@@ -1,7 +1,10 @@
 import {
   githubEventKey,
   normalizeGitHubWebhook,
+  planGitHubActions,
   verifyGitHubWebhookSignature,
+  type GitHubGatePolicy,
+  type GitHubPullSnapshot,
   type GitHubWebhookEvent,
 } from './github';
 import type { TaskStore } from './store';
@@ -12,6 +15,8 @@ export interface GitHubWebhookHandlerOptions {
   store: TaskStore;
   secret: string;
   path: string;
+  snapshotFetcher?: (repository: string, pullNumber: number) => Promise<GitHubPullSnapshot>;
+  gatePolicy?: GitHubGatePolicy;
 }
 
 export interface GitHubWebhookServerOptions extends GitHubWebhookHandlerOptions {
@@ -82,6 +87,9 @@ export function createGitHubWebhookHandler(options: GitHubWebhookHandlerOptions)
       return json({ error: 'invalid_json' }, 400);
     }
     if (eventType === 'ping') return json({ status: 'pong', deliveryId }, 200);
+    if (eventType === 'installation' || eventType === 'installation_repositories') {
+      return json({ status: 'ignored', eventType, deliveryId }, 200);
+    }
     let event: GitHubWebhookEvent;
     try {
       event = normalizeGitHubWebhook(eventType, payload, rawBody);
@@ -96,6 +104,59 @@ export function createGitHubWebhookHandler(options: GitHubWebhookHandlerOptions)
       headSha: event.headSha,
       payloadHash: event.payloadHash,
     };
+    if (options.snapshotFetcher) {
+      let snapshot: GitHubPullSnapshot;
+      try {
+        snapshot = await options.snapshotFetcher(event.repository, event.pullNumber);
+      } catch {
+        return json({ error: 'snapshot_fetch_failed' }, 502);
+      }
+      if (
+        snapshot.repository !== event.repository
+        || snapshot.number !== event.pullNumber
+        || snapshot.headSha !== event.headSha
+        || (event.baseSha !== null && snapshot.baseSha !== event.baseSha)
+      ) {
+        return json({
+          status: 'stale',
+          event: {
+            type: event.eventType,
+            action: event.action,
+            repository: event.repository,
+            pullNumber: event.pullNumber,
+            headSha: event.headSha,
+          },
+        }, 202);
+      }
+      try {
+        const result = options.store.ingestGitHubGate({
+          snapshot,
+          policy: {
+            ...options.gatePolicy,
+            expectedHeadSha: event.headSha,
+            ...(event.baseSha ? { expectedBaseSha: event.baseSha } : {}),
+          },
+          deliveryId,
+          eventType: event.eventType,
+        });
+        return json({
+          status: result.duplicate ? 'duplicate' : 'gated',
+          event: {
+            type: event.eventType,
+            action: event.action,
+            repository: event.repository,
+            pullNumber: event.pullNumber,
+            headSha: event.headSha,
+          },
+          delivery: result.delivery,
+          gate: result.gate.evaluation,
+          plan: planGitHubActions(result.gate.evaluation),
+        }, result.duplicate ? 200 : 202);
+      } catch (error) {
+        const conflict = error instanceof Error && error.message.includes('reused with different content');
+        return json({ error: conflict ? 'delivery_conflict' : 'storage_error' }, conflict ? 409 : 500);
+      }
+    }
     try {
       const delivery = options.store.recordGitHubDelivery({
         ...baseDelivery,

@@ -1,12 +1,14 @@
 import { expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { openDatabase } from './db';
+import type { GitHubPullSnapshot } from './github';
 import { createGitHubWebhookHandler, maxGitHubWebhookBytes, startGitHubWebhookServer } from './github-webhook-server';
 import { TaskStore } from './store';
 
 const secret = 'quotaflow-http-webhook-test-secret';
 const path = '/github/webhook';
 const headSha = 'abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48';
+const baseSha = 'daf67e87a72aa9033a4d62f88e9a9d05ce047d9e';
 
 function payload(action = 'synchronize') {
   return Buffer.from(JSON.stringify({
@@ -38,6 +40,30 @@ function request(body: Uint8Array, overrides: Record<string, string> = {}): Requ
   });
 }
 
+function snapshot(head = headSha): GitHubPullSnapshot {
+  return {
+    repository: 'wangxso/mcarplay',
+    number: 141,
+    state: 'open',
+    draft: false,
+    mergeable: 'mergeable',
+    authorLogin: 'wangxso',
+    baseRef: 'main',
+    headRef: 'feature',
+    baseSha,
+    headSha: head,
+    checks: [{
+      name: 'test',
+      status: 'completed',
+      conclusion: 'success',
+      headSha: head,
+      startedAt: '2026-11-27T13:57:30Z',
+      completedAt: '2026-11-27T14:03:00Z',
+    }],
+    reviews: [],
+  };
+}
+
 test('HTTP webhook handler accepts, deduplicates and rejects signed events', async () => {
   const db = openDatabase(':memory:');
   const store = new TaskStore(db);
@@ -67,6 +93,16 @@ test('HTTP webhook handler accepts, deduplicates and rejects signed events', asy
       'x-github-delivery': 'ping-delivery' }));
     expect(ping.status).toBe(200);
     expect(await ping.json()).toEqual({ status: 'pong', deliveryId: 'ping-delivery' });
+    const installation = await handle(request(Buffer.from('{"action":"new_permissions_accepted"}'), {
+      'x-github-event': 'installation',
+      'x-github-delivery': 'installation-delivery',
+    }));
+    expect(installation.status).toBe(200);
+    expect(await installation.json()).toEqual({
+      status: 'ignored',
+      eventType: 'installation',
+      deliveryId: 'installation-delivery',
+    });
     expect(db.query<{ n: number }, []>('SELECT count(*) AS n FROM github_deliveries').get()?.n).toBe(1);
   } finally {
     db.close();
@@ -87,6 +123,57 @@ test('HTTP webhook handler rejects conflicting deliveries and oversized bodies',
     const tooLarge = await handle(request(large));
     expect(tooLarge.status).toBe(413);
     expect(await tooLarge.json()).toEqual({ error: 'payload_too_large' });
+  } finally {
+    db.close();
+  }
+});
+
+test('HTTP webhook handler fetches the current snapshot and stores a gate', async () => {
+  const db = openDatabase(':memory:');
+  const store = new TaskStore(db);
+  let current = snapshot();
+  let fetchFailure = false;
+  const handle = createGitHubWebhookHandler({
+    store,
+    secret,
+    path,
+    snapshotFetcher: async () => {
+      if (fetchFailure) throw new Error('GitHub unavailable');
+      return current;
+    },
+    gatePolicy: {
+      requiredChecks: ['test'],
+      requiredApprovals: 1,
+    },
+  });
+  try {
+    const body = payload();
+    const first = await handle(request(body));
+    expect(first.status).toBe(202);
+    expect(await first.json()).toMatchObject({
+      status: 'gated',
+      delivery: { duplicateDelivery: false, duplicateEvent: false },
+      gate: { status: 'blocked', reasons: [{ code: 'independent_review_missing' }] },
+      plan: { actions: [{ kind: 'independent_review' }] },
+    });
+    const duplicate = await handle(request(body));
+    expect(duplicate.status).toBe(200);
+    expect(await duplicate.json()).toMatchObject({
+      status: 'duplicate',
+      delivery: { duplicateDelivery: true, duplicateEvent: true },
+    });
+
+    current = snapshot('f'.repeat(40));
+    const stale = await handle(request(body, { 'x-github-delivery': 'delivery-stale' }));
+    expect(stale.status).toBe(202);
+    expect(await stale.json()).toMatchObject({ status: 'stale' });
+
+    fetchFailure = true;
+    const unavailable = await handle(request(body, { 'x-github-delivery': 'delivery-unavailable' }));
+    expect(unavailable.status).toBe(502);
+    expect(await unavailable.json()).toEqual({ error: 'snapshot_fetch_failed' });
+    expect(db.query<{ n: number }, []>('SELECT count(*) AS n FROM github_deliveries').get()?.n).toBe(1);
+    expect(db.query<{ n: number }, []>('SELECT count(*) AS n FROM github_gate_results').get()?.n).toBe(1);
   } finally {
     db.close();
   }

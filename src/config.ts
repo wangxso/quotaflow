@@ -139,11 +139,36 @@ function parseGitHubWebhook(value: unknown): GitHubWebhookConfig {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(secretEnv)) {
     fail('githubWebhook.secretEnv must name an environment variable');
   }
+  if (raw.fetchGate !== undefined && typeof raw.fetchGate !== 'boolean') {
+    fail('githubWebhook.fetchGate must be boolean');
+  }
+  const tokenEnv = raw.tokenEnv === undefined ? undefined : text(raw.tokenEnv, 'githubWebhook.tokenEnv');
+  if (tokenEnv && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(tokenEnv)) {
+    fail('githubWebhook.tokenEnv must name an environment variable');
+  }
+  const apiUrl = raw.apiUrl === undefined ? undefined : text(raw.apiUrl, 'githubWebhook.apiUrl');
+  if (apiUrl) {
+    let parsed: URL;
+    try {
+      parsed = new URL(apiUrl);
+    } catch {
+      fail('githubWebhook.apiUrl must be a valid URL');
+    }
+    if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+      fail('githubWebhook.apiUrl must not contain credentials, query parameters or fragments');
+    }
+    if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && parsed.hostname === '127.0.0.1')) {
+      fail('githubWebhook.apiUrl must use HTTPS or loopback HTTP');
+    }
+  }
   return {
     host: text(raw.host, 'githubWebhook.host'),
     port,
     path,
     secretEnv,
+    ...(raw.fetchGate === undefined ? {} : { fetchGate: raw.fetchGate }),
+    ...(tokenEnv ? { tokenEnv } : {}),
+    ...(apiUrl ? { apiUrl } : {}),
   };
 }
 

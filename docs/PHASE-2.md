@@ -83,7 +83,7 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github webhook payload.json \
   --signature sha256=...
 ```
 
-本地 HTTP 监听器使用配置中的 `githubWebhook`，或通过命令行覆盖：
+本地 HTTP 监听器使用配置中的 `githubWebhook`，或通过命令行覆盖。`fetchGate` 默认为 `true`，验签后会调用 GitHub REST 获取当前 PR 快照，校验事件 HEAD/base，并保存 Gate 与动作计划。
 
 ```sh
 GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
@@ -93,11 +93,11 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
 
 监听器返回稳定的 HTTP 状态：新事件 `202`，重复事件 `200`，签名无效 `401`，载荷过大 `413`，不支持的事件 `422`，已知 delivery 内容冲突 `409`。GitHub 建立 Webhook 时发送的签名 `ping` 返回 `200`，业务事件与健康检查都不回显 Secret 或原始载荷。
 
-当前支持 `pull_request`、`check_run` 和 `pull_request_review`。事件会归一化为仓库、PR、HEAD SHA、action 和原始字节哈希。相同 delivery 或相同逻辑事件重放不会重复处理，冲突内容会被拒绝。签名无效或载荷超过 2 MB 时不会写库。 [Webhook 验证证据](evidence/phase2-github-webhook-2026-11-27.json)
+当前支持 `pull_request`、`check_run` 和 `pull_request_review`。事件会归一化为仓库、PR、HEAD SHA、action 和原始字节哈希。相同 delivery 或相同逻辑事件重放不会重复处理，冲突内容会被拒绝。签名无效或载荷超过 2 MB 时不会写库。installation 生命周期事件验签后返回 200 并忽略。临时公网回调已验证通过 SSH 隧道接收 GitHub `ping`，开放 PR 的签名事件返回 202 并生成 Gate/Plan，重复投递返回 200，错误签名返回 401。 [本地 Webhook 验证](evidence/phase2-github-webhook-2026-11-27.json) · [公网 E2E 证据](evidence/phase2-github-webhook-e2e-2026-11-28.json)
 
 ## 尚未完成
 
-- 公网 TLS Webhook 回调部署和反向代理。
+- 将临时公网 SSH 隧道替换为带稳定域名、TLS、进程监督和故障恢复的持久部署。
 - 在物化前自动抓取 PR HEAD／base 到本地 Git 仓库并校验提交可用性。
 - Check-run 日志抓取、失败分类细节和同 SHA 复跑绑定。
 - 写入应答丢失、重复 Webhook、越权请求和凭据轮换演练。
@@ -105,7 +105,7 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
 
 ## 下一里程碑
 
-1. 将本地监听器部署到受控公网反向代理。
+1. 将监听器部署到稳定公网地址和受控反向代理。
 2. 对后续 Review–Fix／CI 修复任务重复执行、复跑和门禁闭环。
 3. 接入 Check-run 日志抓取和失败分类。
 4. Phase 2 核心验收完成后进入 Phase 3 Dashboard 与部署。

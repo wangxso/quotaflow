@@ -350,6 +350,9 @@ async function main() {
       const port = Number(portText);
       const path = option(rest, '--path') ?? defaults.path;
       const secretName = option(rest, '--secret-env') ?? defaults.secretEnv;
+      const fetchGate = defaults.fetchGate ?? true;
+      const tokenName = defaults.tokenEnv;
+      const apiUrl = defaults.apiUrl;
       if (rest.length > 0) throw new Error(`Unexpected github serve-webhook arguments: ${rest.join(' ')}`);
       if (!Number.isInteger(port) || port < 1 || port > 65535) {
         throw new Error('--port must be an integer between 1 and 65535');
@@ -360,7 +363,27 @@ async function main() {
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(secretName)) throw new Error('--secret-env must name an environment variable');
       const secret = process.env[secretName];
       if (!secret) throw new Error(`GitHub webhook secret is missing from ${secretName}`);
-      const server = startGitHubWebhookServer({ host, port, path, secret, store });
+      const token = tokenName ? process.env[tokenName] : undefined;
+      const server = startGitHubWebhookServer({
+        host,
+        port,
+        path,
+        secret,
+        store,
+        ...(fetchGate ? {
+          snapshotFetcher: (repository: string, pullNumber: number) => fetchGitHubPullSnapshot(
+            repository,
+            pullNumber,
+            {
+              ...(token ? { token } : {}),
+              ...(apiUrl ? { apiUrl } : {}),
+            },
+          ),
+        } : {}),
+        gatePolicy: {
+          allowBotApprovals: Boolean(config.githubApproval?.allowBotApprovals),
+        },
+      });
       console.log(JSON.stringify({ listening: server.url.toString(), path, health: '/healthz' }, null, 2));
       const stopped = new Promise<void>((resolve) => {
         process.once('SIGINT', resolve);

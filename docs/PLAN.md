@@ -26,6 +26,8 @@ PR #141 随后由有权限的操作者转为 Ready。重新拉取快照后，Dra
 
 仓库管理员随后完成人工合并。PR #141 于 2026-11-27T17:05:03Z 合并，合并提交为 `23033142a38d87441ed5632bc4c9d9ac821ccd61`。本地 `mcarplay/main` 已 fast-forward 到该 SHA，源分支、两个 detached Worktree 和临时试点目录已清理。详见 [合并证据](evidence/phase2-github-merge-2026-11-28.json)。
 
+同日完成临时公网 Webhook 验证。GitHub App 订阅 `pull_request`、`check_run` 和 `pull_request_review`，安装权限增加 Checks read，并继续保留 Contents read、Metadata read、Pull requests write。公网 `/healthz` 和 GitHub `ping` 返回 200。签名 PR 事件会抓取当前 PR 快照、绑定事件 HEAD、保存 Gate 并返回动作计划。开放 PR #136 的验证事件生成 Draft、mergeability 和独立审查阻断。重复投递返回 200，错误签名返回 401，installation 生命周期事件返回 200 并忽略。当前域名由临时 SSH 隧道提供，仅用于功能验证，后续替换为持久部署。详见 [公网 Webhook 证据](evidence/phase2-github-webhook-e2e-2026-11-28.json)。
+
 ## Phase 0 · 调研与可行性验证
 
 | 顺序 | 工作 | 通过证据 |

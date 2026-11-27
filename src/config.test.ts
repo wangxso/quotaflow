@@ -154,6 +154,9 @@ test('parses and validates GitHub webhook configuration', () => {
       port: 8787,
       path: '/github/webhook',
       secretEnv: 'GITHUB_WEBHOOK_SECRET',
+      fetchGate: true,
+      tokenEnv: 'GITHUB_TOKEN',
+      apiUrl: 'https://api.github.com',
     },
     githubApproval: {
       allowBotApprovals: true,
@@ -169,6 +172,12 @@ test('parses and validates GitHub webhook configuration', () => {
     join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubWebhook.path');
   expect(() => normalizeConfig({ ...base, githubWebhook: { ...base.githubWebhook, secretEnv: 'bad-name' } },
     join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubWebhook.secretEnv');
+  expect(() => normalizeConfig({ ...base, githubWebhook: { ...base.githubWebhook, fetchGate: 'yes' } },
+    join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubWebhook.fetchGate');
+  expect(() => normalizeConfig({ ...base, githubWebhook: { ...base.githubWebhook, tokenEnv: 'bad-name' } },
+    join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubWebhook.tokenEnv');
+  expect(() => normalizeConfig({ ...base, githubWebhook: { ...base.githubWebhook, apiUrl: 'http://example.test' } },
+    join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubWebhook.apiUrl');
   expect(() => normalizeConfig({ ...base, githubApproval: { allowBotApprovals: 'yes' } },
     join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubApproval.allowBotApprovals');
 });

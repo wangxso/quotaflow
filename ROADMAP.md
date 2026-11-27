@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | Phase 0 · 可行性 | 有条件通过 | 已在临时仓库完成 Codex 写入、Git 检查点和 OpenCode 接续。原生 ChatGPT 执行通道、商业路由组和服务商账单归属仍待验证。 [验收记录](docs/PHASE-0-GATE-CLOSURE.md) |
 | Phase 1 · 单机核心 | 进行中 | 已实现 CLI、SQLite v9 状态、预算到期审计、恢复后冷却、Git 工作树、三平台进程监督、重启恢复、取消升级及可选交接笔记。真实 `mcarplay` Issue 已通过 QuotaFlow 生成 Draft PR，剩余 Worktree 生命周期与 Provider 账单验证。 [当前实现与证据](docs/PHASE-1.md) |
-| Phase 2 · GitHub 开发闭环 | 进行中 | PR #141 已经完成 CI、mergeable、只读审查、最小权限 GitHub App 批准和仓库管理员人工合并，合并提交为 `23033142`。REST 快照、门禁、本地签名 Webhook、双层幂等和动作任务物化已接入。下一步完成公网回调并验证 Review–Fix／CI 修复闭环。 |
+| Phase 2 · GitHub 开发闭环 | 进行中 | PR #141 已完成 CI、mergeable、只读审查、最小权限 GitHub App 批准和仓库管理员人工合并，合并提交为 `23033142`。REST 快照、自动 Gate Webhook、双层幂等和动作任务物化已接入，临时公网回调完成签名和事件验证。下一步替换为持久公网部署并验证 Review–Fix／CI 修复闭环。 |
 | Phase 3 · 界面与部署 | 计划中 | GUI 与部署里程碑。交付 Dashboard 和多项目配置，核对 Dashboard 与 CLI 显示的任务状态，验证 Linux、Windows + WSL2 和 macOS 的支持范围，以及升级和备份恢复。 |
 | Phase 4 · 基于运行证据的改进 | 计划中 | 用历史任务回放和影子评估验证调度、知识库、测试或审查规则提案，保留版本和回滚路径。 |
 | Phase 5 · 长期运行 | 计划中 | 验证多仓库调度、预算公平性和连续运行，安排至少七天运行演练和一次备份恢复演练。低风险自动合并需单独授权。 |
@@ -29,7 +29,7 @@
 | --- | --- | --- |
 | Phase 0 · Feasibility | Passed with conditions | Demonstrated Codex writing changes, Git checkpointing, and OpenCode resuming in a temporary repository. Native ChatGPT execution, commercial routing groups, and provider invoice attribution still need verification. [Gate results](docs/PHASE-0-GATE-CLOSURE.md) |
 | Phase 1 · Single-host core | In progress | The CLI, SQLite v9 state, budget expiry audits, recovery cooldowns, Git worktrees, three-platform process supervision, restart recovery, cancellation escalation, and optional handoff notes are implemented. The default macOS adapters have run live, while Linux has passed subreaper cleanup and Codex App Server smoke tests. [Implementation and evidence](docs/PHASE-1.md) |
-| Phase 2 · GitHub development workflow | In progress | PR #141 passed current-head CI, mergeability, read-only review, least-privilege GitHub App approval, and repository-owner human merge at merge commit `23033142`. REST snapshots, the gate, local signed webhooks, two-level idempotency, and action-task materialization are implemented. Next work deploys public callbacks and validates the Review–Fix/CI remediation loop. |
+| Phase 2 · GitHub development workflow | In progress | PR #141 passed current-head CI, mergeability, read-only review, least-privilege GitHub App approval, and repository-owner human merge at merge commit `23033142`. REST snapshots, gate-processing webhooks, two-level idempotency, and action-task materialization are implemented. A temporary public callback passed signature and event validation. Next work moves it to durable deployment and validates the Review–Fix/CI remediation loop. |
 | Phase 3 · Dashboard and deployment | Planned | GUI and deployment milestone. Deliver a dashboard and multi-project configuration, verify that the dashboard and CLI show the same task state, and validate support for Linux, Windows with WSL2, and macOS, along with upgrades and backup recovery. |
 | Phase 4 · Evidence-based improvements | Planned | Use historical task replay and shadow evaluation to assess proposed changes to scheduling, project knowledge, tests, or review rules. Keep version history and a rollback path. |
 | Phase 5 · Sustained operation | Planned | Validate multi-repository scheduling, budget fairness, and continuous operation through a run of at least seven days and a backup recovery drill. Low-risk auto-merge requires separate approval. |

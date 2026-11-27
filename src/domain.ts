@@ -59,6 +59,9 @@ export interface GitHubWebhookConfig {
   port: number;
   path: string;
   secretEnv: string;
+  fetchGate?: boolean;
+  tokenEnv?: string;
+  apiUrl?: string;
 }
 
 export interface GitHubApprovalConfig {

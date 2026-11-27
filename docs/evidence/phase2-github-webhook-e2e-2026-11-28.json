@@ -1,0 +1,125 @@
+{
+  "recordedOn": "2026-11-28",
+  "baseRevision": "8376c96f502c0b1633fc5f65f0e37dcd8faba89f",
+  "deployment": {
+    "publicUrl": "https://c579990caea1c8.app.lhr.life",
+    "provider": "localhost.run temporary SSH reverse tunnel",
+    "backend": "http://127.0.0.1:8787",
+    "tls": true,
+    "durable": false,
+    "health": {
+      "httpStatus": 200,
+      "body": {
+        "status": "ok"
+      }
+    },
+    "webhookSecretStorage": "User config directory outside the repository, mode 0600",
+    "secretValueRecorded": false
+  },
+  "githubApp": {
+    "appId": 5955591,
+    "installationId": 186560843,
+    "permissions": {
+      "checks": "read",
+      "contents": "read",
+      "metadata": "read",
+      "pull_requests": "write"
+    },
+    "events": [
+      "check_run",
+      "pull_request",
+      "pull_request_review"
+    ],
+    "sslVerification": true
+  },
+  "deliveries": {
+    "initialPingBeforeSecret": {
+      "httpStatus": 400,
+      "cause": "The first ping arrived before the webhook secret update."
+    },
+    "redeliveredPing": {
+      "httpStatus": 200,
+      "status": "OK"
+    },
+    "signedOpenPullRequest": {
+      "deliveryId": "quotaflow-e2e-pr136-2026-11-28-v1",
+      "repository": "wangxso/mcarplay",
+      "pullNumber": 136,
+      "headSha": "1ec88e9840e07831f93ee05c506726341c24e08f",
+      "httpStatus": 202,
+      "result": "gated",
+      "gateStatus": "blocked",
+      "reasons": [
+        "draft",
+        "not_mergeable",
+        "independent_review_missing"
+      ],
+      "actions": [
+        "resolve_conflict",
+        "independent_review"
+      ]
+    },
+    "signedMergedPullRequest": {
+      "deliveryId": "quotaflow-e2e-2026-11-28-v1",
+      "repository": "wangxso/mcarplay",
+      "pullNumber": 141,
+      "headSha": "abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48",
+      "httpStatus": 202,
+      "result": "gated",
+      "gateStatus": "blocked",
+      "reasons": [
+        "pull_not_open",
+        "not_mergeable"
+      ]
+    },
+    "duplicateDelivery": {
+      "httpStatus": 200,
+      "status": "duplicate",
+      "duplicateDelivery": true,
+      "duplicateEvent": true,
+      "rowsCreatedAfterRetry": 0
+    },
+    "invalidSignature": {
+      "httpStatus": 401,
+      "body": {
+        "error": "invalid_signature"
+      },
+      "rowsCreated": 0
+    },
+    "installationLifecycle": {
+      "event": "installation",
+      "action": "new_permissions_accepted",
+      "httpStatus": 200,
+      "body": {
+        "status": "ignored"
+      }
+    }
+  },
+  "storage": {
+    "processedDeliveries": 2,
+    "gateResults": 2,
+    "duplicateRowsFromRetry": 0
+  },
+  "verification": {
+    "webhookGateTests": 1,
+    "webhookServerTests": 4,
+    "configTests": 1,
+    "fullSuite": {
+      "macOS": 138,
+      "linux": 138,
+      "windowsOnlySkipped": 1,
+      "failed": 0
+    },
+    "publicHealthCheck": "passed",
+    "githubPing": "passed after secret update",
+    "jsonAndDiffChecks": "passed"
+  },
+  "scope": {
+    "automaticSnapshotFetch": "implemented",
+    "automaticGatePersistence": "implemented",
+    "automaticActionPlan": "implemented",
+    "automaticTaskMaterialization": "requires a separate repository mapping",
+    "durablePublicDeployment": "pending",
+    "secretRotationDrill": "pending"
+  }
+}
