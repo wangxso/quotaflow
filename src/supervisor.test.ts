@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { launchSupervised, verifySupervisedStop } from './supervisor';
+import { launchGuardedAppServer, launchSupervised, verifySupervisedStop } from './supervisor';
 
 const fixture = fileURLToPath(new URL('./fixture-agent.ts', import.meta.url));
 
@@ -107,6 +107,44 @@ test('a cancellation flag stops the job and reports an empty process set', async
     await removeEventually(root);
   }
 });
+
+test('guarded stdio keeps the worker pipe live and publishes a stop receipt', async () => {
+  if (process.platform !== 'win32') return;
+  const root = mkdtempSync(join(tmpdir(), 'quotaflow-supervisor-stdio-'));
+  try {
+    const status = join(root, 'attempt');
+    const child = launchGuardedAppServer(
+      [process.execPath, fixture, 'echo'],
+      root,
+      status,
+    );
+    const deadline = Date.now() + 10_000;
+    while (!existsSync(join(status, 'ready.json')) && Date.now() < deadline) {
+      await Bun.sleep(30);
+    }
+    expect(existsSync(join(status, 'ready.json'))).toBe(true);
+
+    let output = '';
+    const echoed = new Promise<void>((resolve) => {
+      child.stdout.on('data', (chunk) => {
+        output += String(chunk);
+        if (output.includes('{"method":"ping"}')) resolve();
+      });
+    });
+    child.stdin.write('{"method":"ping"}\n');
+    await echoed;
+    const closed = new Promise<void>((resolve) => child.once('close', () => resolve()));
+    child.stdin.end();
+    await closed;
+
+    expect(verifySupervisedStop(status)).toMatchObject({
+      activeProcesses: 0,
+      reason: 'worker_exit',
+    });
+  } finally {
+    await removeEventually(root);
+  }
+}, 20_000);
 
 test('verification reconstructs a missing stop receipt only after the job is empty', async () => {
   if (process.platform !== 'win32') return;

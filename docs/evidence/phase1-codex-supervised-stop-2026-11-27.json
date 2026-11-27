@@ -1,0 +1,78 @@
+{
+  "date": "2026-11-27",
+  "kind": "phase1-codex-supervised-stop",
+  "result": "passed",
+  "method": "Guarded stdio integration test, adapter stop-receipt tests, Worker safety test, and a real zero-inference Codex App Server initialize/close smoke",
+  "scenario": {
+    "guardedStdio": {
+      "adapter": "fixture echo process",
+      "mechanism": "Windows Job Object supervisor with inherited bidirectional stdio",
+      "roundTrip": "JSON line written by the controller was echoed by the supervised child",
+      "stopReceipt": {
+        "activeProcesses": 0,
+        "exitCode": 0,
+        "reason": "worker_exit"
+      }
+    },
+    "realCodexAppServer": {
+      "version": "codex-cli 0.172.0",
+      "transport": "stdio",
+      "operations": [
+        "initialize"
+      ],
+      "inferenceTurnsRequested": 0,
+      "initialized": true,
+      "stopReceipt": {
+        "activeProcesses": 0,
+        "exitCode": 0,
+        "reason": "worker_exit"
+      }
+    },
+    "adapterSafety": {
+      "missingReceipt": "ProcessStopUnverifiedError",
+      "activeProcessesNonZero": "ProcessStopUnverifiedError",
+      "successfulResultRequiresVerifiedZero": true
+    },
+    "workerSafety": {
+      "taskStatus": "blocked",
+      "attemptStage": "running",
+      "checkpointIntent": false,
+      "checkpoint": null,
+      "partialWorkspaceLeftForRecovery": true
+    }
+  },
+  "assertions": {
+    "bidirectionalStdioPreserved": true,
+    "codexAppServerStartsUnderJobObject": true,
+    "codexInitializationWithoutInference": true,
+    "stopReceiptPublishedOnClose": true,
+    "activeProcessesZero": true,
+    "missingStopReceiptRejected": true,
+    "nonzeroActiveProcessesRejected": true,
+    "workerBlocksWithoutCheckpointOnUnverifiedStop": true,
+    "providerInvoiceUnknown": true
+  },
+  "gate": {
+    "command": "bun test",
+    "result": "81 pass / 0 fail",
+    "assertions": 333
+  },
+  "safetyBoundary": {
+    "rule": "Codex App Server may report a result only after a Windows Job Object stop receipt reports activeProcesses=0.",
+    "missingReceipt": "The Adapter throws ProcessStopUnverifiedError; the Worker blocks the task and does not create a checkpoint or transfer write ownership.",
+    "unverifiedStop": "The attempt remains active for later verified recovery or forced cancellation.",
+    "providerInvoice": "UNKNOWN"
+  },
+  "limitations": [
+    "The supervised Codex App Server path is implemented and verified on Windows only.",
+    "The real Codex smoke covered zero-inference initialization and shutdown, not a model turn.",
+    "Linux and macOS process-stop equivalents remain unverified."
+  ],
+  "reproduction": [
+    "bun test src/supervisor.test.ts --test-name-pattern \"guarded stdio\"",
+    "bun test src/codex-agent.test.ts",
+    "bun test src/worker.test.ts --test-name-pattern \"cannot verify process stop\"",
+    "bun run poc/codex-app-server-guarded-smoke.ts C:\\path\\to\\codex.exe",
+    "bun test"
+  ]
+}

@@ -12,12 +12,12 @@ class AppServer {
   #stderr = '';
 
   constructor(executable, args = [], options = {}) {
-    const { transport = 'stdio', ...spawnOptions } = options;
+    const { transport = 'stdio', child, ...spawnOptions } = options;
     if (!['stdio', 'daemon'].includes(transport)) throw new Error('Unsupported App Server transport');
     const command = transport === 'daemon'
       ? ['app-server', 'proxy']
       : ['app-server', '--listen', 'stdio://', ...args];
-    this.#child = spawn(executable, command, {
+    this.#child = child ?? spawn(executable, command, {
       ...spawnOptions,
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,

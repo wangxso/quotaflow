@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
-import type { AgentContext } from './agent';
+import { ProcessStopUnverifiedError, type AgentContext } from './agent';
 import { CodexAppServerAgent, type CodexServer } from './codex-agent';
 import type { Attempt, LaneConfig, Task } from './domain';
+import type { SupervisorStop } from './supervisor';
 
 const lane: LaneConfig = {
   id: 'codex-magpie',
@@ -55,6 +56,13 @@ const context: AgentContext = {
 };
 
 function fakeServer(calls: Array<{ method: string; params: unknown }>): CodexServer {
+  const stop: SupervisorStop = {
+    supervisorPid: 1,
+    workerPid: 2,
+    exitCode: 0,
+    activeProcesses: 0,
+    reason: 'worker_exit',
+  };
   return {
     stderr: '',
     async initialize() {
@@ -71,7 +79,9 @@ function fakeServer(calls: Array<{ method: string; params: unknown }>): CodexSer
     async notification() {
       return { turn: { id: 'turn-1', status: 'completed' } };
     },
-    async close() {},
+    async close() {
+      return stop;
+    },
   };
 }
 
@@ -125,6 +135,13 @@ test('cancellation interrupts the active turn and closes the server', async () =
   let closed = false;
   server.close = async () => {
     closed = true;
+    return {
+      supervisorPid: 1,
+      workerPid: 2,
+      exitCode: 0,
+      activeProcesses: 0,
+      reason: 'worker_exit',
+    };
   };
   const agent = new CodexAppServerAgent(
     lane,
@@ -150,4 +167,42 @@ test('cancellation interrupts the active turn and closes the server', async () =
   });
   expect(calls.some((call) => call.method === 'turn/interrupt')).toBe(true);
   expect(closed).toBe(true);
+});
+
+test('refuses to report a stopped process set without a supervisor receipt', async () => {
+  const calls: Array<{ method: string; params: unknown }> = [];
+  const server = fakeServer(calls);
+  server.close = async () => null;
+  const agent = new CodexAppServerAgent(
+    lane,
+    () => server,
+    async () => ({
+      inferenceCalls: 0,
+      commandExec: { status: 'completed', exitCode: 0, fileWritten: true },
+    }),
+  );
+
+  await expect(agent.run(context)).rejects.toBeInstanceOf(ProcessStopUnverifiedError);
+});
+
+test('refuses a stop receipt that still reports active processes', async () => {
+  const calls: Array<{ method: string; params: unknown }> = [];
+  const server = fakeServer(calls);
+  server.close = async () => ({
+    supervisorPid: 1,
+    workerPid: 2,
+    exitCode: null,
+    activeProcesses: 1,
+    reason: 'controller_closed',
+  });
+  const agent = new CodexAppServerAgent(
+    lane,
+    () => server,
+    async () => ({
+      inferenceCalls: 0,
+      commandExec: { status: 'completed', exitCode: 0, fileWritten: true },
+    }),
+  );
+
+  await expect(agent.run(context)).rejects.toBeInstanceOf(ProcessStopUnverifiedError);
 });

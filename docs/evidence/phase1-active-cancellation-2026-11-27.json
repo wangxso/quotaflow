@@ -22,7 +22,7 @@
   "adapterCoverage": {
     "supervisedCommand": "AbortSignal stops the Job Object before the adapter returns",
     "openCode": "AbortSignal is passed to the supervisor and returns cancelled",
-    "codex": "turn/interrupt is called and the App Server is closed"
+    "codex": "turn/interrupt is called, then the supervised App Server is closed and its activeProcesses=0 stop receipt is required"
   },
   "assertions": {
     "secondProcessCanRequestCancellation": true,
@@ -37,7 +37,7 @@
     "This run covers the cooperative path where a running Worker polls the cancellation event.",
     "Timeout reporting and forced reclaim are recorded separately in phase1-cancel-escalation-2026-11-27.json.",
     "Unknown usage keeps its budget hold pending.",
-    "The Codex adapter has cooperative turn interruption, not a Windows Job Object stop receipt."
+    "The cross-process run exercises the supervised command fixture. The Codex turn-interrupt plus supervised stop path is covered by adapter tests and phase1-codex-supervised-stop-2026-11-27.json."
   ],
   "reproduction": [
     "bun test src/cli.test.ts --test-name-pattern \"cancels an active supervised\"",

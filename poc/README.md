@@ -34,6 +34,16 @@ node poc/app-server-preflight.mjs $quotaCodex --transport stdio
 
 `--transport daemon` 使用 `codex app-server proxy` 连接已启动的 managed daemon。当前 0.172.0 复测中该路径初始化超时，因此默认使用 `stdio`。
 
+## Codex 受监督停止复跑
+
+该 smoke 通过 Job Object 监督器启动 `codex app-server`，完成一次零推理初始化后关闭，并要求监督器发布 `activeProcesses=0` 的停止凭证。
+
+```powershell
+bun run poc/codex-app-server-guarded-smoke.ts $quotaCodex
+```
+
+输出应包含 `initialized: true`、`inferenceTurnsRequested: 0`，以及 `stop.activeProcesses: 0`、`stop.exitCode: 0`。缺少凭证或仍有活动进程时脚本失败。
+
 ## 真实运行对照
 
 使用报告中核对过的发行版本。以下变量指向待测 CLI 和模型权重文件。Archon 的脚本节点需要在提供的目录中找到名为 `bun.exe` 的 Bun 程序。

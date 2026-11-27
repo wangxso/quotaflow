@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { AgentAdapter } from './agent';
+import { ProcessStopUnverifiedError, type AgentAdapter } from './agent';
 import { supervisedCommandAgent } from './command-agent';
 import type { QuotaFlowConfig, UsageReport } from './domain';
 import { openDatabase } from './db';
@@ -252,6 +252,40 @@ test('worker cooperatively cancels an active adapter and saves a checkpoint', as
       reason: 'cancelled_by_operator',
     });
     expect(readFileSync(join(root, 'cancel-active', 'app.txt'), 'utf8')).toBe('partial\n');
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('worker blocks without a checkpoint when an agent cannot verify process stop', async () => {
+  const { root, repo, db, store, config } = setup();
+  try {
+    store.createTask({
+      id: 'unverified-stop',
+      title: 'unverified stop',
+      repoPath: repo,
+      workspacePath: join(root, 'unverified-stop'),
+    });
+    const result = await runOnce(store, config, () => ({
+      id: 'unverified-stop',
+      async run(context) {
+        writeFileSync(join(context.workspacePath, 'app.txt'), 'partial\n');
+        throw new ProcessStopUnverifiedError('missing supervisor receipt');
+      },
+    }));
+
+    expect(result).toMatchObject({
+      task: { status: 'blocked', checkpoint: null },
+      attempt: { stage: 'running' },
+      checkpoint: null,
+    });
+    expect(store.activeAttempt('unverified-stop')?.stage).toBe('running');
+    expect(store.events('unverified-stop').some((event) => event.kind === 'checkpoint_intent')).toBe(false);
+    expect(store.events('unverified-stop').at(-1)?.detail).toMatchObject({
+      reason: 'process_stop_unverified',
+    });
+    expect(readFileSync(join(root, 'unverified-stop', 'app.txt'), 'utf8')).toBe('partial\n');
   } finally {
     db.close();
     rmSync(root, { recursive: true, force: true });

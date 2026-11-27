@@ -24,4 +24,11 @@ export interface AgentAdapter {
   run(context: AgentContext): Promise<AgentResult>;
 }
 
+export class ProcessStopUnverifiedError extends Error {
+  constructor(message = 'Agent process stop could not be verified') {
+    super(message);
+    this.name = 'ProcessStopUnverifiedError';
+  }
+}
+
 export type AgentFactory = (lane: LaneConfig) => AgentAdapter | undefined;

@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -81,6 +81,39 @@ export function verifySupervisedStop(statusDir: string): SupervisorStop {
     throw new Error('Verified supervisor stop still reports active processes');
   }
   return verified;
+}
+
+export function launchGuardedAppServer(
+  command: string[],
+  cwd: string,
+  statusDir: string,
+  options: { env?: NodeJS.ProcessEnv } = {},
+): ChildProcessWithoutNullStreams {
+  if (process.platform !== 'win32') throw new Error('Supervised Codex App Server currently requires Windows');
+  if (command.length === 0) throw new Error('A supervised command is required');
+  const env: NodeJS.ProcessEnv = { ...process.env, ...options.env };
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined) delete env[key];
+  }
+  mkdirSync(statusDir, { recursive: true });
+  return spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', guardScript], {
+    windowsHide: true,
+    cwd,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: {
+      ...env,
+      QUOTAFLOW_GUARD_EXE: command[0],
+      QUOTAFLOW_GUARD_ARGS: JSON.stringify({ args: command.slice(1) }),
+      QUOTAFLOW_GUARD_CWD: cwd,
+      QUOTAFLOW_GUARD_STATUS: statusDir,
+      QUOTAFLOW_GUARD_OWNER: String(process.pid),
+      QUOTAFLOW_GUARD_CREATED_BY: String(Date.now()),
+      QUOTAFLOW_GUARD_JOB: `QuotaFlow-Phase0-${randomUUID()}`,
+      QUOTAFLOW_GUARD_VERIFY: '0',
+      QUOTAFLOW_GUARD_PROXY_STDIO: '1',
+      QUOTAFLOW_ATTEMPT_DIR: statusDir,
+    },
+  }) as ChildProcessWithoutNullStreams;
 }
 
 export async function launchSupervised(

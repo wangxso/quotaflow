@@ -1,5 +1,10 @@
 import { existsSync } from 'node:fs';
-import type { AgentAdapter, AgentFactory, AgentResult } from './agent';
+import {
+  ProcessStopUnverifiedError,
+  type AgentAdapter,
+  type AgentFactory,
+  type AgentResult,
+} from './agent';
 import type {
   Attempt,
   AttemptUsageRecord,
@@ -144,6 +149,20 @@ export async function runOnce(
       checkpoint: checkpointSha,
     };
   } catch (error) {
+    if (error instanceof ProcessStopUnverifiedError) {
+      const blocked = store.block(task.id, 'process_stop_unverified', finishedAt());
+      return {
+        task: blocked,
+        attempt: store.getAttempt(attempt.id),
+        agent: agent.id,
+        agentStatus: 'failed',
+        actualModel: null,
+        usageStatus: null,
+        usage: [],
+        checkpoint: blocked.checkpoint,
+        error: errorMessage(error),
+      };
+    }
     let checkpointSha = task.checkpoint ?? '';
     try {
       if (existsSync(task.workspacePath)) {

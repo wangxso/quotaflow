@@ -27,6 +27,10 @@ if (mode === 'complete') {
 } else if (mode === 'hold') {
   writeFileSync('app.txt', 'partial\n');
   setInterval(() => {}, 1_000);
+} else if (mode === 'echo') {
+  process.stdin.on('data', (chunk) => {
+    process.stdout.write(chunk);
+  });
 } else {
-  throw new Error('Expected fixture mode complete, fail, hold or quota');
+  throw new Error('Expected fixture mode complete, fail, hold, quota or echo');
 }

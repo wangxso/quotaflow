@@ -27,7 +27,7 @@
     "appServerClosed": true,
     "adapterReportedActiveProcesses": 0,
     "processSupervisorReceipt": null,
-    "processSupervisorNote": "The Codex App Server adapter does not use the Windows Job Object supervisor. No stopped.json exists, and adapterReportedActiveProcesses is not a supervisor receipt.",
+    "processSupervisorNote": "Historical run from before supervised stdio was implemented. The current default Codex App Server path publishes stopped.json and is covered by phase1-codex-supervised-stop-2026-11-27.json; the null receipt here is not evidence about the current path.",
     "checkpoint": "905ad3e357c6bcf3cb3a4d8628e6a109a46b2ca4"
   },
   "magpie": {

@@ -67,13 +67,13 @@
   "safetyBoundary": {
     "rule": "No checkpoint or write transfer without a verified empty supervised process set and an exited owner.",
     "forceMarker": "cancel.flag",
-    "forceOwnerTermination": "Only the Windows Job Object supervisor path terminates an unresponsive owner after publishing activeProcesses=0; control-plane recovery still waits for owner exit.",
+    "forceOwnerTermination": "The Windows Job Object supervisor terminates an unresponsive owner after publishing activeProcesses=0; control-plane recovery still waits for owner exit.",
     "codexWithoutStopReceipt": "blocked",
     "unsupervisedOrUnlaunchedAttempt": "no write transfer"
   },
   "limitations": [
-    "Forced owner termination is implemented only for the Windows Job Object supervisor used by supervised commands and OpenCode.",
-    "Codex App Server has cooperative turn interruption but no Windows Job Object stop receipt; force cancellation remains blocked rather than guessed.",
+    "Forced owner termination is implemented only for the Windows Job Object supervisor used by supervised commands, OpenCode, and the default Codex App Server path.",
+    "Custom Codex App Server factories without a supervisor stop receipt remain blocked rather than guessed.",
     "Unknown usage keeps its budget hold pending and does not change the Provider invoice from UNKNOWN."
   ],
   "reproduction": [

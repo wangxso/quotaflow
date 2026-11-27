@@ -16,15 +16,18 @@ public static class QuotaFlowGuard
     private const uint CreateSuspended = 0x4;
     private const uint CreateNoWindow = 0x08000000;
     private const uint OwnerAccess = 0x101001;
+    private const uint StartfUseStdHandles = 0x100;
+    private const uint DuplicateSameAccess = 0x2;
     private const uint WaitObject = 0;
     private const uint WaitTimeout = 258;
     private const int BasicAccounting = 1;
     private const int ExtendedLimit = 9;
 
-    public static void Run(string exe, string[] args, string cwd, string status, uint ownerPid, long createdBy, string name)
+    public static void Run(string exe, string[] args, string cwd, string status, uint ownerPid, long createdBy,
+        string name, bool proxyStdio)
     {
         var supervisor = Process.GetCurrentProcess().Id;
-        var parent = Task.Factory.StartNew(() => Console.OpenStandardInput().ReadByte());
+        var parent = proxyStdio ? null : Task.Factory.StartNew(() => Console.OpenStandardInput().ReadByte());
         var job = CreateJobObject(IntPtr.Zero, name);
         if (job == IntPtr.Zero) throw new Win32Exception();
         if (Marshal.GetLastWin32Error() == 183)
@@ -37,6 +40,7 @@ public static class QuotaFlowGuard
         ProcessInfo worker = new ProcessInfo();
         IntPtr input = IntPtr.Zero;
         IntPtr log = IntPtr.Zero;
+        IntPtr error = IntPtr.Zero;
         bool assigned = false;
         try
         {
@@ -54,14 +58,27 @@ public static class QuotaFlowGuard
             }
             Startup startup = new Startup();
             startup.Size = Marshal.SizeOf(typeof(Startup));
-            var security = new Security { Length = Marshal.SizeOf(typeof(Security)), Inherit = true };
-            input = CreateFile("NUL", 0x80000000, 3, ref security, 3, 0x80, IntPtr.Zero);
-            log = CreateFile(Path.Combine(status, "worker.log"), 0x40000000, 1, ref security, 2, 0x80, IntPtr.Zero);
-            if (input.ToInt64() == -1 || log.ToInt64() == -1) throw new Win32Exception();
-            startup.Flags = 0x100;
-            startup.StandardIn = input;
-            startup.StandardOut = log;
-            startup.StandardError = log;
+            if (proxyStdio)
+            {
+                input = DuplicateStandardHandle(-10);
+                log = DuplicateStandardHandle(-11);
+                error = DuplicateStandardHandle(-12);
+                startup.Flags = StartfUseStdHandles;
+                startup.StandardIn = input;
+                startup.StandardOut = log;
+                startup.StandardError = error;
+            }
+            else
+            {
+                var security = new Security { Length = Marshal.SizeOf(typeof(Security)), Inherit = true };
+                input = CreateFile("NUL", 0x80000000, 3, ref security, 3, 0x80, IntPtr.Zero);
+                log = CreateFile(Path.Combine(status, "worker.log"), 0x40000000, 1, ref security, 2, 0x80, IntPtr.Zero);
+                if (input.ToInt64() == -1 || log.ToInt64() == -1) throw new Win32Exception();
+                startup.Flags = StartfUseStdHandles;
+                startup.StandardIn = input;
+                startup.StandardOut = log;
+                startup.StandardError = log;
+            }
             var command = new StringBuilder(string.Join(" ", new[] { exe }.Concat(args).Select(Quote)));
             Require(CreateProcess(exe, command, IntPtr.Zero, IntPtr.Zero, true,
                 CreateSuspended | CreateNoWindow, IntPtr.Zero, cwd, ref startup, out worker));
@@ -123,6 +140,7 @@ public static class QuotaFlowGuard
             if (worker.Process != IntPtr.Zero) CloseHandle(worker.Process);
             if (input.ToInt64() > 0) CloseHandle(input);
             if (log.ToInt64() > 0) CloseHandle(log);
+            if (error.ToInt64() > 0) CloseHandle(error);
             if (owner != IntPtr.Zero) CloseHandle(owner);
             CloseHandle(job);
         }
@@ -130,7 +148,17 @@ public static class QuotaFlowGuard
 
     private static bool ControllerStopped(IntPtr owner, Task<int> input)
     {
-        return input.IsCompleted || WaitForSingleObject(owner, 0) != WaitTimeout;
+        return (input != null && input.IsCompleted) || WaitForSingleObject(owner, 0) != WaitTimeout;
+    }
+
+    private static IntPtr DuplicateStandardHandle(int id)
+    {
+        IntPtr source = GetStdHandle(id);
+        if (source == IntPtr.Zero || source.ToInt64() == -1) throw new Win32Exception();
+        IntPtr duplicate;
+        Require(DuplicateHandle(GetCurrentProcess(), source, GetCurrentProcess(), out duplicate, 0, true,
+            DuplicateSameAccess));
+        return duplicate;
     }
 
     public static void VerifyStopped(string dir, string name, int session, int supervisor, uint worker)
@@ -282,4 +310,11 @@ public static class QuotaFlowGuard
     private static extern bool TerminateProcess(IntPtr process, uint exitCode);
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr GetStdHandle(int handle);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr GetCurrentProcess();
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool DuplicateHandle(IntPtr sourceProcess, IntPtr source, IntPtr targetProcess,
+        out IntPtr target, uint access, bool inherit, uint options);
 }

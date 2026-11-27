@@ -9,6 +9,7 @@ try {
         exit 0
     }
     $quotaWorkerArguments = [string[]]((ConvertFrom-Json -InputObject $env:QUOTAFLOW_GUARD_ARGS).args)
+    $quotaGuardProxyStdio = $env:QUOTAFLOW_GUARD_PROXY_STDIO -eq '1'
     [QuotaFlowGuard]::Run(
         $env:QUOTAFLOW_GUARD_EXE,
         $quotaWorkerArguments,
@@ -16,7 +17,8 @@ try {
         $env:QUOTAFLOW_GUARD_STATUS,
         [uint32]$env:QUOTAFLOW_GUARD_OWNER,
         [int64]$env:QUOTAFLOW_GUARD_CREATED_BY,
-        $env:QUOTAFLOW_GUARD_JOB
+        $env:QUOTAFLOW_GUARD_JOB,
+        $quotaGuardProxyStdio
     )
 } catch {
     [IO.File]::WriteAllText((Join-Path $env:QUOTAFLOW_GUARD_STATUS 'guard-error.txt'), $_.Exception.Message)
