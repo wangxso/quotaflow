@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadConfig } from './config';
 import { agentForLane } from './agent-factory';
@@ -13,7 +13,13 @@ import { runOnce } from './worker';
 import { recoverInterruptedAttempts } from './recovery';
 import { waitForCancellation } from './cancellation';
 import { ensureWorktree } from './worktree';
-import { hashGitHubPayload, parseGitHubPullSnapshot } from './github';
+import {
+  githubEventKey,
+  hashGitHubPayload,
+  normalizeGitHubWebhook,
+  parseGitHubPullSnapshot,
+  verifyGitHubWebhookSignature,
+} from './github';
 
 const usage = `
 quotaflow config validate [--config <file>]
@@ -30,6 +36,7 @@ quotaflow worker recover [--config <file>]
 quotaflow budget status [--config <file>]
 quotaflow budget audit [--limit <n>] [--config <file>]
 quotaflow github gate <snapshot.json> [--delivery-id <id>] [--event-type <type>] [--expected-head <sha>] [--expected-base <sha>] [--require-check <name>]... [--required-approvals <n>] [--allow-author-self-approval] [--config <file>]
+quotaflow github webhook <payload.json> --event <type> --delivery-id <id> --signature <sha256=...> [--secret-env GITHUB_WEBHOOK_SECRET] [--config <file>]
 `.trim();
 
 function option(args: string[], name: string): string | undefined {
@@ -207,8 +214,8 @@ async function main() {
     if (scope === 'github' && action === 'gate') {
       const snapshotFile = rest.shift();
       if (!snapshotFile || snapshotFile.startsWith('--')) throw new Error('Expected a GitHub pull snapshot JSON file');
+      if (statSync(snapshotFile).size > 1_000_000) throw new Error('GitHub pull snapshot exceeds 1 MiB');
       const snapshotText = readFileSync(snapshotFile, 'utf8');
-      if (Buffer.byteLength(snapshotText) > 1_000_000) throw new Error('GitHub pull snapshot exceeds 1 MiB');
       const snapshot = parseGitHubPullSnapshot(JSON.parse(snapshotText) as unknown);
       const expectedHeadSha = option(rest, '--expected-head');
       const expectedBaseSha = option(rest, '--expected-base');
@@ -241,6 +248,44 @@ async function main() {
         eventType,
       });
       console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+
+    if (scope === 'github' && action === 'webhook') {
+      const payloadFile = rest.shift();
+      if (!payloadFile || payloadFile.startsWith('--')) throw new Error('Expected a GitHub webhook payload JSON file');
+      const eventType = option(rest, '--event');
+      const deliveryId = option(rest, '--delivery-id');
+      const signature = option(rest, '--signature');
+      const secretName = option(rest, '--secret-env') ?? 'GITHUB_WEBHOOK_SECRET';
+      if (!eventType || !deliveryId || !signature) {
+        throw new Error('GitHub webhook requires --event, --delivery-id and --signature');
+      }
+      if (rest.length > 0) throw new Error(`Unexpected github webhook arguments: ${rest.join(' ')}`);
+      if (!deliveryId.trim()) throw new Error('--delivery-id must not be empty');
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(secretName)) throw new Error('--secret-env must name an environment variable');
+      const secret = process.env[secretName];
+      if (!secret) throw new Error(`GitHub webhook secret is missing from ${secretName}`);
+      if (statSync(payloadFile).size > 2_000_000) throw new Error('GitHub webhook payload exceeds 2 MB');
+      const rawPayload = readFileSync(payloadFile);
+      if (!verifyGitHubWebhookSignature(secret, rawPayload, signature)) {
+        throw new Error('Invalid GitHub webhook signature');
+      }
+      const payload = JSON.parse(rawPayload.toString('utf8')) as unknown;
+      const normalized = normalizeGitHubWebhook(eventType, payload, rawPayload);
+      const baseDelivery = {
+        eventType: normalized.eventType,
+        repository: normalized.repository,
+        pullNumber: normalized.pullNumber,
+        headSha: normalized.headSha,
+        payloadHash: normalized.payloadHash,
+      };
+      const delivery = store.recordGitHubDelivery({
+        ...baseDelivery,
+        deliveryId,
+        eventKey: githubEventKey(baseDelivery),
+      });
+      console.log(JSON.stringify({ event: normalized, delivery }, null, 2));
       return;
     }
 

@@ -1,10 +1,14 @@
 import { expect, test } from 'bun:test';
+import { createHmac } from 'node:crypto';
 import {
   evaluateGitHubPull,
   githubEventKey,
+  hashGitHubBytes,
   hashGitHubPayload,
+  normalizeGitHubWebhook,
   parseGitHubPullSnapshot,
   type GitHubPullSnapshot,
+  verifyGitHubWebhookSignature,
 } from './github';
 
 const headSha = 'abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48';
@@ -168,4 +172,37 @@ test('deduplicates logical GitHub deliveries independently of delivery id', () =
   };
   expect(githubEventKey(base)).toBe(githubEventKey({ ...base, repository: 'WANGXSO/MCARPLAY' }));
   expect(githubEventKey(base)).not.toBe(githubEventKey({ ...base, payloadHash: hashGitHubPayload({ action: 'opened' }) }));
+});
+
+test('verifies the raw GitHub webhook HMAC and rejects tampering', () => {
+  const secret = 'test-webhook-secret';
+  const body = Buffer.from('{"action":"opened"}');
+  const signature = `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
+  expect(verifyGitHubWebhookSignature(secret, body, signature)).toBe(true);
+  expect(verifyGitHubWebhookSignature(secret, Buffer.from('{"action":"closed"}'), signature)).toBe(false);
+  expect(verifyGitHubWebhookSignature(secret, body, 'sha256=bad')).toBe(false);
+  expect(verifyGitHubWebhookSignature('', body, signature)).toBe(false);
+});
+
+test('normalizes supported GitHub webhook events to PR and head identity', () => {
+  const repository = { full_name: 'WANGXSO/mcarplay' };
+  const pullRequest = {
+    number: 141,
+    head: { sha: headSha },
+    base: { sha: baseSha },
+  };
+  const pullBody = Buffer.from(JSON.stringify({ action: 'synchronize', repository, pull_request: pullRequest }));
+  expect(normalizeGitHubWebhook('pull_request', JSON.parse(pullBody.toString()), pullBody)).toEqual({
+    eventType: 'pull_request', action: 'synchronize', repository: 'wangxso/mcarplay', pullNumber: 141,
+    headSha, baseSha, payloadHash: hashGitHubBytes(pullBody),
+  });
+  const checkBody = Buffer.from(JSON.stringify({ action: 'completed', repository,
+    check_run: { head_sha: headSha, pull_requests: [{ number: 141 }] } }));
+  expect(normalizeGitHubWebhook('check_run', JSON.parse(checkBody.toString()), checkBody))
+    .toMatchObject({ eventType: 'check_run', repository: 'wangxso/mcarplay', pullNumber: 141, headSha, baseSha: null });
+  const reviewBody = Buffer.from(JSON.stringify({ action: 'submitted', repository,
+    pull_request: pullRequest, review: { commit_id: headSha } }));
+  expect(normalizeGitHubWebhook('pull_request_review', JSON.parse(reviewBody.toString()), reviewBody))
+    .toMatchObject({ eventType: 'pull_request_review', action: 'submitted', pullNumber: 141, headSha, baseSha });
+  expect(() => normalizeGitHubWebhook('issue_comment', {})).toThrow('Unsupported GitHub webhook event');
 });

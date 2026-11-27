@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { createHmac } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -23,7 +24,7 @@ function setup() {
   return { root, config };
 }
 
-async function cliResult(root: string, args: string[], entrypoint = cliEntry) {
+async function cliResult(root: string, args: string[], entrypoint = cliEntry, extraEnv: NodeJS.ProcessEnv = {}) {
   const process = Bun.spawn([
     globalThis.process.execPath,
     entrypoint,
@@ -36,6 +37,7 @@ async function cliResult(root: string, args: string[], entrypoint = cliEntry) {
     stderr: 'pipe',
     stdin: 'ignore',
     windowsHide: true,
+    env: { ...globalThis.process.env, ...extraEnv },
   });
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(process.stdout).text(),
@@ -45,8 +47,8 @@ async function cliResult(root: string, args: string[], entrypoint = cliEntry) {
   return { stdout, stderr, exitCode };
 }
 
-async function cli(root: string, args: string[]) {
-  const result = await cliResult(root, args);
+async function cli(root: string, args: string[], extraEnv: NodeJS.ProcessEnv = {}) {
+  const result = await cliResult(root, args, cliEntry, extraEnv);
   const { stdout, stderr, exitCode } = result;
   if (exitCode !== 0) throw new Error(`CLI exited ${exitCode}: ${stderr || stdout}`);
   return result;
@@ -181,6 +183,47 @@ test('evaluates and idempotently stores a GitHub pull gate snapshot', async () =
     expect(repeated).toMatchObject({ duplicate: true, delivery: { duplicateDelivery: true, duplicateEvent: true } });
     const redelivered = JSON.parse((await cli(root, [...args.slice(0, 4), 'delivery-redelivery', ...args.slice(5)])).stdout);
     expect(redelivered).toMatchObject({ duplicate: true, delivery: { duplicateDelivery: false, duplicateEvent: true } });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('verifies signed GitHub webhooks before idempotent storage', async () => {
+  const { root } = setup();
+  const secret = 'quotaflow-webhook-test';
+  try {
+    const webhookEnv = { QUOTAFLOW_TEST_WEBHOOK_SECRET: secret };
+    const payloadFile = join(root, 'webhook.json');
+    const payload = Buffer.from(JSON.stringify({
+      action: 'synchronize',
+      repository: { full_name: 'wangxso/mcarplay' },
+      pull_request: {
+        number: 141,
+        head: { sha: 'abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48' },
+        base: { sha: 'daf67e87a72aa9033a4d62f88e9a9d05ce047d9e' },
+      },
+    }));
+    writeFileSync(payloadFile, payload);
+    const signature = `sha256=${createHmac('sha256', secret).update(payload).digest('hex')}`;
+    const args = ['github', 'webhook', payloadFile, '--event', 'pull_request',
+      '--delivery-id', 'webhook-delivery-1', '--signature', signature,
+      '--secret-env', 'QUOTAFLOW_TEST_WEBHOOK_SECRET'];
+    const first = JSON.parse((await cli(root, args, webhookEnv)).stdout);
+    expect(first).toMatchObject({
+      event: { eventType: 'pull_request', action: 'synchronize', pullNumber: 141 },
+      delivery: { deliveryId: 'webhook-delivery-1', duplicateDelivery: false, duplicateEvent: false },
+    });
+    const retry = JSON.parse((await cli(root, args, webhookEnv)).stdout);
+    expect(retry).toMatchObject({ delivery: { duplicateDelivery: true, duplicateEvent: true } });
+    const alternateArgs = [...args];
+    alternateArgs[alternateArgs.indexOf('webhook-delivery-1')] = 'webhook-delivery-2';
+    const redelivered = JSON.parse((await cli(root, alternateArgs, webhookEnv)).stdout);
+    expect(redelivered).toMatchObject({ delivery: { duplicateDelivery: false, duplicateEvent: true } });
+
+    writeFileSync(payloadFile, Buffer.concat([payload, Buffer.from(' ')]));
+    const tampered = await cliResult(root, args, cliEntry, webhookEnv);
+    expect(tampered.exitCode).toBe(1);
+    expect(tampered.stderr).toContain('Invalid GitHub webhook signature');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

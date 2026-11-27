@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
 export interface GitHubCheckRun {
   name: string;
@@ -109,6 +109,16 @@ export interface GitHubGateIngestResult {
   delivery: GitHubDeliveryRecord;
   gate: GitHubGateRecord;
   duplicate: boolean;
+}
+
+export interface GitHubWebhookEvent {
+  eventType: string;
+  action: string;
+  repository: string;
+  pullNumber: number;
+  headSha: string;
+  baseSha: string | null;
+  payloadHash: string;
 }
 
 function record(value: unknown, label: string): Record<string, unknown> {
@@ -302,6 +312,82 @@ export function evaluateGitHubPull(
 
 export function hashGitHubPayload(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
+}
+
+export function hashGitHubBytes(value: Uint8Array): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+export function verifyGitHubWebhookSignature(
+  secret: string,
+  payload: string | Uint8Array,
+  signatureHeader: string,
+): boolean {
+  const match = /^sha256=([0-9a-f]{64})$/i.exec(signatureHeader.trim());
+  if (!secret || !match) return false;
+  const expected = createHmac('sha256', secret).update(payload).digest();
+  const received = Buffer.from(match[1], 'hex');
+  return received.length === expected.length && timingSafeEqual(received, expected);
+}
+
+function positiveInteger(value: unknown, label: string): number {
+  if (!Number.isInteger(value) || (value as number) <= 0) throw new Error(`${label} must be a positive integer`);
+  return value as number;
+}
+
+export function normalizeGitHubWebhook(
+  eventType: string,
+  payload: unknown,
+  rawPayload?: Uint8Array,
+): GitHubWebhookEvent {
+  const event = eventType.trim().toLowerCase();
+  if (!['pull_request', 'check_run', 'pull_request_review'].includes(event)) {
+    throw new Error(`Unsupported GitHub webhook event ${eventType}`);
+  }
+  const root = record(payload, 'GitHub webhook payload');
+  const repository = stringValue(record(root.repository, 'repository').full_name, 'repository.full_name').toLowerCase();
+  const action = stringValue(root.action, 'action').toLowerCase();
+  if (event === 'pull_request') {
+    const pull = record(root.pull_request, 'pull_request');
+    return {
+      eventType: event,
+      action,
+      repository,
+      pullNumber: positiveInteger(pull.number, 'pull_request.number'),
+      headSha: shaValue(record(pull.head, 'pull_request.head').sha, 'pull_request.head.sha'),
+      baseSha: shaValue(record(pull.base, 'pull_request.base').sha, 'pull_request.base.sha'),
+      payloadHash: rawPayload ? hashGitHubBytes(rawPayload) : hashGitHubPayload(payload),
+    };
+  }
+  if (event === 'check_run') {
+    const check = record(root.check_run, 'check_run');
+    const pulls = check.pull_requests;
+    if (!Array.isArray(pulls) || pulls.length === 0) throw new Error('check_run.pull_requests must contain a PR');
+    const pull = record(pulls[0], 'check_run.pull_requests[0]');
+    return {
+      eventType: event,
+      action,
+      repository,
+      pullNumber: positiveInteger(pull.number, 'check_run.pull_requests[0].number'),
+      headSha: shaValue(check.head_sha, 'check_run.head_sha'),
+      baseSha: null,
+      payloadHash: rawPayload ? hashGitHubBytes(rawPayload) : hashGitHubPayload(payload),
+    };
+  }
+  if (event === 'pull_request_review') {
+    const pull = record(root.pull_request, 'pull_request');
+    const review = record(root.review, 'review');
+    return {
+      eventType: event,
+      action,
+      repository,
+      pullNumber: positiveInteger(pull.number, 'pull_request.number'),
+      headSha: shaValue(review.commit_id ?? record(pull.head, 'pull_request.head').sha, 'review.commit_id'),
+      baseSha: shaValue(record(pull.base, 'pull_request.base').sha, 'pull_request.base.sha'),
+      payloadHash: rawPayload ? hashGitHubBytes(rawPayload) : hashGitHubPayload(payload),
+    };
+  }
+  throw new Error(`GitHub webhook event ${eventType} reached an invalid branch`);
 }
 
 export function githubEventKey(input: Omit<GitHubDeliveryInput, 'deliveryId' | 'eventKey' | 'now'>): string {
