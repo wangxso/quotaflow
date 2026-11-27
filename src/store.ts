@@ -7,6 +7,7 @@ import type {
   BudgetPolicy,
   BudgetStatus,
   EventRecord,
+  HandoffOptions,
   LaneConfig,
   LaneFilter,
   Reservation,
@@ -14,6 +15,7 @@ import type {
   TaskStatus,
   UsageReport,
 } from './domain';
+import { parseHandoffNote, parseHandoffOptions, type HandoffDraft, type SavedHandoff } from './handoff';
 import { usageActualModel } from './magpie-usage';
 
 const maxAttemptsPerTask = 3;
@@ -27,6 +29,7 @@ type TaskRow = {
   status: TaskStatus;
   priority: number;
   critical: number;
+  handoff_config: string | null;
   checkpoint: string | null;
   next_wake_at: number | null;
   created_at: number;
@@ -106,6 +109,7 @@ function taskFrom(row: TaskRow): Task {
     status: row.status,
     priority: row.priority,
     critical: row.critical === 1,
+    ...(row.handoff_config ? { handoff: parseHandoffOptions(JSON.parse(row.handoff_config)) } : {}),
     checkpoint: row.checkpoint,
     nextWakeAt: row.next_wake_at,
     createdAt: row.created_at,
@@ -199,6 +203,16 @@ function usageSummary(usage: UsageReport, actualModel?: string) {
   };
 }
 
+interface SettlementOptions {
+  handoff?: HandoffDraft;
+  preserveCheckpoint?: boolean;
+  detail?: Record<string, unknown>;
+}
+
+function noteForCheckpoint(checkpoint: string | null, handoff?: HandoffDraft): string | null {
+  return checkpoint && handoff && 'note' in handoff ? JSON.stringify(handoff.note) : null;
+}
+
 export class TaskStore {
   constructor(readonly db: Database) {}
 
@@ -210,6 +224,7 @@ export class TaskStore {
     workspacePath: string;
     priority?: number;
     critical?: boolean;
+    handoff?: HandoffOptions;
     now?: number;
   }): Task {
     const now = input.now ?? Date.now();
@@ -221,14 +236,16 @@ export class TaskStore {
     const prompt = input.prompt ?? input.title;
     const priority = input.priority ?? 0;
     if (!Number.isFinite(priority)) throw new Error('Task priority must be finite');
+    const handoff = input.handoff ? parseHandoffOptions(input.handoff) : null;
     this.db.transaction(() => {
       this.db.run(
         `INSERT INTO tasks
-          (id, title, prompt, repo_path, workspace_path, status, priority, critical, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)`,
-        [id, input.title, prompt, input.repoPath, input.workspacePath, priority, Number(input.critical ?? false), now, now],
+          (id, title, prompt, repo_path, workspace_path, status, priority, critical, handoff_config, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?)`,
+        [id, input.title, prompt, input.repoPath, input.workspacePath, priority, Number(input.critical ?? false),
+          handoff ? JSON.stringify(handoff) : null, now, now],
       );
-      this.#event(id, null, 'task_created', { priority, critical: Boolean(input.critical), now });
+      this.#event(id, null, 'task_created', { priority, critical: Boolean(input.critical), ...(handoff ? { handoff } : {}), now });
     }).immediate();
     return this.getTask(id);
   }
@@ -278,6 +295,25 @@ export class TaskStore {
 
   attempts(taskId: string): Attempt[] {
     return this.db.query<AttemptRow, [string]>('SELECT * FROM attempts WHERE task_id = ? ORDER BY id').all(taskId).map(attemptFrom);
+  }
+
+  handoffForCheckpoint(taskId: string, checkpoint: string | null): SavedHandoff | null {
+    if (!checkpoint) return null;
+    const row = this.db.query<{ id: number; handoff_note: string }, [string, string]>(`
+      SELECT id, handoff_note FROM attempts
+      WHERE task_id = ? AND checkpoint = ? AND stage = 'done' AND handoff_note IS NOT NULL
+      ORDER BY id DESC LIMIT 1
+    `).get(taskId, checkpoint);
+    if (!row) return null;
+    const note = parseHandoffNote(row.handoff_note);
+    return note ? { taskId, attemptId: row.id, checkpoint, note } : null;
+  }
+
+  recordHandoffInput(attempt: Attempt, checkpoint: string, source: SavedHandoff | null, now = Date.now()): void {
+    this.#event(attempt.taskId, attempt.id, 'handoff_input', {
+      checkpoint,
+      sourceAttemptId: source?.attemptId ?? null,
+    }, now);
   }
 
   events(taskId: string): EventRecord[] {
@@ -493,6 +529,7 @@ export class TaskStore {
     now = Date.now(),
     actualModel?: string,
     usage?: UsageReport,
+    options: SettlementOptions = {},
   ): Task {
     return this.db.transaction(() => {
       const attempt = this.db.query<AttemptRow, [number]>('SELECT * FROM attempts WHERE id = ?').get(attemptId);
@@ -500,9 +537,11 @@ export class TaskStore {
       const usageModel = usageActualModel(usage);
       const settledActualModel = usageModel
         ?? (usage?.status === 'recorded' ? undefined : actualModel);
+      const published = options.preserveCheckpoint ? null : checkpoint || null;
       const updated = this.db.run(
-        "UPDATE attempts SET stage = 'done', checkpoint = ?, ended_at = ?, actual_model = coalesce(?, actual_model) WHERE id = ? AND stage <> 'done'",
-        [checkpoint || null, now, settledActualModel ?? null, attemptId],
+        `UPDATE attempts SET stage = 'done', checkpoint = ?, ended_at = ?, actual_model = coalesce(?, actual_model),
+          handoff_note = ? WHERE id = ? AND stage <> 'done'`,
+        [published, now, settledActualModel ?? null, noteForCheckpoint(published, options.handoff), attemptId],
       );
       if (!updated.changes) return this.getTask(attempt.task_id);
 
@@ -510,7 +549,9 @@ export class TaskStore {
       const budgetLease = this.#settleBudgetLease(attemptId, usage, now);
       const nextWakeAt = status === 'waiting_quota' || status === 'queued' ? now + retryAfterMs : null;
       this.#updateStatus(attempt.task_id, status, nextWakeAt, now);
-      this.db.run('UPDATE tasks SET checkpoint = ? WHERE id = ?', [checkpoint || null, attempt.task_id]);
+      if (!options.preserveCheckpoint) {
+        this.db.run('UPDATE tasks SET checkpoint = ? WHERE id = ?', [published, attempt.task_id]);
+      }
       if (nextWakeAt !== null) {
         this.db.run(
           `INSERT INTO cooldowns (account, until_ms) VALUES (?, ?)
@@ -531,8 +572,10 @@ export class TaskStore {
           expiresAt: budgetLease.expiresAt,
         });
       }
+      this.#recordHandoff(attempt.task_id, attemptId, published, options.handoff, now);
       this.#event(attempt.task_id, attemptId, 'attempt_finished', {
-        checkpoint: checkpoint || null,
+        ...options.detail,
+        checkpoint: published,
         status,
         reason,
         actualModel: settledActualModel ?? attempt.actual_model,
@@ -558,6 +601,7 @@ export class TaskStore {
     input: {
       status: 'queued' | 'blocked' | 'cancelled';
       checkpoint?: string | null;
+      handoff?: HandoffDraft;
       reason: string;
       detail?: Record<string, unknown>;
       now?: number;
@@ -569,8 +613,9 @@ export class TaskStore {
       if (!attempt) throw new Error(`Unknown attempt ${attemptId}`);
       const checkpoint = input.checkpoint || null;
       const updated = this.db.run(
-        "UPDATE attempts SET stage = 'done', checkpoint = coalesce(?, checkpoint), ended_at = ? WHERE id = ? AND stage <> 'done'",
-        [checkpoint, now, attemptId],
+        `UPDATE attempts SET stage = 'done', checkpoint = coalesce(?, checkpoint), ended_at = ?,
+          handoff_note = ? WHERE id = ? AND stage <> 'done'`,
+        [checkpoint, now, noteForCheckpoint(checkpoint, input.handoff), attemptId],
       );
       if (!updated.changes) return this.getTask(attempt.task_id);
 
@@ -597,10 +642,17 @@ export class TaskStore {
         ...input.detail,
         now,
       };
+      this.#recordHandoff(attempt.task_id, attemptId, checkpoint, input.handoff, now);
       this.#event(attempt.task_id, attemptId, 'attempt_recovered', detail);
       this.#event(attempt.task_id, attemptId, 'attempt_finished', detail);
       return this.getTask(attempt.task_id);
     }).immediate();
+  }
+
+  #recordHandoff(taskId: string, attemptId: number, checkpoint: string | null, handoff: HandoffDraft | undefined, now: number) {
+    if (!handoff || !checkpoint) return;
+    if ('note' in handoff) this.#event(taskId, attemptId, 'handoff_saved', { checkpoint }, now);
+    else this.#event(taskId, attemptId, 'handoff_unavailable', { checkpoint, reason: handoff.reason }, now);
   }
 
   cancelRequested(taskId: string, attemptId: number): boolean {
@@ -783,10 +835,10 @@ export class TaskStore {
     }
   }
 
-  #event(taskId: string, attemptId: number | null, kind: string, detail: unknown) {
+  #event(taskId: string, attemptId: number | null, kind: string, detail: unknown, now = Date.now()) {
     this.db.run(
       'INSERT INTO events (task_id, attempt_id, kind, detail, created_at) VALUES (?, ?, ?, ?, ?)',
-      [taskId, attemptId, kind, JSON.stringify(detail), Date.now()],
+      [taskId, attemptId, kind, JSON.stringify(detail), now],
     );
   }
 }

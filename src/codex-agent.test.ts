@@ -128,6 +128,21 @@ test('does not send a turn when the zero-inference preflight fails', async () =>
   expect(calls.some((call) => call.method === 'turn/start')).toBe(false);
 });
 
+test('uses the handoff prompt and grants a dedicated writable directory for its draft', async () => {
+  const calls: Array<{ method: string; params: unknown }> = [];
+  const agent = new CodexAppServerAgent(lane, () => fakeServer(calls), async () => ({
+    inferenceCalls: 0,
+    commandExec: { status: 'completed', exitCode: 0, fileWritten: true },
+  }));
+  const handoff = { directory: 'C:/attempt/handoff', file: 'C:/attempt/handoff/draft.json',
+    prompt: 'Task plus verified handoff notes', source: null };
+  await agent.run({ ...context, handoff });
+  expect(calls.find((call) => call.method === 'turn/start')?.params).toMatchObject({
+    input: [{ type: 'text', text: handoff.prompt }],
+    sandboxPolicy: { writableRoots: [context.workspacePath, handoff.directory] },
+  });
+});
+
 test('cancellation interrupts the active turn and closes the server', async () => {
   const calls: Array<{ method: string; params: unknown }> = [];
   const server = fakeServer(calls);

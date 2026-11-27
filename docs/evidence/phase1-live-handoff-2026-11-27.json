@@ -1,0 +1,152 @@
+{
+  "recordedOn": "2026-11-27",
+  "baseRevision": "c4543d90a08e23f368f18e1d26f82895a2a54a50",
+  "environment": {
+    "os": "macOS 26.6.2 arm64",
+    "bun": "1.4.5",
+    "git": "2.56.1",
+    "codex": "0.171.0",
+    "opencode": "1.19.6",
+    "magpie": "0.1.4539",
+    "appleClang": "21.0.0"
+  },
+  "verification": {
+    "bunTest": { "passed": 90, "failed": 0, "windowsOnlySkipped": 2 },
+    "build": "bun run build",
+    "configValidation": "bun dist/cli.js config validate --config quotaflow.config.example.json"
+  },
+  "nativeQuotaProbe": {
+    "command": "codex exec --ephemeral --ignore-user-config --skip-git-repo-check --sandbox read-only --json 'Reply only with OK.'",
+    "exitCode": 1,
+    "outcome": "usage_limit",
+    "turnStatus": "failed",
+    "workspaceWrites": false
+  },
+  "trial": {
+    "purpose": "Verify that Codex can complete work and a checkpoint-bound handoff note through a zero-priced Magpie route when the native ChatGPT quota is exhausted, then hand the remaining task to OpenCode.",
+    "requestedModel": "opencode-go/hy4-flash-free",
+    "servedModel": "hy4-flash-free",
+    "magpieRequests": 50,
+    "magpieHttp200": 50,
+    "magpieCostEstimate": 0,
+    "priced": true,
+    "providerInvoice": "UNKNOWN",
+    "order": ["B1", "A1", "A2", "B2", "B3", "A3"],
+    "checkpoint": "29f33bd8b355a69b50ce15745cfab410f12ff0e8",
+    "donor": {
+      "agent": "codex",
+      "transport": "Codex App Server launched by a supervised command Lane inside a macOS Seatbelt profile",
+      "turnStatus": "failed",
+      "fault": "A local forwarding proxy returned HTTP 429 only after parser.ts had changed and a valid handoff draft existed. The injected response was not forwarded upstream.",
+      "http429Injections": 1,
+      "stop": { "activeProcesses": 0, "reason": "controller_closed" },
+      "supervisedGroup": true,
+      "changedFiles": ["parser.ts"],
+      "parserTests": { "passed": 2, "failed": 0 },
+      "noteSourceAttempt": 1,
+      "note": {
+        "version": 1,
+        "completed": [
+          "parser.ts: parseRetryLimit validates trimmed ASCII decimal input from 0 through 10, allows leading zeros, and rejects invalid values with RangeError.",
+          "The checkpointed parser.ts was changed without modifying another source file."
+        ],
+        "failedAttempts": [],
+        "blockers": [],
+        "nextSteps": [
+          "Implement label.ts using parseRetryLimit and the required singular, plural, and disabled labels.",
+          "Leave tests unchanged because the controller runs them after the recipient exits."
+        ],
+        "checks": []
+      },
+      "usage": {
+        "code": { "rows": 1, "inputTokens": 2954, "outputTokens": 1174, "cacheReadTokens": 0, "durationMs": 9082 },
+        "note": { "rows": 1, "inputTokens": 1596, "outputTokens": 613, "cacheReadTokens": 2560, "durationMs": 4884 }
+      }
+    },
+    "ordering": {
+      "units": "Unix epoch milliseconds",
+      "http429InjectedAt": 1795780921705,
+      "stoppedReceiptPublishedAt": 1795780921812,
+      "checkpointRefPublishedAt": 1795780921912,
+      "recipientOwnerWrittenAt": 1795780922020,
+      "interpretation": "The 429 preceded the verified empty process set, the checkpoint was published after that stop receipt, and the receiving attempt started after the checkpoint."
+    },
+    "arms": [
+      {
+        "arm": "B1", "withNote": true, "status": "completed", "changedFiles": ["label.ts"], "tests": "3/3", "stopVerified": true,
+        "durationMs": 31606, "toolCount": 7, "repeatedCalls": 0, "parserReads": 2, "parserEdits": 0,
+        "usage": { "rows": 9, "inputTokens": 8499, "outputTokens": 2562, "cacheReadTokens": 33792 }
+      },
+      {
+        "arm": "A1", "withNote": false, "status": "completed", "changedFiles": ["label.ts"], "tests": "3/3", "stopVerified": true,
+        "durationMs": 27553, "toolCount": 9, "repeatedCalls": 1, "parserReads": 2, "parserEdits": 0,
+        "usage": { "rows": 7, "inputTokens": 8825, "outputTokens": 5545, "cacheReadTokens": 27904 }
+      },
+      {
+        "arm": "A2", "withNote": false, "status": "completed", "changedFiles": ["label.ts"], "tests": "3/3", "stopVerified": true,
+        "durationMs": 21595, "toolCount": 8, "repeatedCalls": 1, "parserReads": 2, "parserEdits": 0,
+        "usage": { "rows": 7, "inputTokens": 8487, "outputTokens": 2529, "cacheReadTokens": 23552 }
+      },
+      {
+        "arm": "B2", "withNote": true, "status": "completed", "changedFiles": ["label.ts"], "tests": "3/3", "stopVerified": true,
+        "durationMs": 23281, "toolCount": 10, "repeatedCalls": 2, "parserReads": 2, "parserEdits": 0,
+        "usage": { "rows": 9, "inputTokens": 8615, "outputTokens": 1441, "cacheReadTokens": 36608 }
+      },
+      {
+        "arm": "B3", "withNote": true, "status": "completed", "changedFiles": ["label.ts"], "tests": "3/3", "stopVerified": true,
+        "durationMs": 21632, "toolCount": 8, "repeatedCalls": 0, "parserReads": 2, "parserEdits": 0,
+        "usage": { "rows": 7, "inputTokens": 8273, "outputTokens": 2849, "cacheReadTokens": 26112 }
+      },
+      {
+        "arm": "A3", "withNote": false, "status": "completed", "changedFiles": ["label.ts"], "tests": "3/3", "stopVerified": true,
+        "durationMs": 29093, "toolCount": 11, "repeatedCalls": 1, "parserReads": 2, "parserEdits": 0,
+        "usage": { "rows": 9, "inputTokens": 9152, "outputTokens": 4290, "cacheReadTokens": 39168 }
+      }
+    ],
+    "summary": {
+      "withNote": {
+        "runs": 3,
+        "testsPassed": 9,
+        "testsFailed": 0,
+        "fileScopePassed": 3,
+        "toolCount": 25,
+        "repeatedCalls": 2,
+        "recipientDurationMs": 76519,
+        "requests": 25,
+        "inputTokens": 25387,
+        "outputTokens": 6852,
+        "cacheReadTokens": 96512
+      },
+      "withoutNote": {
+        "runs": 3,
+        "testsPassed": 9,
+        "testsFailed": 0,
+        "fileScopePassed": 3,
+        "toolCount": 28,
+        "repeatedCalls": 3,
+        "recipientDurationMs": 78241,
+        "requests": 23,
+        "inputTokens": 26464,
+        "outputTokens": 12364,
+        "cacheReadTokens": 90624
+      },
+      "includingNoteGeneration": {
+        "withNoteRequests": 26,
+        "withoutNoteRequests": 23,
+        "withNoteInputTokens": 26983,
+        "withoutNoteInputTokens": 26464,
+        "withNoteOutputTokens": 7465,
+        "withoutNoteOutputTokens": 12364,
+        "withNoteCacheReadTokens": 99072,
+        "withoutNoteCacheReadTokens": 90624,
+        "withNoteDurationMs": 81403,
+        "withoutNoteDurationMs": 78241,
+        "inputTokenDifference": 519,
+        "outputTokenDifference": -4899,
+        "toolCallDifference": -3,
+        "durationDifferenceMs": 3162
+      }
+    },
+    "decision": "Keep handoff notes opt-in. All runs preserved completion, tests, write isolation, and stop ordering. Three runs show lower tool use and output-token volume with notes, while note generation increased total input tokens, requests, and elapsed time. The sample is too small to change the default."
+  }
+}

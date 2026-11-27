@@ -14,6 +14,14 @@ import { runOnce } from './worker';
 import { checkpoint, ensureWorktree, restoreCheckpoint, worktreeGit } from './worktree';
 
 const supervisedTest = test.skipIf(process.platform !== 'win32' && process.platform !== 'darwin');
+const draft = {
+  version: 1,
+  completed: ['Verified app.txt'],
+  failedAttempts: [],
+  blockers: [],
+  nextSteps: ['Write answer.txt'],
+  checks: ['Read back the accepted result'],
+};
 
 function setup() {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-worker-'));
@@ -137,6 +145,89 @@ test('worker reserves, executes, checkpoints and completes a task', async () => 
     restoreCheckpoint(repo, restored, result!.checkpoint!);
     expect(readFileSync(join(restored, 'app.txt'), 'utf8')).toBe('started\n');
     expect(readFileSync(join(restored, 'answer.txt'), 'utf8')).toBe('42\n');
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a rejected change keeps the handoff checkpoint and blocks a retry while the protected file is dirty', async () => {
+  const { root, repo, db, store, config } = setup();
+  try {
+    const workspacePath = join(root, 'protected');
+    const task = store.createTask({ id: 'protected', title: 'finish work', repoPath: repo, workspacePath,
+      handoff: { protectedPaths: ['app.txt'] } });
+    const now = Date.now();
+    const first = await runOnce(store, config, () => ({
+      id: 'donor',
+      async run({ handoff }) {
+        writeFileSync(join(workspacePath, 'app.txt'), 'accepted\n');
+        writeFileSync(handoff!.file, JSON.stringify(draft));
+        return { status: 'waiting_quota', reason: 'fixture_quota', tests: 'not_run', activeProcesses: 0, retryAfterMs: 5 };
+      },
+    }), () => now);
+    expect(first?.task.status).toBe('waiting_quota');
+    expect(store.handoffForCheckpoint(task.id, first!.checkpoint)).toMatchObject({ attemptId: first!.attempt.id, note: draft });
+    expect(store.handoffForCheckpoint(task.id, worktreeGit(repo, ['rev-parse', 'HEAD']))).toBeNull();
+    expect(store.handoffForCheckpoint('another-task', first!.checkpoint)).toBeNull();
+
+    const rejected = await runOnce(store, config, () => ({
+      id: 'recipient',
+      async run({ handoff }) {
+        expect(handoff?.source?.attemptId).toBe(first!.attempt.id);
+        writeFileSync(join(workspacePath, 'answer.txt'), '42\n');
+        writeFileSync(join(workspacePath, 'app.txt'), 'accepted\n\n');
+        writeFileSync(handoff!.file, JSON.stringify(draft));
+        return { status: 'completed', reason: 'fixture_passed', tests: 'passed', activeProcesses: 0, usage: usageReport() };
+      },
+    }), () => now + 10);
+    expect(rejected?.task).toMatchObject({ status: 'blocked', checkpoint: first!.checkpoint });
+    expect(rejected?.attempt).toMatchObject({ stage: 'done', checkpoint: null });
+    expect(store.usage(rejected!.attempt.id)).toHaveLength(1);
+    expect(store.events(task.id).at(-1)?.detail).toMatchObject({ reason: 'handoff_protected_paths_changed', protectedPaths: ['app.txt'] });
+    expect(store.events(task.id).filter((entry) => entry.kind === 'handoff_saved')).toHaveLength(1);
+    expect(worktreeGit(repo, ['for-each-ref', `refs/quotaflow/attempts/${task.id}/${rejected!.attempt.id}`])).toBe('');
+    expect(readFileSync(join(workspacePath, 'app.txt'), 'utf8')).toBe('accepted\n\n');
+
+    store.retry(task.id, now + 20);
+    let started = false;
+    const retry = await runOnce(store, config, () => fixtureAgent(() => { started = true; }), () => now + 20);
+    expect(started).toBe(false);
+    expect(retry?.task).toMatchObject({ status: 'blocked', checkpoint: first!.checkpoint });
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test.each(['missing', 'invalid', 'unverified'])('worker resumes from the original prompt when the prior note is %s', async (kind) => {
+  const { root, repo, db, store, config } = setup();
+  try {
+    const task = store.createTask({ id: 'handoff', title: 'Retain the original task', repoPath: repo,
+      workspacePath: join(root, 'resume'), handoff: { protectedPaths: [] } });
+    const now = Date.now();
+    const first = await runOnce(store, config, () => ({
+      id: 'donor',
+      async run({ handoff }) {
+        if (kind === 'invalid') writeFileSync(handoff!.file, JSON.stringify({ version: 1, nextSteps: ['Incomplete draft'] }));
+        if (kind === 'unverified') writeFileSync(handoff!.file, JSON.stringify(draft));
+        return { status: 'waiting_quota', reason: 'fixture_quota', tests: 'not_run', retryAfterMs: 5,
+          ...(kind === 'unverified' ? {} : { activeProcesses: 0 }) };
+      },
+    }), () => now);
+    expect(first?.task.status).toBe('waiting_quota');
+    expect(store.handoffForCheckpoint(task.id, first!.checkpoint)).toBeNull();
+    const resumed = await runOnce(store, config, () => ({
+      id: 'recipient',
+      async run(context) {
+        expect(context.task.prompt).toBe(task.prompt);
+        expect(context.handoff?.prompt.startsWith(task.prompt)).toBe(true);
+        expect(context.handoff?.source).toBeNull();
+        expect(context.handoff?.prompt).not.toContain('Previous attempt note');
+        return { status: 'completed', reason: 'fixture_passed', tests: 'passed', activeProcesses: 0 };
+      },
+    }), () => now + 10);
+    expect(resumed?.task.status).toBe('completed');
   } finally {
     db.close();
     rmSync(root, { recursive: true, force: true });

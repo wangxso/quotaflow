@@ -214,10 +214,10 @@ export class CodexAppServerAgent implements AgentAdapter {
 
     const turn = await server.call('turn/start', {
       threadId,
-      input: [{ type: 'text', text: context.task.prompt }],
+      input: [{ type: 'text', text: context.handoff?.prompt ?? context.task.prompt }],
       sandboxPolicy: {
         type: 'workspaceWrite',
-        writableRoots: [context.workspacePath],
+        writableRoots: [context.workspacePath, ...(context.handoff ? [context.handoff.directory] : [])],
         networkAccess: false,
         excludeTmpdirEnvVar: true,
         excludeSlashTmp: true,

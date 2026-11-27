@@ -1,0 +1,44 @@
+{
+  "recordedOn": "2026-11-27",
+  "baseRevision": "c4543d90a08e23f368f18e1d26f82895a2a54a50",
+  "environment": { "os": "macOS 26.6.2", "arch": "arm64", "bun": "1.4.5", "git": "2.56.1" },
+  "checks": {
+    "bunTest": { "passed": 90, "failed": 0, "windowsOnlySkipped": 2 },
+    "bundle": "bun run build",
+    "bundledConfigurationValidation": "bun dist/cli.js config validate --config quotaflow.config.example.json",
+    "regressions": [
+      "quota-held Codex fixture lane hands off to an OpenCode fixture lane through the CLI",
+      "missing, invalid or unverified note data falls back to the original task prompt",
+      "a note can only be read for its task and checkpoint",
+      "a stopped writer without acceptable protected file contents cannot advance the checkpoint",
+      "a retry checks protected files before launching another writer",
+      "verified cancellation retains the previous checkpoint when protected changes are rejected",
+      "SQLite v1 through v5 migrate to v6 with earlier tasks and attempts intact"
+    ]
+  },
+  "controllerCrash": {
+    "entrypoint": "bun dist/cli.js worker once",
+    "fault": "SIGKILL after the supervised command wrote its handoff draft",
+    "controllerExitCode": 137,
+    "stop": { "activeProcesses": 0, "reason": "controller_closed" },
+    "recoveryCommand": "bun dist/cli.js worker recover",
+    "recoveredCheckpoint": "96b8333f6df6326d155c496e0e20eb4d4ca323b0",
+    "noteSourceAttempt": 1,
+    "repeatedRecoveryCount": 0,
+    "receivingAttempt": 2,
+    "receivingLane": "recipient",
+    "finalStatus": "completed",
+    "finalCheckpoint": "cf0f745d8acb9d525341bc36050b968d8eaaadd7",
+    "snapshotFiles": ["answer.txt", "app.txt"],
+    "protectedAppValue": 41,
+    "answerValue": 42
+  },
+  "opencodeLoopback": {
+    "version": "1.19.6",
+    "execution": "OpenCode adapter with an injected macOS runner and a synthetic loopback streaming endpoint",
+    "scopedDirectoryPermission": true,
+    "draftWrittenOutsideWorktree": true,
+    "loopbackRequests": 3
+  },
+  "remoteModelRequests": 0
+}

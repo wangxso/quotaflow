@@ -15,7 +15,7 @@ import { ensureWorktree } from './worktree';
 
 const usage = `
 quotaflow config validate [--config <file>]
-quotaflow task add <title> [--prompt <text>] [--repo <path>] [--workspace <path>] [--priority <n>] [--critical] [--config <file>]
+quotaflow task add <title> [--prompt <text>] [--repo <path>] [--workspace <path>] [--priority <n>] [--critical] [--handoff] [--handoff-protect <path>]... [--config <file>]
 quotaflow task list [--status <status>] [--config <file>]
 quotaflow task show <id> [--config <file>]
 quotaflow task events <id> [--config <file>]
@@ -103,6 +103,11 @@ async function main() {
       const priority = Number(priorityText);
       if (!Number.isFinite(priority)) throw new Error('--priority must be a finite number');
       const critical = flag(rest, '--critical');
+      const protectedPaths: string[] = [];
+      for (let path = option(rest, '--handoff-protect'); path !== undefined; path = option(rest, '--handoff-protect')) {
+        protectedPaths.push(path);
+      }
+      const handoff = flag(rest, '--handoff') || protectedPaths.length > 0 ? { protectedPaths } : undefined;
       const title = option(rest, '--title') ?? rest.join(' ').trim();
       if (!title) throw new Error('Expected a task title');
       const prompt = promptOption ?? title;
@@ -114,6 +119,7 @@ async function main() {
         workspacePath,
         priority,
         critical,
+        handoff,
       });
       console.log(JSON.stringify(task, null, 2));
       return;
@@ -131,6 +137,7 @@ async function main() {
         attempts: store.attempts(task.id),
         usage: store.usageForTask(task.id),
         budgetLeases: store.budgetLeasesForTask(task.id),
+        ...(task.handoff ? { handoffNote: store.handoffForCheckpoint(task.id, task.checkpoint) } : {}),
       }, null, 2));
       return;
     }

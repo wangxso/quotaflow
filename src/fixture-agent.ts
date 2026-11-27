@@ -1,4 +1,4 @@
-import { renameSync, writeFileSync } from 'node:fs';
+import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const [mode] = process.argv.slice(2);
@@ -31,6 +31,28 @@ if (mode === 'complete') {
   process.stdin.on('data', (chunk) => {
     process.stdout.write(chunk);
   });
+} else if (mode === 'handoff-quota' || mode === 'handoff-hold') {
+  const draft = process.env.QUOTAFLOW_HANDOFF_FILE;
+  if (!draft) throw new Error('The handoff fixture requires an attempt draft path');
+  writeFileSync('app.txt', '41\n');
+  writeFileSync(draft, JSON.stringify({
+    version: 1,
+    completed: ['Verified app.txt contains 41'],
+    failedAttempts: [],
+    blockers: [],
+    nextSteps: ['Write 42 to answer.txt'],
+    checks: ['Read app.txt after writing it'],
+  }));
+  if (mode === 'handoff-quota') outcome({ kind: 'quota', reason: 'fixture_quota', tests: 'not_run' });
+  setInterval(() => {}, 1_000);
+} else if (mode === 'handoff-resume') {
+  const promptFile = process.env.QUOTAFLOW_PROMPT_FILE;
+  if (!promptFile || !readFileSync(promptFile, 'utf8').includes('Verified app.txt contains 41')) {
+    throw new Error('The replacement agent did not receive the checkpointed note');
+  }
+  if (readFileSync('app.txt', 'utf8') !== '41\n') throw new Error('The accepted fixture content changed');
+  writeFileSync('answer.txt', '42\n');
+  outcome({ kind: 'success', reason: 'fixture_passed', tests: 'passed' });
 } else {
-  throw new Error('Expected fixture mode complete, fail, hold, quota or echo');
+  throw new Error('Unknown fixture mode');
 }

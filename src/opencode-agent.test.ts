@@ -266,10 +266,18 @@ test('returns cancelled when its supervisor signal is aborted', async () => {
 test('classifies OpenCode quota failures for retry', async () => {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-opencode-'));
   try {
-    const agent = new OpenCodeAgent(lane, runnerWith('429 usage limit reached\n', 1));
-    const result = await agent.run(context(root));
+    const directory = join(root, 'attempt', 'handoff');
+    const handoff = { directory, file: join(directory, 'draft.json'), prompt: 'Original task plus handoff context', source: null };
+    const agent = new OpenCodeAgent(lane, async (command, cwd, dir, options) => {
+      expect(command.at(-1)).toBe(handoff.prompt);
+      const profile = JSON.parse(readFileSync(options!.env!.OPENCODE_CONFIG!, 'utf8'));
+      expect(profile.permission.external_directory).toEqual({ '*': 'deny', [join(directory, '*')]: 'allow' });
+      return runnerWith('429 usage limit reached\n', 1)(command, cwd, dir, options);
+    });
+    const result = await agent.run({ ...context(root), handoff });
     expect(result).toMatchObject({
       status: 'waiting_quota',
+      activeProcesses: 0,
       reason: 'opencode_quota',
       retryAfterMs: 60_000,
     });

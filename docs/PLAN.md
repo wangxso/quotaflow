@@ -43,7 +43,7 @@
 
 ### Phase 1 跨 Agent 交接实验
 
-当前恢复流程从 Git 检查点接续代码，适配器用原始任务提示启动下一次尝试。本实验借鉴 CLM 让 Agent 持续整理上下文的做法，验证一份简短交接笔记能否减少 Codex → OpenCode 换手后的重复工作。 [CLM 论文](https://arxiv.org/abs/2609.37725) · [交接架构](ARCHITECTURE.md#跨-agent-检查点与进程恢复)
+恢复流程从 Git 检查点接续代码。任务可启用 `--handoff`，在原始提示后附加与当前检查点匹配的笔记。本实验借鉴 CLM 让 Agent 持续整理上下文的做法，验证一份简短交接笔记能否减少 Codex → OpenCode 换手后的重复工作。 [CLI 交接用法](PHASE-1.md#跨-agent-交接笔记) · [CLM 论文](https://arxiv.org/abs/2609.37725) · [交接架构](ARCHITECTURE.md#跨-agent-检查点与进程恢复)
 
 1. **交接内容。** Agent 在运行中记录已完成项、失败尝试、已知阻塞和下一步，测试结果引用实际产物。控制面确认旧进程树停止后，将最新有效笔记关联到任务、尝试和检查点 SHA。任务目标及权限由控制面提供，笔记缺失、无效或与检查点不匹配时，沿用原始提示和 Git 检查点恢复。
 2. **对照方法。** 先用本地 fixture 覆盖额度中断、Worker 重启和笔记缺失，再用已授权的模型通道在临时仓库复测。每组从同一检查点创建独立 Worktree，固定接手模型、预算和验收测试。A 组只传原始提示，B 组附加笔记。记录每次复跑的检查点 SHA、模型和结果。
@@ -51,7 +51,7 @@
 
 首轮使用项目自有的交接格式。完整 CLM 上下文编辑、社区 OpenCode 插件和推理侧 Suffix Cache Reuse 依据实验结果与部署条件另行评估。 [CLM 仓库与许可](https://github.com/facebookresearch/context-language-models)
 
-2026-11-27 在 macOS 完成首轮 Codex → OpenCode 对照。两组从同一检查点接手，功能测试均为 3/3。A 组只修改待办的 `label.ts`。B 组对已验证的 `parser.ts` 执行了两次编辑，最终多出一个空行，未通过保留已完成文件的验收项。B 组接手时的输入 Token 从 8,447 降到 7,621，计入生成笔记后为 9,058。每组执行一次，效率收益仍待复测。 [首轮脱敏证据](evidence/phase1-macos-handoff-experiment-2026-11-27.json)
+2026-11-27 在 macOS 完成两组真实模型复测。原生 ChatGPT 当前返回用量上限后，Codex 改经 Magpie 的零标价 `hy4-flash-free` 完成解析器和交接草稿；本地代理在草稿有效后注入 HTTP 429。三次带笔记和三次仅原提示的 OpenCode 接手均 3/3 通过，且只修改 `label.ts`。带笔记组工具调用共 25 次、对照组 28 次；计入笔记生成后，输入 Token 多 519、输出 Token 少 4,899，耗时多 3.16 秒。该结果支持保留显式启用的交接路径，样本量还不足以改变默认策略。服务商账单仍为 `UNKNOWN`。 [真实模型交接证据](evidence/phase1-live-handoff-2026-11-27.json) · [首轮对照证据](evidence/phase1-macos-handoff-experiment-2026-11-27.json)
 
 ## mcarplay 试点
 

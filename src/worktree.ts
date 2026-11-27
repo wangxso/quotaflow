@@ -26,7 +26,7 @@ function git(cwd: string, args: string[], index?: string): string {
   if (result.status !== 0) {
     throw new Error(`git ${args.join(' ')} failed: ${result.stderr.trim() || result.stdout.trim()}`);
   }
-  return result.stdout.trim();
+  return args.includes('-z') ? result.stdout : result.stdout.trim();
 }
 
 function gitOrNull(cwd: string, args: string[]): string | null {
@@ -76,12 +76,39 @@ function workingTree(workspace: string, directory: string): string {
   }
 }
 
-export function checkpoint(workspacePath: string, directory: string, taskId: string, attemptId: number): string {
+export interface CheckpointProtection {
+  checkpoint: string;
+  paths: string[];
+}
+
+export class ProtectedPathsChangedError extends Error {
+  constructor(readonly paths: string[]) {
+    super(`Protected paths changed since the handoff checkpoint: ${paths.join(', ')}`);
+  }
+}
+
+function checkProtectedTree(workspace: string, tree: string, protection: CheckpointProtection) {
+  const paths = git(workspace, [
+    '--literal-pathspecs', 'diff', '--no-ext-diff', '--no-renames', '--name-only', '-z',
+    protection.checkpoint, tree, '--', ...protection.paths,
+  ]).split('\0').filter(Boolean);
+  if (paths.length) throw new ProtectedPathsChangedError(paths);
+}
+
+export function verifyProtectedPaths(workspace: string, directory: string, protection: CheckpointProtection): void {
+  mkdirSync(directory, { recursive: true });
+  checkProtectedTree(workspace, workingTree(workspace, directory), protection);
+}
+
+export function checkpoint(
+  workspacePath: string, directory: string, taskId: string, attemptId: number, protection?: CheckpointProtection,
+): string {
   const workspace = resolve(workspacePath);
   const checkpointRoot = resolve(directory);
   mkdirSync(checkpointRoot, { recursive: true });
   const base = git(workspace, ['rev-parse', 'HEAD']);
   const tree = workingTree(workspace, checkpointRoot);
+  if (protection) checkProtectedTree(workspace, tree, protection);
   const ref = `refs/quotaflow/attempts/${taskId}/${attemptId}`;
   const existing = gitOrNull(workspace, ['rev-parse', '--verify', '--quiet', ref]);
   if (existing) {

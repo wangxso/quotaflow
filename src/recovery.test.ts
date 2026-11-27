@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { QuotaFlowConfig } from './domain';
@@ -132,12 +132,17 @@ test('a launch intent retains the writer claim until the stop receipt arrives', 
       title: 'interrupted during launch',
       repoPath: repo,
       workspacePath: workspace,
+      handoff: { protectedPaths: ['app.txt'] },
       now,
     });
     const { attempt } = store.reserve('in-flight', config.lanes, now)!;
     const status = attemptDirectory(config, 'in-flight', attempt.id);
     writeAttemptOwner(status, 999_999, now);
     writeFileSync(join(status, supervisorLaunchFile), '{}');
+    const draft = { version: 1, completed: ['Modified app.txt'], failedAttempts: [], blockers: [],
+      nextSteps: ['Continue the task'], checks: ['Read app.txt'] };
+    mkdirSync(join(status, 'handoff'));
+    writeFileSync(join(status, 'handoff', 'draft.json'), JSON.stringify(draft));
     writeFileSync(join(workspace, 'app.txt'), 'partial\n');
     const recover = () => recoverInterruptedAttempts(store, config, { isProcessAlive: () => false });
 
@@ -145,6 +150,7 @@ test('a launch intent retains the writer claim until the stop receipt arrives', 
     expect(store.getTask('in-flight')).toMatchObject({ status: 'blocked', checkpoint: null });
     expect(store.activeAttempt('in-flight')?.id).toBe(attempt.id);
     expect(() => store.retry('in-flight')).toThrow('active attempt');
+    expect(store.events('in-flight').some((event) => event.kind === 'handoff_saved')).toBe(false);
 
     writeFileSync(join(status, 'stopped.json'), JSON.stringify({
       supervisorPid: 100,
@@ -158,6 +164,32 @@ test('a launch intent retains the writer claim until the stop receipt arrives', 
     expect(task.status).toBe('queued');
     expect(store.activeAttempt('in-flight')).toBeNull();
     expect(worktreeGit(workspace, ['show', `${task.checkpoint}:app.txt`])).toBe('partial');
+    expect(store.handoffForCheckpoint(task.id, task.checkpoint)).toMatchObject({ attemptId: attempt.id, note: draft });
+    expect(recover().recovered).toBe(0);
+    expect(store.events(task.id).filter((event) => event.kind === 'handoff_saved')).toHaveLength(1);
+
+    const resumed = store.reserve(task.id, config.lanes, now + 20)!.attempt;
+    const resumedStatus = attemptDirectory(config, task.id, resumed.id);
+    writeAttemptOwner(resumedStatus, 999_999, now + 20);
+    writeFileSync(join(resumedStatus, 'stopped.json'), JSON.stringify({
+      supervisorPid: 102, workerPid: 103, exitCode: null, activeProcesses: 0, reason: 'controller_closed',
+    }));
+    writeFileSync(join(workspace, 'app.txt'), 'changed protected content\n');
+    expect(recover().items[0]).toMatchObject({ outcome: 'blocked', reason: 'handoff_protected_paths_changed', checkpoint: task.checkpoint });
+    expect(store.getTask(task.id)).toMatchObject({ status: 'blocked', checkpoint: task.checkpoint });
+    expect(worktreeGit(repo, ['for-each-ref', `refs/quotaflow/attempts/${task.id}/${resumed.id}`])).toBe('');
+
+    store.retry(task.id, now + 30);
+    const cancelled = store.reserve(task.id, config.lanes, now + 30)!.attempt;
+    const cancelledStatus = attemptDirectory(config, task.id, cancelled.id);
+    writeAttemptOwner(cancelledStatus, 999_999, now + 30);
+    writeFileSync(join(cancelledStatus, 'stopped.json'), JSON.stringify({
+      supervisorPid: 104, workerPid: 105, exitCode: null, activeProcesses: 0, reason: 'cancelled',
+    }));
+    store.cancel(task.id, now + 31);
+    expect(recover().items[0]).toMatchObject({ outcome: 'recovered', reason: 'cancellation_completed' });
+    expect(store.getTask(task.id)).toMatchObject({ status: 'cancelled', checkpoint: task.checkpoint });
+    expect(store.events(task.id).at(-1)?.detail).toMatchObject({ checkpointRejected: 'handoff_protected_paths_changed' });
   } finally {
     db.close();
     rmSync(root, { recursive: true, force: true });

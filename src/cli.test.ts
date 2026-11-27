@@ -548,3 +548,50 @@ supervisedTest('runs one supervised fixture through the CLI worker', async () =>
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+supervisedTest('hands off an opted-in task from a quota-held Codex lane to an OpenCode lane', async () => {
+  const { root, config } = setup();
+  try {
+    const repo = join(root, 'repo');
+    worktreeGit(root, ['init', '--initial-branch=main', repo]);
+    writeFileSync(join(repo, 'app.txt'), 'base\n');
+    worktreeGit(repo, ['add', '.']);
+    worktreeGit(repo, ['commit', '-m', 'base']);
+    const fixture = fileURLToPath(new URL('./fixture-agent.ts', import.meta.url));
+    const windows = [{ key: 'day', remaining: 10, reserve: 0, observedAt: Date.now(), resetAt: Date.now() + 60_000 }];
+    writeFileSync(config, JSON.stringify({
+      version: 1,
+      database: '.quotaflow/state.sqlite',
+      worktreeRoot: '.quotaflow/worktrees',
+      defaultRepo: repo,
+      routing: { allowedProviders: ['local'] },
+      lanes: [
+        { id: 'donor', agent: 'codex', model: 'fixture', provider: 'local', account: 'first', priority: 2, slots: 1,
+          windows, command: [process.execPath, fixture, 'handoff-quota'] },
+        { id: 'recipient', agent: 'opencode', model: 'fixture', provider: 'local', account: 'second', priority: 1, slots: 1,
+          windows, command: [process.execPath, fixture, 'handoff-resume'] },
+      ],
+    }));
+    const invoke = async (...args: string[]) => JSON.parse((await cli(root, args)).stdout);
+    const task = await invoke('task', 'add', 'Finish fixture', '--handoff', '--handoff-protect', 'app.txt');
+    expect(task.handoff).toEqual({ protectedPaths: ['app.txt'] });
+    const first = await invoke('worker', 'once');
+    expect(first).toMatchObject({ task: { status: 'waiting_quota' }, attempt: { agent: 'codex' } });
+    expect(first.checkpoint).toBeString();
+    const shown = await invoke('task', 'show', task.id);
+    expect(shown.handoffNote).toMatchObject({ taskId: task.id, attemptId: first.attempt.id, checkpoint: first.checkpoint,
+      note: { completed: ['Verified app.txt contains 41'] } });
+    expect(worktreeGit(repo, ['ls-tree', '--name-only', first.checkpoint])).toBe('app.txt');
+
+    await invoke('task', 'retry', task.id);
+    const second = await invoke('worker', 'once');
+    expect(second).toMatchObject({ task: { status: 'completed' }, attempt: { agent: 'opencode' } });
+    expect(worktreeGit(repo, ['show', `${second.checkpoint}:app.txt`])).toBe('41');
+    expect(worktreeGit(repo, ['show', `${second.checkpoint}:answer.txt`])).toBe('42');
+    expect(await invoke('task', 'events', task.id)).toContainEqual(expect.objectContaining({
+      attemptId: second.attempt.id, kind: 'handoff_input', detail: { checkpoint: first.checkpoint, sourceAttemptId: first.attempt.id },
+    }));
+  } finally {
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 80 });
+  }
+}, 30_000);

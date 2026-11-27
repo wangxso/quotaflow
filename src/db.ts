@@ -60,6 +60,7 @@ const schema = `
     status TEXT NOT NULL,
     priority INTEGER NOT NULL,
     critical INTEGER NOT NULL,
+    handoff_config TEXT,
     checkpoint TEXT,
     next_wake_at INTEGER,
     created_at INTEGER NOT NULL,
@@ -79,6 +80,7 @@ const schema = `
     lease_token TEXT NOT NULL UNIQUE,
     actual_model TEXT,
     checkpoint TEXT,
+    handoff_note TEXT,
     started_at INTEGER NOT NULL,
     ended_at INTEGER
   );
@@ -130,38 +132,29 @@ export function openDatabase(file: string): Database {
     PRAGMA foreign_keys = ON;
   `);
   const version = db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version ?? 0;
-  if (version > 5) throw new Error(`Unsupported QuotaFlow database version ${version}`);
-  if (version < 1) {
-    migrate(db, () => {
-      db.exec(schema);
-      db.run('PRAGMA user_version = 5');
-    });
-  } else if (version === 1) {
-    migrate(db, () => {
-      db.run("ALTER TABLE tasks ADD COLUMN prompt TEXT NOT NULL DEFAULT ''");
-      db.run('ALTER TABLE attempts ADD COLUMN actual_model TEXT');
-      db.exec(usageSchema);
-      db.exec(budgetSchema);
-      db.run('PRAGMA user_version = 5');
-    });
-  } else if (version === 2) {
-    migrate(db, () => {
-      db.run('ALTER TABLE attempts ADD COLUMN actual_model TEXT');
-      db.exec(usageSchema);
-      db.exec(budgetSchema);
-      db.run('PRAGMA user_version = 5');
-    });
-  } else if (version === 3) {
-    migrate(db, () => {
-      db.exec(usageSchema);
-      db.exec(budgetSchema);
-      db.run('PRAGMA user_version = 5');
-    });
-  } else if (version === 4) {
-    migrate(db, () => {
-      db.exec(budgetSchema);
-      db.run('PRAGMA user_version = 5');
-    });
+  try {
+    if (version > 6) throw new Error(`Unsupported QuotaFlow database version ${version}`);
+    if (version < 6) {
+      migrate(db, () => {
+        const current = db.query<{ user_version: number }, []>('PRAGMA user_version').get()!.user_version;
+        if (current > 6) throw new Error(`Unsupported QuotaFlow database version ${current}`);
+        if (current === 6) return;
+        if (current < 1) {
+          db.exec(schema);
+        } else {
+          if (current < 2) db.run("ALTER TABLE tasks ADD COLUMN prompt TEXT NOT NULL DEFAULT ''");
+          if (current < 3) db.run('ALTER TABLE attempts ADD COLUMN actual_model TEXT');
+          if (current < 4) db.exec(usageSchema);
+          if (current < 5) db.exec(budgetSchema);
+          db.run('ALTER TABLE tasks ADD COLUMN handoff_config TEXT');
+          db.run('ALTER TABLE attempts ADD COLUMN handoff_note TEXT');
+        }
+        db.run('PRAGMA user_version = 6');
+      });
+    }
+    return db;
+  } catch (error) {
+    db.close();
+    throw error;
   }
-  return db;
 }

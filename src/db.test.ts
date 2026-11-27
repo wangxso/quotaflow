@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDatabase } from './db';
 
-function createLegacyDatabase(version: 1 | 2 | 3 | 4): { root: string; file: string } {
+function createLegacyDatabase(version: 1 | 2 | 3 | 4 | 5): { root: string; file: string } {
   const root = mkdtempSync(join(tmpdir(), `quotaflow-db-v${version}-`));
   const file = join(root, 'state.sqlite');
   const db = new Database(file);
@@ -39,7 +39,7 @@ function createLegacyDatabase(version: 1 | 2 | 3 | 4): { root: string; file: str
       started_at INTEGER NOT NULL,
       ended_at INTEGER
     );
-    ${version === 4 ? `
+    ${version >= 4 ? `
       CREATE TABLE attempt_usage (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         attempt_id INTEGER NOT NULL,
@@ -47,6 +47,12 @@ function createLegacyDatabase(version: 1 | 2 | 3 | 4): { root: string; file: str
         source_request_id TEXT,
         observed_at INTEGER NOT NULL
       );
+    ` : ''}
+    ${version === 5 ? `
+      CREATE TABLE budget_leases (
+        id INTEGER PRIMARY KEY, attempt_id INTEGER NOT NULL, state TEXT NOT NULL
+      );
+      INSERT INTO budget_leases VALUES (1, 1, 'pending');
     ` : ''}
     PRAGMA user_version = ${version};
   `);
@@ -72,23 +78,23 @@ function createLegacyDatabase(version: 1 | 2 | 3 | 4): { root: string; file: str
   return { root, file };
 }
 
-for (const version of [1, 2, 3, 4] as const) {
-  test(`migrates schema v${version} to v5 without losing task data`, () => {
+for (const version of [1, 2, 3, 4, 5] as const) {
+  test(`migrates schema v${version} to v6 without losing task data`, () => {
     const { root, file } = createLegacyDatabase(version);
     const db = openDatabase(file);
     try {
-      expect(db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version).toBe(5);
-      expect(db.query<{ prompt: string }, []>("SELECT prompt FROM tasks WHERE id = 'legacy'").get()?.prompt)
-        .toBe(version === 1 ? '' : 'kept prompt');
-      expect(db.query<{ actual_model: string | null }, []>(
-        "SELECT actual_model FROM attempts WHERE task_id = 'legacy'",
-      ).get()?.actual_model).toBeNull();
+      expect(db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version).toBe(6);
+      expect(db.query("SELECT prompt, handoff_config FROM tasks WHERE id = 'legacy'").get())
+        .toEqual({ prompt: version === 1 ? '' : 'kept prompt', handoff_config: null });
+      expect(db.query("SELECT actual_model, handoff_note FROM attempts WHERE task_id = 'legacy'").get())
+        .toEqual({ actual_model: null, handoff_note: null });
       expect(db.query<{ name: string }, []>(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'attempt_usage'",
       ).get()?.name).toBe('attempt_usage');
       expect(db.query<{ name: string }, []>(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'budget_leases'",
       ).get()?.name).toBe('budget_leases');
+      if (version === 5) expect(db.query('SELECT state FROM budget_leases').get()).toEqual({ state: 'pending' });
     } finally {
       db.close();
       rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });

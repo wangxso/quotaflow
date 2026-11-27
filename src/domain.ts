@@ -92,6 +92,10 @@ export interface QuotaFlowConfig {
   lanes: LaneConfig[];
 }
 
+export interface HandoffOptions {
+  protectedPaths: string[];
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -101,6 +105,7 @@ export interface Task {
   status: TaskStatus;
   priority: number;
   critical: boolean;
+  handoff?: HandoffOptions;
   checkpoint: string | null;
   nextWakeAt: number | null;
   createdAt: number;

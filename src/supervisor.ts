@@ -31,6 +31,14 @@ export interface SupervisorOptions {
 const guardScript = fileURLToPath(new URL('../poc/guard-win.ps1', import.meta.url));
 export const supervisorLaunchFile = 'launch.json';
 
+export function hasSupervisorEvidence(statusDir: string): boolean {
+  return [supervisorLaunchFile, 'ready.json', 'stopped.json'].some((file) => existsSync(join(statusDir, file)));
+}
+
+function recordLaunch(statusDir: string, backend: string): void {
+  writeFileSync(join(statusDir, supervisorLaunchFile), JSON.stringify({ backend }), { flag: 'wx' });
+}
+
 function readJson<T>(file: string): T | null {
   if (!existsSync(file)) return null;
   try {
@@ -100,6 +108,7 @@ export function launchGuardedAppServer(
     if (value === undefined) delete env[key];
   }
   mkdirSync(statusDir, { recursive: true });
+  recordLaunch(statusDir, 'windows_job');
   return spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', guardScript], {
     windowsHide: true,
     cwd,
@@ -133,9 +142,7 @@ function launchMacGuard(command: string[], cwd: string, statusDir: string, env: 
       throw new Error(`Could not build the macOS process supervisor. Install Xcode Command Line Tools. ${build.stderr.trim()}`);
     }
     // Persist the launch intent before the guard can start a writer.
-    writeFileSync(join(statusDir, supervisorLaunchFile), JSON.stringify({ backend: 'macos_process_group' }), {
-      flag: 'wx',
-    });
+    recordLaunch(statusDir, 'macos_process_group');
     const guard = spawn(executable, [String(process.pid), statusDir, ...command], {
       cwd,
       detached: true,
@@ -152,6 +159,7 @@ function launchMacGuard(command: string[], cwd: string, statusDir: string, env: 
 
 function launchCommandGuard(command: string[], cwd: string, statusDir: string, env: NodeJS.ProcessEnv) {
   if (process.platform === 'darwin') return launchMacGuard(command, cwd, statusDir, env);
+  recordLaunch(statusDir, 'windows_job');
   return spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', guardScript], {
     windowsHide: true,
     cwd,

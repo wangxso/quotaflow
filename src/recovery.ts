@@ -1,9 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Attempt, QuotaFlowConfig } from './domain';
+import { assertSeparateAttemptDirectory, handoffProtection, HandoffSetupError, readHandoffDraft, type HandoffDraft } from './handoff';
 import type { TaskStore } from './store';
-import { supervisorLaunchFile, verifySupervisedStop, type SupervisorStop } from './supervisor';
-import { checkpoint } from './worktree';
+import { hasSupervisorEvidence, verifySupervisedStop, type SupervisorStop } from './supervisor';
+import { checkpoint, ProtectedPathsChangedError } from './worktree';
 
 export interface AttemptOwner {
   pid: number;
@@ -131,8 +132,7 @@ export function recoverInterruptedAttempts(
     const owner = readAttemptOwner(statusDir);
     const ownerPid = owner?.pid ?? null;
     const ownerAlive = ownerPid === null ? null : probe(ownerPid);
-    const launched = existsSync(join(statusDir, supervisorLaunchFile)) || existsSync(join(statusDir, 'ready.json'));
-    const stopPresent = existsSync(join(statusDir, 'stopped.json'));
+    const hasEvidence = hasSupervisorEvidence(statusDir);
 
     if (ownerAlive === true) {
       items.push({
@@ -148,15 +148,17 @@ export function recoverInterruptedAttempts(
 
     let supervisorStop: SupervisorStop | null = null;
     let verificationError: string | null = null;
-    if (launched || stopPresent) {
+    if (hasEvidence) {
       try {
-        supervisorStop = verifyStop(statusDir);
+        const stop = verifyStop(statusDir);
+        if (stop.activeProcesses !== 0) throw new Error('Supervisor stop receipt still reports active processes');
+        supervisorStop = stop;
       } catch (error) {
         verificationError = message(error);
       }
     }
 
-    if (!supervisorStop && (launched || stopPresent)) {
+    if (!supervisorStop && hasEvidence) {
       try {
         const blocked = store.block(task.id, 'writer_stop_unverified', now, {
           attemptId: attempt.id,
@@ -261,18 +263,28 @@ export function recoverInterruptedAttempts(
     }
 
     let checkpointSha = task.checkpoint;
+    let handoff: HandoffDraft | undefined;
     try {
       if (existsSync(task.workspacePath)) {
-        checkpointSha = snapshot(task.workspacePath, config.worktreeRoot, task.id, attempt.id);
+        if (task.handoff) assertSeparateAttemptDirectory(task.workspacePath, statusDir);
+        checkpointSha = snapshot(task.workspacePath, config.worktreeRoot, task.id, attempt.id, handoffProtection(task));
+        if (task.handoff && supervisorStop) handoff = readHandoffDraft(statusDir);
       }
     } catch (error) {
+      const protectedPaths = error instanceof ProtectedPathsChangedError ? error.paths : null;
+      const rejection = protectedPaths ? 'handoff_protected_paths_changed'
+        : error instanceof HandoffSetupError ? 'handoff_setup_failed' : 'recovery_checkpoint_failed';
+      const cancelled = Boolean(supervisorStop && cancellationRequested && rejection !== 'recovery_checkpoint_failed');
+      const reason = cancelled ? dependencies.cancellationReason ?? 'cancellation_completed' : rejection;
       try {
         store.recoverAttempt(attempt.id, {
-          status: 'blocked',
-          reason: 'recovery_checkpoint_failed',
+          status: cancelled ? 'cancelled' : 'blocked',
+          reason,
           detail: {
             ownerPid,
             supervisorStop,
+            ...(cancelled ? { checkpointRejected: rejection } : {}),
+            ...(protectedPaths ? { protectedPaths } : {}),
             error: message(error),
           },
           now,
@@ -281,8 +293,9 @@ export function recoverInterruptedAttempts(
           taskId: task.id,
           attemptId: attempt.id,
           agent: attempt.agent,
-          outcome: 'blocked',
-          reason: 'recovery_checkpoint_failed',
+          outcome: cancelled ? 'recovered' : 'blocked',
+          reason,
+          checkpoint: task.checkpoint,
           ownerPid,
           supervisorStop,
           error: message(error),
@@ -308,6 +321,7 @@ export function recoverInterruptedAttempts(
       store.recoverAttempt(attempt.id, {
         status: cancellationRequested ? 'cancelled' : 'queued',
         checkpoint: checkpointSha,
+        handoff,
         reason,
         detail: {
           ownerPid,

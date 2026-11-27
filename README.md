@@ -4,12 +4,12 @@
 
 QuotaFlow 是一个额度感知的 AI 软件研发调度工具。它按账户额度、并发和预算安排 Codex 或 OpenCode 执行任务，将改动保存在独立的 Git 工作树和检查点中，供中断后恢复。
 
-**当前状态（2026-11-27）**　Phase 0 技术门禁有条件通过，已在临时仓库验证 Codex 写入、保存检查点和 OpenCode 接续。Phase 1 单机 CLI 正在开发。Windows 已验证 Magpie 路由任务、OpenCode 请求级用量回写和受监督恢复。macOS 已验证本地命令的取消、子进程回收和 Git 检查点恢复。首个 GitHub 试点计划在 Phase 2 使用 `mcarplay`。 [Phase 0 验收](docs/PHASE-0-GATE-CLOSURE.md) · [Phase 1 实现与验证](docs/PHASE-1.md)
+**当前状态（2026-11-27）**　Phase 0 技术门禁有条件通过，已在临时仓库验证 Codex 写入、保存检查点和 OpenCode 接续。Phase 1 单机 CLI 正在开发。Windows 已验证 Magpie 路由任务、OpenCode 请求级用量回写和受监督恢复。macOS 已验证本地命令的取消、子进程回收、Git 检查点恢复，以及原生额度耗尽后经 Magpie 运行的 Codex → OpenCode 交接。macOS 默认模型适配器仍需补齐跨进程组监督。首个 GitHub 试点计划在 Phase 2 使用 `mcarplay`。 [Phase 0 验收](docs/PHASE-0-GATE-CLOSURE.md) · [Phase 1 实现与验证](docs/PHASE-1.md)
 
 ## 当前功能
 
 - **任务调度**　SQLite 持久化任务、尝试和事件。调度器以事务方式预留账户并发槽位、额度和已配置的预算。
-- **执行与恢复**　CLI 支持提交、查看、取消和重试任务。Windows 使用 Job Object。macOS 支持受监督的本地 `command`，命令及子进程须留在初始进程组中。保存检查点和恢复任务均要求停止凭证。已启动的受监督尝试在缺少凭证时进入 `blocked`，并保留写入权。
+- **执行与恢复**　CLI 支持提交、查看、取消和重试任务。Windows 使用 Job Object。macOS 支持受监督的本地 `command`，命令及子进程须留在初始进程组中。保存检查点和恢复任务均要求停止凭证。已启动的受监督尝试在缺少凭证时进入 `blocked`，并保留写入权。`--handoff` 可在中断后把与检查点匹配的简短笔记交给下一个 Agent。
 - **模型接入与用量**　默认 Codex App Server 与 OpenCode Adapter 需要 Windows 进程监督。Magpie 路由需要配置中的显式授权，网关估算用于预算租约，服务商账单归属仍为 `UNKNOWN`。 [配置与适配器说明](docs/PHASE-1.md)
 
 ## 快速开始

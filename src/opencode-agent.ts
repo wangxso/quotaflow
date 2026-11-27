@@ -86,6 +86,7 @@ function isQuotaFailure(log: string): boolean {
 
 export class OpenCodeAgent implements AgentAdapter {
   readonly id: string;
+  readonly maxPromptLength = 24_000;
   readonly #lane: LaneConfig;
   readonly #runner: OpenCodeRunner;
   readonly #usage: OpenCodeUsageLookup;
@@ -104,7 +105,8 @@ export class OpenCodeAgent implements AgentAdapter {
   async run(context: AgentContext): Promise<AgentResult> {
     const baseUrl = this.#lane.baseUrl;
     if (!baseUrl) throw new Error(`OpenCode lane ${this.#lane.id} requires baseUrl`);
-    if (context.task.prompt.length > 24_000) {
+    const prompt = context.handoff?.prompt ?? context.task.prompt;
+    if (prompt.length > this.maxPromptLength) {
       throw new Error('Task prompt exceeds the OpenCode Windows command-line limit');
     }
 
@@ -137,7 +139,9 @@ export class OpenCodeAgent implements AgentAdapter {
         list: 'allow',
         bash: 'allow',
         task: 'deny',
-        external_directory: 'deny',
+        external_directory: context.handoff
+          ? { '*': 'deny', [join(context.handoff.directory, '*')]: 'allow' }
+          : 'deny',
         webfetch: 'deny',
         websearch: 'deny',
         codesearch: 'deny',
@@ -199,7 +203,7 @@ export class OpenCodeAgent implements AgentAdapter {
       fullModel,
       '--dir',
       context.workspacePath,
-      context.task.prompt,
+      prompt,
     ];
     const { stop } = await this.#runner(command, context.workspacePath, context.attemptDir, {
       env,
@@ -229,13 +233,14 @@ export class OpenCodeAgent implements AgentAdapter {
         reason: quota ? 'opencode_quota' : `opencode_exit_${stop.exitCode ?? 'unknown'}`,
         tests: 'not_run',
         retryAfterMs: quota ? 60_000 : undefined,
+        activeProcesses: stop.activeProcesses,
       };
     }
     if (errors.length > 0) {
-      return { status: 'failed', reason: 'opencode_event_error', tests: 'not_run' };
+      return { status: 'failed', reason: 'opencode_event_error', tests: 'not_run', activeProcesses: stop.activeProcesses };
     }
     if (finishes.length === 0) {
-      return { status: 'failed', reason: 'opencode_missing_step_finish', tests: 'not_run' };
+      return { status: 'failed', reason: 'opencode_missing_step_finish', tests: 'not_run', activeProcesses: stop.activeProcesses };
     }
 
     const endedAt = Date.now();

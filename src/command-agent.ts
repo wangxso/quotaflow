@@ -1,3 +1,5 @@
+import { writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { AgentAdapter } from './agent';
 import type { LaneConfig } from './domain';
 import { launchSupervised, type SupervisorOutcome } from './supervisor';
@@ -38,7 +40,16 @@ export function supervisedCommandAgent(lane: LaneConfig): AgentAdapter {
   return {
     id: `command:${lane.id}`,
     async run(context) {
+      let promptFile: string | undefined;
+      if (context.handoff) {
+        promptFile = resolve(context.attemptDir, 'prompt.txt');
+        writeFileSync(promptFile, context.handoff.prompt, { mode: 0o600 });
+      }
       const { stop, outcome } = await launchSupervised(command, context.workspacePath, context.attemptDir, {
+        env: {
+          QUOTAFLOW_PROMPT_FILE: promptFile,
+          QUOTAFLOW_HANDOFF_FILE: context.handoff?.file,
+        },
         timeoutMs: lane.timeoutMs,
         signal: context.signal,
       });

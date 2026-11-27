@@ -13,7 +13,7 @@
 首个可运行切片覆盖单机任务底座：
 
 - `quotaflow.config.example.json` 提供显式路由审批、Lane、额度窗口和 Worktree 根目录示例。
-- SQLite v5 持久化 `tasks`、`attempts`、`cooldowns`、`events`、`attempt_usage` 和 `budget_leases`，开启 WAL 和完整同步；v1／v2／v3／v4 均可无损迁移。
+- SQLite v6 持久化任务、尝试、交接笔记、额度冷却、事件、用量和预算租约，开启 WAL 和完整同步。v1 至 v5 可迁移到 v6。
 - 原子预留同时检查账户并发槽位、冷却时间、额度窗口剩余量、保留额度、观测新鲜度、显式预算租约和尝试上限。
 - 未知或过期额度不会被猜测为可用；关键任务可绕过普通任务保留额度，但不能绕过并发槽位。
 - Git Worktree 可显式准备，私有检查点保存已暂存、未暂存、删除和未跟踪内容，并支持从检查点恢复。
@@ -21,11 +21,12 @@
 - Worker 编排已实现：预留尝试后自动准备 Worktree，运行注入的 Agent Adapter，保存检查点并结算完成、失败、取消或额度等待；fixture 测试覆盖完成、失败、活动取消、额度中断、缺少 Adapter 和从检查点恢复。
 - 受监督命令 Adapter 支持 Windows 和 macOS。`worker once` 可执行 Lane `command`，并在 `stopped.json` 确认 `activeProcesses=0` 后保存检查点。macOS 的凭证覆盖命令与留在其初始进程组中的子进程。
 - Codex App Server Adapter 已接入：推理前执行零推理工作区预检，使用任务 prompt、Lane 模型和可选 `baseUrl`，并拒绝继承直接 API 环境变量。Windows 路径通过受监督 stdio 代理保留 App Server 双向管道，并把 `app-server` 进程树放入 Job Object；关闭后必须取得 `stopped.json` 的 `activeProcesses=0`，否则抛出停止未验证错误，由 Worker 阻塞任务而不保存检查点。
-- OpenCode Adapter 已接入：当前要求 Magpie Lane 显式配置 `baseUrl`；使用隔离的 `OPENCODE_CONFIG`、`OPENCODE_DB` 和 `XDG_*` 运行 `opencode run --pure --format json`，拒绝外部目录、网络、task 和 skill 权限；必须在 `stopped.json` 确认 `activeProcesses=0`，并从 NDJSON 日志要求至少一个 `step_finish`。
+- OpenCode Adapter 要求 Magpie Lane 显式配置 `baseUrl`，并使用隔离的 `OPENCODE_CONFIG`、`OPENCODE_DB` 和 `XDG_*`。`external_directory` 权限只为已启用交接的尝试草稿目录开例外，网络、task 和 skill 工具保持禁用。完成检查要求 `activeProcesses=0` 的停止凭证以及 NDJSON 中至少一个 `step_finish`。
 - Magpie 请求级对账已接入：OpenCode 完成后按精确会话 ID 查询请求行，在本地按尝试时窗复核，写入 `attempt_usage` 并从一致的服务模型回填 `attempts.actual_model`。对账失败只记录 `usage_reconciled` 事件，不阻断任务完成；服务商账单始终保留为 `UNKNOWN`。
 - 预算租约已接入：仅对显式配置 `budgets` 的账户记账；预留时先占用 `holdPerAttempt`，已定价用量结算后收缩到网关估算成本，用量未知或不完整时保留 hold 并标记 `pending`。预算不足会使任务进入 `waiting_quota`、`reason=budget`，并等待最早租约过期。`task show` 与 `budget status` 可审计租约。
 - Worker 每次预留后写入 `owner.json`，`worker once` 启动时检查遗留活动尝试。已启动的受监督尝试须等旧 owner 退出并取得 `activeProcesses=0` 凭证，才能保存检查点并重新入队。凭证缺失时任务进入 `blocked` 并保留活动尝试。之后取得凭证，可再次执行 `worker recover`。
 - `task retry` 可将没有活动尝试的 `failed`、`blocked` 或等待任务重新入队，保留既有检查点和尝试历史。总尝试次数限制为 3。
+- `task add --handoff` 为新任务启用交接笔记。`--handoff-protect` 可重复指定要在后续尝试保留的仓库路径。 [交接笔记](#跨-agent-交接笔记)
 - 活动取消已接入：第二个 CLI 进程对运行中任务写入 `cancel_requested` 事件并把状态置为 `cancelling`；Worker 轮询后向 Adapter 发送 `AbortSignal`。受监督命令由其平台监督器停止，Windows 上的 OpenCode 和默认 Codex App Server 使用 Job Object。Codex 先调用 `turn/interrupt`，再关闭受监督 App Server 并要求 `activeProcesses=0` 的停止凭证，随后保存检查点并结算为 `cancelled`。重启时发现未完成取消请求也会在停止凭证满足后完成取消。
 - 取消超时升级与无响应 Worker 强制回收已接入：`task cancel --wait <ms>` 等待协作取消并明确报告超时；`--force` 写入原子取消标记并记录 `cancel_forced` 事件。受监督路径由 Job Object 监督器停止进程树，再终止无响应的 owner；控制面只在该停止凭证的 `activeProcesses=0` 且 owner 已退出后保存检查点并结算为 `cancelled`。默认 Codex App Server 已纳入该监督范围；自定义或未受监督的 Codex 路径缺少凭证时保守置为 `blocked`，不会转移写权。
 
@@ -63,7 +64,7 @@ bun run src/cli.ts worker once
 
 第一次 smoke 的 `attempts.actual_model` 保持 `null`，准确反映了当时 OpenCode 1.19.6 `step_finish` 不含模型字段、且尚无请求级回写的状态。第二次 smoke 没有用请求模型冒充实际模型，而是只从 Magpie 服务模型回填。网关估算成本 0 不等于服务商发票，Provider 账单仍记 `UNKNOWN`；Magpie 行也没有 QuotaFlow `task_id`，但 QuotaFlow 现已持久化任务到请求行的关联。
 
-上述用量回写证据产生于 schema v4；当前 schema v5 已包含无损 v4→v5 迁移和预算租约。预算租约的确定性测试证据见[预算租约证据](evidence/phase1-budget-lease-2026-11-27.json)。
+上述用量回写证据产生于 schema v4。v5 引入预算租约，v6 迁移保留已有的请求和租约数据。 [预算租约证据](evidence/phase1-budget-lease-2026-11-27.json)
 
 重启恢复通过一次真实控制器进程终止演练验证：受监督任务写入部分结果后，控制器被强制结束；下一轮 `worker once` 依据 `stopped.json` 的 `activeProcesses=0` 凭证保存首个检查点、把任务重新入队，并由第二次尝试完成。结果见[重启恢复证据](evidence/phase1-restart-recovery-2026-11-27.json)。恢复不会释放未知用量的预算 hold，而是保留 `pending` 直到租约过期或后续核销。
 
@@ -96,12 +97,33 @@ macOS 监督适用于可信的前台命令。整个工作负载须留在初始�
 
 打包后的 CLI 在 QuotaFlow 临时克隆中完成了强制终止控制器、验证子进程停止、保存检查点、重建工作树和第二次尝试。复跑 `worker recover` 未产生重复恢复。Codex 安装版通过 `/bin/sh` 写入和读回预检，OpenCode 安装版使用模拟的环回响应完成一次 `step_finish`。两项 CLI 验证均使用临时配置，远程模型请求为 0。 [macOS 验证记录](evidence/phase1-macos-supervision-2026-11-27.json)
 
+## 跨 Agent 交接笔记
+
+在已配置运行 Lane 的仓库中，可用以下命令为一项新任务开启交接。`--handoff-protect` 也会开启交接，可重复指定仓库相对路径，路径使用正斜杠。
+
+```sh
+bun run src/cli.ts task add "Finish the retry label" --repo . --handoff --handoff-protect parser.ts
+bun run src/cli.ts task show TASK_ID
+bun run src/cli.ts task events TASK_ID
+```
+
+Agent 在当前回合中更新尝试专用的 `handoff/draft.json`。Codex 和 OpenCode 会收到草稿路径，受监督命令通过 `QUOTAFLOW_HANDOFF_FILE` 写入草稿，通过 `QUOTAFLOW_PROMPT_FILE` 读取本次提示。草稿最多 4 KiB，使用 `version: 1` 及 `completed`、`failedAttempts`、`blockers`、`nextSteps`、`checks` 五个字符串数组。可以将未知项留空，记录实际观察到的测试结果。
+
+Worker 取得停止凭证后，把有效笔记与新检查点在同一次 SQLite 结算中绑定到任务和尝试。草稿位于尝试目录，独立于 Git 工作树。续作从当前检查点查找笔记，缺失、无效、不匹配或超出适配器提示长度时使用原任务提示。写笔记的约定会随当次提示一起传入，无需单独启动回合。`task show` 的 `handoffNote` 显示当前检查点的笔记，`handoff_input` 事件记录接手时选用的尝试。
+
+受保护路径从首次检查点起生效。Worker 在接手前和发布新检查点前比较 Git 树。如果受保护路径有改动，任务进入 `blocked`，保留旧检查点和供检查的工作树改动。修复受保护路径后可重试。若此时已确认写入者因取消而停止，任务可以结算为 `cancelled`，同时拒收违规检查点。
+
+macOS 已用受监督 fixture 验证额度中断后的跨 Lane 接手，并实际强制结束打包后的 Worker，复核笔记绑定、幂等恢复和接续结果。 [接入验证记录](evidence/phase1-handoff-integration-2026-11-27.json)
+
+2026-11-27 又在原生 ChatGPT 返回额度耗尽后，用 Codex 通过 Magpie 的零标价 `hy4-flash-free` 完成任务落盘、草稿写入和 429 换手。三次带笔记与三次仅原提示的 OpenCode 接手均为 3/3 测试通过，且只修改待办的 `label.ts`。带笔记组的工具调用中位数为 8，对照组为 9；计入笔记生成后，总输入 Token 增加 519，输出 Token 减少 4,899，总耗时增加 3.16 秒。样本仍小，交接保持显式启用。 [真实模型交接证据](evidence/phase1-live-handoff-2026-11-27.json)
+
 ## 尚未完成
 
 - Linux 进程监督，以及 macOS 上跨进程组的默认模型适配器停止凭证。
 - 自定义或未受监督 Codex App Server 工厂的停止契约；缺少凭证时仍会保守置为 `blocked`。
 - 基于实际 Provider 账单的预算归属；当前预算只使用网关估算租约。
-- 真实模型任务的端到端验证和 Worktree 生命周期自动化。
+- macOS 默认 Codex App Server 与 OpenCode Adapter 的跨进程组回收，以及 Worktree 生命周期自动化。
+- 扩大不同模型和任务的交接笔记样本，复核完成率、文件保留情况和含笔记生成的用量。
 
 ## 下一里程碑
 

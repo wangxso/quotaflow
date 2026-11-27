@@ -1,4 +1,5 @@
 import type { Attempt, LaneConfig, Task, UsageReport } from './domain';
+import type { HandoffContext } from './handoff';
 
 export interface AgentContext {
   task: Task;
@@ -6,6 +7,7 @@ export interface AgentContext {
   lane: LaneConfig;
   workspacePath: string;
   attemptDir: string;
+  handoff?: HandoffContext;
   signal?: AbortSignal;
 }
 
@@ -21,6 +23,7 @@ export interface AgentResult {
 
 export interface AgentAdapter {
   id: string;
+  maxPromptLength?: number;
   run(context: AgentContext): Promise<AgentResult>;
 }
 

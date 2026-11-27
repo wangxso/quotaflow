@@ -17,11 +17,20 @@ import type {
 import { reserveNext } from './scheduler';
 import type { TaskStore } from './store';
 import {
+  assertSeparateAttemptDirectory,
+  handoffProtection,
+  HandoffSetupError,
+  prepareHandoff,
+  readHandoffDraft,
+  type HandoffContext,
+} from './handoff';
+import {
   attemptDirectory,
   recoverInterruptedAttempts,
   writeAttemptOwner,
 } from './recovery';
-import { checkpoint, ensureWorktree } from './worktree';
+import { hasSupervisorEvidence, verifySupervisedStop } from './supervisor';
+import { checkpoint, ensureWorktree, ProtectedPathsChangedError, verifyProtectedPaths } from './worktree';
 
 export interface WorkerResult {
   task: Task;
@@ -33,13 +42,6 @@ export interface WorkerResult {
   usage: AttemptUsageRecord[];
   checkpoint: string | null;
   error?: string;
-}
-
-function targetStatus(result: AgentResult): TaskStatus {
-  if (result.status === 'completed') return 'completed';
-  if (result.status === 'waiting_quota') return 'waiting_quota';
-  if (result.status === 'cancelled') return 'cancelled';
-  return 'failed';
 }
 
 function errorMessage(error: unknown): string {
@@ -111,47 +113,49 @@ export async function runOnce(
   const cancellationWatcher = setInterval(observeCancellation, 100);
 
   try {
-    ensureWorktree(task.repoPath, task.workspacePath, task.checkpoint ?? 'HEAD');
-    const result = await agent.run({
-      task,
-      attempt,
-      lane,
-      workspacePath: task.workspacePath,
-      attemptDir: statusDir,
-      signal: cancellation.signal,
-    });
-    if ((result.activeProcesses ?? 0) !== 0) {
-      throw new ProcessStopUnverifiedError('Agent left active processes after returning');
+    const protection = handoffProtection(task);
+    let handoff: HandoffContext | undefined;
+    let result: AgentResult | undefined;
+    let started = false;
+    let verifiedStop = false;
+    let failure: { error: unknown } | undefined;
+
+    try {
+      ensureWorktree(task.repoPath, task.workspacePath, task.checkpoint ?? 'HEAD');
+      if (task.handoff) {
+        assertSeparateAttemptDirectory(task.workspacePath, statusDir);
+        if (protection) verifyProtectedPaths(task.workspacePath, config.worktreeRoot, protection);
+        const source = store.handoffForCheckpoint(task.id, task.checkpoint);
+        handoff = prepareHandoff(task, statusDir, source, agent.maxPromptLength);
+        if (task.checkpoint) store.recordHandoffInput(attempt, task.checkpoint, handoff?.source ?? null, clock());
+      }
+      started = true;
+      result = await agent.run({
+        task,
+        attempt,
+        lane,
+        workspacePath: task.workspacePath,
+        attemptDir: statusDir,
+        ...(handoff ? { handoff } : {}),
+        signal: cancellation.signal,
+      });
+      if ((result.activeProcesses ?? 0) !== 0) {
+        throw new ProcessStopUnverifiedError('Agent left active processes after returning');
+      }
+      verifiedStop = result.activeProcesses === 0;
+    } catch (error) {
+      failure = { error };
+      if (task.handoff && started && !(error instanceof ProcessStopUnverifiedError) && hasSupervisorEvidence(statusDir)) {
+        try {
+          verifySupervisedStop(statusDir);
+          verifiedStop = true;
+        } catch (stopError) {
+          failure = { error: new ProcessStopUnverifiedError(errorMessage(stopError)) };
+        }
+      }
     }
-    const cancelled = cancellation.signal.aborted || store.cancelRequested(task.id, attempt.id);
-    const checkpointSha = checkpoint(task.workspacePath, config.worktreeRoot, task.id, attempt.id);
-    const settledAt = finishedAt();
-    const reason = cancelled ? 'cancelled_by_operator' : result.reason;
-    const agentStatus: AgentResult['status'] = cancelled ? 'cancelled' : result.status;
-    store.beginCheckpoint(attempt.id, reason, result.activeProcesses ?? 0, settledAt);
-    const settled = store.settle(
-      attempt.id,
-      checkpointSha,
-      cancelled ? 'cancelled' : targetStatus(result),
-      reason,
-      result.retryAfterMs ?? 1000,
-      settledAt,
-      result.actualModel,
-      result.usage,
-    );
-    const settledAttempt = store.getAttempt(attempt.id);
-    return {
-      task: settled,
-      attempt: settledAttempt,
-      agent: agent.id,
-      agentStatus,
-      actualModel: settledAttempt.actualModel,
-      usageStatus: result.usage?.status ?? null,
-      usage: store.usage(attempt.id),
-      checkpoint: checkpointSha,
-    };
-  } catch (error) {
-    if (error instanceof ProcessStopUnverifiedError) {
+
+    if (failure?.error instanceof ProcessStopUnverifiedError) {
       const blocked = store.block(task.id, 'process_stop_unverified', finishedAt(), { attemptId: attempt.id });
       return {
         task: blocked,
@@ -162,43 +166,63 @@ export async function runOnce(
         usageStatus: null,
         usage: [],
         checkpoint: blocked.checkpoint,
-        error: errorMessage(error),
+        error: errorMessage(failure.error),
       };
     }
+
     let checkpointSha = task.checkpoint ?? '';
-    try {
-      if (existsSync(task.workspacePath)) {
-        checkpointSha = checkpoint(task.workspacePath, config.worktreeRoot, task.id, attempt.id);
+    let published = false;
+    const maySnapshot = !failure || (existsSync(task.workspacePath) && (!task.handoff || started));
+    if (maySnapshot) {
+      try {
+        checkpointSha = checkpoint(task.workspacePath, config.worktreeRoot, task.id, attempt.id, protection);
+        published = true;
+      } catch (error) {
+        if (!failure || error instanceof ProtectedPathsChangedError) failure = { error };
       }
-    } catch {
-      checkpointSha = task.checkpoint ?? '';
     }
+
     const settledAt = finishedAt();
     const cancelled = cancellation.signal.aborted || store.cancelRequested(task.id, attempt.id);
-    const reason = cancelled ? 'cancelled_by_operator' : 'worker_error';
-    try {
+    const error = failure?.error;
+    const protectedPaths = error instanceof ProtectedPathsChangedError ? error.paths : null;
+    const rejection = protectedPaths ? 'handoff_protected_paths_changed'
+      : error instanceof HandoffSetupError ? 'handoff_setup_failed' : null;
+    if (task.handoff && !started && failure) store.releaseBudgetLease(attempt.id, rejection ?? 'worker_error', settledAt);
+    const reason = cancelled ? 'cancelled_by_operator' : rejection ?? (failure ? 'worker_error' : result?.reason ?? 'worker_error');
+    const agentStatus: AgentResult['status'] = cancelled ? 'cancelled' : failure ? 'failed' : result?.status ?? 'failed';
+    const status: TaskStatus = rejection && !cancelled ? 'blocked' : agentStatus;
+    if (!rejection) {
       store.beginCheckpoint(attempt.id, reason, 0, settledAt);
-    } catch {
-      // The settlement below is still authoritative if the attempt already moved on.
     }
+    const usage = !failure || rejection ? result?.usage : undefined;
+    const savedHandoff = handoff && verifiedStop && published ? readHandoffDraft(statusDir) : undefined;
     const settled = store.settle(
       attempt.id,
       checkpointSha,
-      cancelled ? 'cancelled' : 'failed',
+      status,
       reason,
-      1000,
+      failure ? 1000 : result?.retryAfterMs ?? 1000,
       settledAt,
+      !failure || rejection ? result?.actualModel : undefined,
+      usage,
+      {
+        preserveCheckpoint: Boolean(rejection),
+        handoff: savedHandoff,
+        ...(rejection ? { detail: { checkpointRejected: rejection, ...(protectedPaths ? { protectedPaths } : {}) } } : {}),
+      },
     );
+    const settledAttempt = store.getAttempt(attempt.id);
     return {
       task: settled,
-      attempt: store.getAttempt(attempt.id),
+      attempt: settledAttempt,
       agent: agent.id,
-      agentStatus: cancelled ? 'cancelled' : 'failed',
-      actualModel: null,
-      usageStatus: null,
-      usage: [],
-      checkpoint: checkpointSha || null,
-      error: errorMessage(error),
+      agentStatus,
+      actualModel: settledAttempt.actualModel,
+      usageStatus: usage?.status ?? null,
+      usage: store.usage(attempt.id),
+      checkpoint: settled.checkpoint,
+      ...(failure ? { error: errorMessage(failure.error) } : {}),
     };
   } finally {
     clearInterval(cancellationWatcher);
