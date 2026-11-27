@@ -24,6 +24,8 @@ PR #141 随后由有权限的操作者转为 Ready。重新拉取快照后，Dra
 
 同日按项目决策采用 Bot 批准路线。创建 `quotaflow-review-gate-wangxso` GitHub App，仅授予仓库内容只读、元数据和 Pull Request 读写权限，并只安装到 `mcarplay`。App 对 HEAD `abc4c5b` 提交正式 `APPROVED` Review 后，QuotaFlow 通过 `githubApproval.allowBotApprovals=true` 显式计入该批准并进入 `ready_for_human_merge`。Bot 批准默认关闭，代码会读取 Review 的 `authorType`，仅在配置或 `--allow-bot-approvals` 明确允许时计入。PR 仍未自动合并。详见 [Bot 批准证据](evidence/phase2-github-bot-approval-2026-11-28.json)。
 
+仓库管理员随后完成人工合并。PR #141 于 2026-11-27T17:05:03Z 合并，合并提交为 `23033142a38d87441ed5632bc4c9d9ac821ccd61`。本地 `mcarplay/main` 已 fast-forward 到该 SHA，源分支、两个 detached Worktree 和临时试点目录已清理。详见 [合并证据](evidence/phase2-github-merge-2026-11-28.json)。
+
 ## Phase 0 · 调研与可行性验证
 
 | 顺序 | 工作 | 通过证据 |

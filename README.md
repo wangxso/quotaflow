@@ -4,7 +4,7 @@
 
 QuotaFlow 是一个额度感知的 AI 软件研发调度工具。它按账户额度、并发和预算安排 Codex 或 OpenCode 执行任务，将改动保存在独立的 Git 工作树和检查点中，供中断后恢复。
 
-**当前状态（2026-11-28）**　Phase 0 技术门禁有条件通过。Phase 1 单机 CLI 已具备三平台监督、检查点恢复、预算审计和可选交接笔记。Phase 2 已接入同 HEAD CI、独立审查、Draft 状态和人工合并门禁，并完成本地签名 Webhook、双层幂等、受限任务物化与只读审查执行。真实 PR [#141](https://github.com/wangxso/mcarplay/pull/141) 已转为 Ready，CI 和 mergeable 检查通过，专用 GitHub App 已提交绑定当前 HEAD 的正式 Bot 批准。QuotaFlow 在显式 Bot 策略下进入 `ready_for_human_merge`，等待仓库管理员人工决定是否合并。GUI 计划在 Phase 3 交付。 [Phase 1](docs/PHASE-1.md) · [Phase 2](docs/PHASE-2.md) · [Bot 批准证据](docs/evidence/phase2-github-bot-approval-2026-11-28.json)
+**当前状态（2026-11-28）**　Phase 0 技术门禁有条件通过。Phase 1 单机 CLI 已具备三平台监督、检查点恢复、预算审计和可选交接笔记。Phase 2 已接入同 HEAD CI、独立审查、Draft 状态和人工合并门禁，并完成本地签名 Webhook、双层幂等、受限任务物化、只读审查执行和 Bot 批准。真实 PR [#141](https://github.com/wangxso/mcarplay/pull/141) 已经由仓库管理员人工合并到 `main`，合并提交为 `23033142`。下一步完成公网回调与 Review–Fix／CI 修复闭环，GUI 计划在 Phase 3 交付。 [Phase 1](docs/PHASE-1.md) · [Phase 2](docs/PHASE-2.md) · [合并证据](docs/evidence/phase2-github-merge-2026-11-28.json)
 
 ## 当前功能
 

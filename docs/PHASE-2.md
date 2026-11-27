@@ -70,6 +70,8 @@ SQLite v8 新增 `github_deliveries` 和 `github_gate_results`，v9 为任务增
 
 项目明确采用 Bot 批准路线。`quotaflow-review-gate-wangxso` GitHub App 仅安装到 `mcarplay`，拥有 Contents read、Metadata read 和 Pull requests write。它通过 9 分钟 JWT 换取单仓库短时令牌，并对当前 HEAD 提交 Review ID `6091237629`。门禁将 Review 识别为 `authorType=bot`，在显式允许后计为 1 条独立批准并进入 `ready_for_human_merge`。GitHub 仓库没有分支保护或 Ruleset，因此 GitHub 的 `reviewDecision` 仍为空，合并判断由 QuotaFlow 的显式策略完成。 [Bot 批准证据](evidence/phase2-github-bot-approval-2026-11-28.json)
 
+仓库管理员随后人工合并 PR。合并提交为 `23033142a38d87441ed5632bc4c9d9ac821ccd61`，本地 `main` 已同步并确认工作树干净。源分支已删除，审核与实现使用过的两个 detached Worktree 已移除，临时试点目录已清理。 [合并证据](evidence/phase2-github-merge-2026-11-28.json)
+
 ## Signed Webhook 入口
 
 Webhook 在解析 JSON 前对原始请求字节执行 HMAC-SHA256 验证，并使用常量时间比较。Secret 只从 `--secret-env` 指定的环境变量读取，默认名称为 `GITHUB_WEBHOOK_SECRET`，不会写入输出或数据库。
@@ -95,16 +97,15 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
 
 ## 尚未完成
 
-- GitHub App 或最小权限凭据、公网 TLS 回调部署和反向代理。
+- 公网 TLS Webhook 回调部署和反向代理。
 - 在物化前自动抓取 PR HEAD／base 到本地 Git 仓库并校验提交可用性。
-- 由仓库管理员确认最终代码、CI 和 Bot 批准证据后执行人工合并。
 - Check-run 日志抓取、失败分类细节和同 SHA 复跑绑定。
 - 写入应答丢失、重复 Webhook、越权请求和凭据轮换演练。
-- Draft 转 Ready、人工批准与合并操作。当前所有合并保持人工执行。
+- 后续 Review–Fix／CI 修复任务的完整执行、复跑和门禁闭环。
 
 ## 下一里程碑
 
-1. 接入 GitHub App 凭据，并将本地监听器部署到受控公网反向代理。
-2. 由仓库管理员完成 PR #141 的人工合并决定。
-3. 对后续 Review–Fix／CI 修复任务重复执行、复跑和门禁闭环。
+1. 将本地监听器部署到受控公网反向代理。
+2. 对后续 Review–Fix／CI 修复任务重复执行、复跑和门禁闭环。
+3. 接入 Check-run 日志抓取和失败分类。
 4. Phase 2 核心验收完成后进入 Phase 3 Dashboard 与部署。

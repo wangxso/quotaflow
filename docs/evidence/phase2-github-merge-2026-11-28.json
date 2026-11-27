@@ -1,0 +1,49 @@
+{
+  "recordedOn": "2026-11-28",
+  "baseRevision": "60ffaaa1012fad164149c5991f8d98fafabbb3fa",
+  "pullRequest": {
+    "repository": "wangxso/mcarplay",
+    "number": 141,
+    "url": "https://github.com/wangxso/mcarplay/pull/141",
+    "state": "MERGED",
+    "baseSha": "daf67e87a72aa9033a4d62f88e9a9d05ce047d9e",
+    "headSha": "abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48",
+    "mergeCommit": "23033142a38d87441ed5632bc4c9d9ac821ccd61",
+    "mergedAt": "2026-11-27T17:05:03Z"
+  },
+  "gateBeforeMerge": {
+    "status": "ready_for_human_merge",
+    "independentApprovals": 1,
+    "approvalPrincipal": {
+      "login": "quotaflow-review-gate-wangxso[bot]",
+      "type": "Bot",
+      "reviewId": 6091237629,
+      "commitSha": "abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48"
+    },
+    "requiredChecksPassed": 3,
+    "humanMergeRequired": true
+  },
+  "postMerge": {
+    "remoteMainSha": "23033142a38d87441ed5632bc4c9d9ac821ccd61",
+    "localMainSha": "23033142a38d87441ed5632bc4c9d9ac821ccd61",
+    "localMainClean": true,
+    "sourceBranchRemoved": true,
+    "detachedWorktreesRemoved": 2,
+    "temporaryPilotDirectoriesRemoved": true
+  },
+  "verification": {
+    "fullSuite": {
+      "macOS": 137,
+      "linux": 137,
+      "windowsOnlySkipped": 1,
+      "failed": 0
+    },
+    "buildAndConfig": "passed on macOS and Linux",
+    "jsonAndDiffChecks": "passed"
+  },
+  "scope": {
+    "automaticMerge": false,
+    "mergeExecutor": "repository owner",
+    "nextPhaseWork": "GitHub App public callbacks and the Review-Fix/CI remediation loop"
+  }
+}
