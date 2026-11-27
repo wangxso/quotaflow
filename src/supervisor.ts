@@ -101,35 +101,25 @@ export function launchGuardedAppServer(
   statusDir: string,
   options: { env?: NodeJS.ProcessEnv } = {},
 ): ChildProcessWithoutNullStreams {
-  if (process.platform !== 'win32') throw new Error('Supervised Codex App Server currently requires Windows');
+  if (process.platform !== 'win32' && process.platform !== 'darwin') {
+    throw new Error('Supervised Codex App Server requires Windows or macOS');
+  }
   if (command.length === 0) throw new Error('A supervised command is required');
   const env: NodeJS.ProcessEnv = { ...process.env, ...options.env };
   for (const [key, value] of Object.entries(env)) {
     if (value === undefined) delete env[key];
   }
   mkdirSync(statusDir, { recursive: true });
-  recordLaunch(statusDir, 'windows_job');
-  return spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', guardScript], {
-    windowsHide: true,
-    cwd,
-    stdio: ['pipe', 'pipe', 'pipe'],
-    env: {
-      ...env,
-      QUOTAFLOW_GUARD_EXE: command[0],
-      QUOTAFLOW_GUARD_ARGS: JSON.stringify({ args: command.slice(1) }),
-      QUOTAFLOW_GUARD_CWD: cwd,
-      QUOTAFLOW_GUARD_STATUS: statusDir,
-      QUOTAFLOW_GUARD_OWNER: String(process.pid),
-      QUOTAFLOW_GUARD_CREATED_BY: String(Date.now()),
-      QUOTAFLOW_GUARD_JOB: `QuotaFlow-Phase0-${randomUUID()}`,
-      QUOTAFLOW_GUARD_VERIFY: '0',
-      QUOTAFLOW_GUARD_PROXY_STDIO: '1',
-      QUOTAFLOW_ATTEMPT_DIR: statusDir,
-    },
-  }) as ChildProcessWithoutNullStreams;
+  return launchCommandGuard(command, cwd, statusDir, env, true) as ChildProcessWithoutNullStreams;
 }
 
-function launchMacGuard(command: string[], cwd: string, statusDir: string, env: NodeJS.ProcessEnv) {
+function launchMacGuard(
+  command: string[],
+  cwd: string,
+  statusDir: string,
+  env: NodeJS.ProcessEnv,
+  proxyStdio: boolean,
+) {
   const buildDir = mkdtempSync(join(tmpdir(), 'quotaflow-guard-'));
   const removeBuild = () => rmSync(buildDir, { recursive: true, force: true });
   try {
@@ -142,12 +132,17 @@ function launchMacGuard(command: string[], cwd: string, statusDir: string, env: 
       throw new Error(`Could not build the macOS process supervisor. Install Xcode Command Line Tools. ${build.stderr.trim()}`);
     }
     // Persist the launch intent before the guard can start a writer.
-    recordLaunch(statusDir, 'macos_process_group');
+    recordLaunch(statusDir, 'macos_process_tree');
     const guard = spawn(executable, [String(process.pid), statusDir, ...command], {
       cwd,
       detached: true,
-      stdio: ['pipe', 'ignore', 'pipe'],
-      env: { ...env, QUOTAFLOW_GUARD_STATUS: statusDir, QUOTAFLOW_ATTEMPT_DIR: statusDir },
+      stdio: proxyStdio ? ['pipe', 'pipe', 'pipe'] : ['pipe', 'ignore', 'pipe'],
+      env: {
+        ...env,
+        QUOTAFLOW_GUARD_STATUS: statusDir,
+        QUOTAFLOW_GUARD_PROXY_STDIO: proxyStdio ? '1' : '0',
+        QUOTAFLOW_ATTEMPT_DIR: statusDir,
+      },
     });
     guard.once('close', removeBuild);
     return guard;
@@ -157,13 +152,19 @@ function launchMacGuard(command: string[], cwd: string, statusDir: string, env: 
   }
 }
 
-function launchCommandGuard(command: string[], cwd: string, statusDir: string, env: NodeJS.ProcessEnv) {
-  if (process.platform === 'darwin') return launchMacGuard(command, cwd, statusDir, env);
+function launchCommandGuard(
+  command: string[],
+  cwd: string,
+  statusDir: string,
+  env: NodeJS.ProcessEnv,
+  proxyStdio = false,
+) {
+  if (process.platform === 'darwin') return launchMacGuard(command, cwd, statusDir, env, proxyStdio);
   recordLaunch(statusDir, 'windows_job');
   return spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', guardScript], {
     windowsHide: true,
     cwd,
-    stdio: ['pipe', 'ignore', 'pipe'],
+    stdio: proxyStdio ? ['pipe', 'pipe', 'pipe'] : ['pipe', 'ignore', 'pipe'],
     env: {
       ...env,
       QUOTAFLOW_GUARD_EXE: command[0],
@@ -174,7 +175,7 @@ function launchCommandGuard(command: string[], cwd: string, statusDir: string, e
       QUOTAFLOW_GUARD_CREATED_BY: String(Date.now()),
       QUOTAFLOW_GUARD_JOB: `QuotaFlow-Phase0-${randomUUID()}`,
       QUOTAFLOW_GUARD_VERIFY: '0',
-      QUOTAFLOW_GUARD_PROXY_STDIO: '0',
+      QUOTAFLOW_GUARD_PROXY_STDIO: proxyStdio ? '1' : '0',
       QUOTAFLOW_ATTEMPT_DIR: statusDir,
     },
   });

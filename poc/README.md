@@ -9,7 +9,7 @@ bun test poc/phase0.test.ts
 bun run poc/demo.ts
 ```
 
-示例输出包含额度拒绝后的两个尝试、写入者停止凭证、检查点 SHA 和任务结果。`fixture-codex` 与 `fixture-opencode` 是合成执行器。Windows 用 Job Object 验证进程停止，macOS 验证命令及其同组子进程停止。通过验证后才允许交接。 [macOS 监督范围](../docs/PHASE-1.md#macos-本地命令验证)
+示例输出包含额度拒绝后的两个尝试、写入者停止凭证、检查点 SHA 和任务结果。`fixture-codex` 与 `fixture-opencode` 是合成执行器。Windows 用 Job Object 验证进程停止，macOS 用原生进程树监督覆盖同组和 detached 后代。通过验证后才允许交接。 [macOS 监督范围](../docs/PHASE-1.md#macos-本地命令验证)
 
 ## 只读接口探测
 
@@ -36,13 +36,13 @@ node poc/app-server-preflight.mjs codex --transport stdio
 
 ## Codex 受监督停止复跑
 
-该 smoke 通过 Job Object 监督器启动 `codex app-server`，完成一次零推理初始化后关闭，并要求监督器发布 `activeProcesses=0` 的停止凭证。
+该 smoke 通过平台监督器启动 `codex app-server`，完成一次零推理初始化和 `command/exec` 写入预检。macOS 还会启动一个后台子进程，并验证关闭后没有残留。监督器必须发布 `activeProcesses=0` 的停止凭证。
 
 ```powershell
 bun run poc/codex-app-server-guarded-smoke.ts $quotaCodex
 ```
 
-输出应包含 `initialized: true`、`inferenceTurnsRequested: 0`，以及 `stop.activeProcesses: 0`、`stop.exitCode: 0`。缺少凭证或仍有活动进程时脚本失败。
+输出应包含 `initialized: true`、`commandExec: "passed"`、`inferenceTurnsRequested: 0`，以及 `stop.activeProcesses: 0`、`stop.exitCode: 0`。macOS 的 `detachedProcessTree` 应为 `stopped`。缺少凭证或仍有活动进程时脚本失败。
 
 ## 真实运行对照
 

@@ -85,7 +85,13 @@ async function main() {
       allowedProviders: config.routing.allowedProviders,
       routedModelApproval: config.routing.routedModelApproval ?? null,
       budgets: config.budgets ?? [],
-      lanes: config.lanes.map((lane) => ({ id: lane.id, agent: lane.agent, model: lane.model, provider: lane.provider })),
+      lanes: config.lanes.map((lane) => ({
+        id: lane.id,
+        agent: lane.agent,
+        model: lane.model,
+        provider: lane.provider,
+        ...(lane.baseUrl ? { baseUrl: lane.baseUrl } : {}),
+      })),
     }, null, 2));
     return;
   }

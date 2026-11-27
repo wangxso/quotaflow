@@ -28,6 +28,7 @@
       "agent": "codex",
       "model": "opencode-go/deepseek-v4.1-flash",
       "provider": "magpie",
+      "baseUrl": "http://127.0.0.1:3425/v1",
       "account": "magpie-default",
       "priority": 100,
       "slots": 1,

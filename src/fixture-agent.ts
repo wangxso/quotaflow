@@ -1,5 +1,7 @@
-import { readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const [mode] = process.argv.slice(2);
 const statusDir = process.env.QUOTAFLOW_ATTEMPT_DIR;
@@ -10,6 +12,18 @@ function outcome(value: object) {
   const pending = `${target}.${process.pid}.pending`;
   writeFileSync(pending, JSON.stringify(value));
   renameSync(pending, target);
+}
+
+async function startDetachedHolder() {
+  const holder = spawn(process.execPath, [
+    fileURLToPath(import.meta.url), 'detached-holder', statusDir,
+  ], { detached: true, stdio: 'ignore' });
+  holder.unref();
+  const deadline = Date.now() + 5_000;
+  while (!existsSync(join(statusDir!, 'detached-heartbeat'))) {
+    if (Date.now() > deadline) throw new Error('Detached descendant could not start');
+    await Bun.sleep(20);
+  }
 }
 
 if (mode === 'complete') {
@@ -27,6 +41,23 @@ if (mode === 'complete') {
 } else if (mode === 'hold') {
   writeFileSync('app.txt', 'partial\n');
   setInterval(() => {}, 1_000);
+} else if (mode === 'detached-holder') {
+  const leaf = spawn(process.execPath, [
+    fileURLToPath(import.meta.url), 'detached-leaf', statusDir,
+  ], { detached: true, stdio: 'ignore' });
+  leaf.unref();
+  writeFileSync(join(statusDir, 'detached-pids.json'), JSON.stringify({ holder: process.pid, leaf: leaf.pid }));
+  setInterval(() => {}, 1_000);
+} else if (mode === 'detached-leaf') {
+  setInterval(() => writeFileSync(join(statusDir, 'detached-heartbeat'), String(Date.now())), 30);
+} else if (mode === 'detached-tree' || mode === 'detached-hold') {
+  await startDetachedHolder();
+  await Bun.sleep(150);
+  if (mode === 'detached-hold') {
+    setInterval(() => {}, 1_000);
+  } else {
+    process.exit(73);
+  }
 } else if (mode === 'echo') {
   process.stdin.on('data', (chunk) => {
     process.stdout.write(chunk);

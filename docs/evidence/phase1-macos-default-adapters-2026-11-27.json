@@ -1,0 +1,83 @@
+{
+  "recordedOn": "2026-11-27",
+  "baseRevision": "92c5a37ea806a27a4ee2430206448086a4687bfe",
+  "environment": {
+    "os": "macOS 26.6.2 arm64",
+    "bun": "1.4.5",
+    "git": "2.56.1",
+    "codex": "0.171.0",
+    "opencode": "1.19.6",
+    "magpie": "0.1.4539",
+    "appleClang": "21.0.0"
+  },
+  "verification": {
+    "bunTest": { "passed": 94, "failed": 0, "windowsOnlySkipped": 1 },
+    "build": "bun run build",
+    "configValidation": "bun dist/cli.js config validate --config quotaflow.config.example.json",
+    "codexSmoke": "bun run poc/codex-app-server-guarded-smoke.ts codex"
+  },
+  "supervisor": {
+    "backend": "macos_process_tree",
+    "rootIsolation": "The worker starts in a separate session and process group.",
+    "tracking": "Every 25 ms the native guard records child PIDs, process-group members, and PID start times. This follows descendants that call setsid or create a detached process group while the workload remains observable.",
+    "stop": "The guard sends SIGKILL to recorded processes and groups, verifies no recorded live identity remains, reaps the worker, and then publishes stopped.json with activeProcesses=0.",
+    "receipts": [
+      { "scenario": "worker exits with a detached two-level descendant tree", "exitCode": 73, "activeProcesses": 0, "reason": "worker_exit" },
+      { "scenario": "cancellation of a worker with detached descendants", "exitCode": null, "activeProcesses": 0, "reason": "cancelled" },
+      { "scenario": "timeout and abort cleanup", "exitCode": null, "activeProcesses": 0, "reason": "controller_closed" }
+    ],
+    "limits": "This is lifecycle supervision for trusted workloads. It uses process enumeration and is not a security boundary against code deliberately racing or hiding process creation. Untrusted code still requires an external sandbox."
+  },
+  "codexZeroInference": {
+    "agent": "default Codex App Server factory",
+    "stdioProxy": "bidirectional",
+    "initialize": "passed",
+    "commandExec": {
+      "status": "completed",
+      "fileWrittenAndReadBack": true,
+      "inferenceCalls": 0
+    },
+    "detachedDescendant": "stopped",
+    "stop": { "activeProcesses": 0, "exitCode": 0, "reason": "worker_exit" }
+  },
+  "codexLiveTask": {
+    "taskId": "mac-codex-default",
+    "workerEntrypoint": "bun dist/cli.js worker once",
+    "lane": { "id": "codex-mac", "agent": "codex", "provider": "magpie" },
+    "requestedModel": "opencode-go/hy4-flash-free",
+    "actualModel": "opencode-go/hy4-flash-free",
+    "finalStatus": "completed",
+    "checkpoint": "fcca6e5f4d41b579784a7103a0bbbc12707708e9",
+    "workspaceResult": { "app.txt": "41\n" },
+    "stop": { "activeProcesses": 0, "exitCode": 0, "reason": "worker_exit" }
+  },
+  "opencodeLiveTask": {
+    "taskId": "opencode-mac-default",
+    "workerEntrypoint": "bun dist/cli.js worker once",
+    "lane": { "id": "opencode-mac", "agent": "opencode", "provider": "magpie" },
+    "requestedModel": "opencode-go/hy4-flash-free",
+    "actualModel": "hy4-flash-free",
+    "finalStatus": "completed",
+    "checkpoint": "7326c4f886f9b90812078534763164e17087cb56",
+    "workspaceResult": { "app.txt": "42\n" },
+    "openCodeSession": "ses_de309b825ffehxUiiatEsqZR4h",
+    "usage": {
+      "status": "recorded",
+      "rows": 4,
+      "allHttp200": true,
+      "allPriced": true,
+      "inputTokens": 6089,
+      "outputTokens": 739,
+      "cacheReadTokens": 10240,
+      "costEstimate": 0,
+      "providerInvoice": "UNKNOWN"
+    },
+    "stop": { "activeProcesses": 0, "exitCode": 0, "reason": "worker_exit" }
+  },
+  "limitations": [
+    "Linux remains unsupported by the native supervisor.",
+    "A custom or unsupervised Codex server factory still requires a separate verified-stop contract.",
+    "Codex request-level usage is not reconciled by the current adapter. OpenCode usage is reconciled by exact session ID.",
+    "The zero Magpie cost is a gateway estimate and does not establish a provider invoice."
+  ]
+}

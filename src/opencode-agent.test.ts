@@ -105,6 +105,38 @@ function usageReport(servedModel = 'hy4-flash-free'): UsageReport {
   };
 }
 
+test.skipIf(process.platform !== 'darwin')('uses the macOS supervisor for the default OpenCode runner', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'quotaflow-opencode-guard-'));
+  let childPid: number | undefined;
+  try {
+    const workspace = join(root, 'workspace');
+    mkdirSync(workspace);
+    const executable = join(root, 'opencode-fixture');
+    writeFileSync(executable, [
+      '#!/bin/sh',
+      'printf \'%s\\n\' \'{"type":"step_finish","sessionID":"fixture-session","part":{"type":"step-finish","reason":"stop"}}\'',
+      'sleep 60 &',
+      'child=$!',
+      'printf "%s" "$child" > "$QUOTAFLOW_ATTEMPT_DIR/opencode-child.pid"',
+      'sleep 0.2',
+      'exit 0',
+      '',
+    ].join('\n'), { mode: 0o755 });
+    const attemptDir = join(root, 'attempt');
+    const agent = new OpenCodeAgent({ ...lane, executable }, undefined, async () => usageReport());
+    const result = await agent.run({ ...context(root), workspacePath: workspace, attemptDir });
+    expect(result).toMatchObject({ status: 'completed', activeProcesses: 0, actualModel: 'hy4-flash-free' });
+    childPid = Number(readFileSync(join(attemptDir, 'opencode-child.pid'), 'utf8'));
+    await Bun.sleep(100);
+    expect(() => process.kill(childPid!, 0)).toThrow();
+  } finally {
+    if (childPid) {
+      try { process.kill(childPid, 'SIGKILL'); } catch {}
+    }
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+  }
+}, 20_000);
+
 test('runs OpenCode with isolated Magpie config and parses JSON events', async () => {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-opencode-'));
   try {

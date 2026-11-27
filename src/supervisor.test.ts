@@ -105,7 +105,7 @@ supervisedTest('a cancellation flag stops the command and reports an empty proce
   }
 });
 
-test.skipIf(process.platform !== 'win32')('guarded stdio keeps the worker pipe live and publishes a stop receipt', async () => {
+supervisedTest('guarded stdio keeps the worker pipe live and publishes a stop receipt', async () => {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-supervisor-stdio-'));
   try {
     const status = join(root, 'attempt');
@@ -137,6 +137,45 @@ test.skipIf(process.platform !== 'win32')('guarded stdio keeps the worker pipe l
       activeProcesses: 0,
       reason: 'worker_exit',
     });
+  } finally {
+    await removeEventually(root);
+  }
+}, 20_000);
+
+test.skipIf(process.platform !== 'darwin')('a detached process tree is stopped before a worker-exit receipt', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'quotaflow-supervisor-tree-'));
+  try {
+    const status = join(root, 'attempt');
+    const result = await launchSupervised([process.execPath, fixture, 'detached-tree'], root, status);
+    expect(result.stop).toMatchObject({ activeProcesses: 0, exitCode: 73, reason: 'worker_exit' });
+    expect(JSON.parse(readFileSync(join(status, 'detached-pids.json'), 'utf8'))).toMatchObject({
+      holder: expect.any(Number),
+      leaf: expect.any(Number),
+    });
+    const heartbeat = readFileSync(join(status, 'detached-heartbeat'), 'utf8');
+    await Bun.sleep(120);
+    expect(readFileSync(join(status, 'detached-heartbeat'), 'utf8')).toBe(heartbeat);
+  } finally {
+    await removeEventually(root);
+  }
+}, 20_000);
+
+test.skipIf(process.platform !== 'darwin')('cancellation stops detached descendants in other process groups', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'quotaflow-supervisor-tree-cancel-'));
+  try {
+    const status = join(root, 'attempt');
+    const running = launchSupervised([process.execPath, fixture, 'detached-hold'], root, status);
+    const deadline = Date.now() + 10_000;
+    while (!existsSync(join(status, 'detached-heartbeat')) && Date.now() < deadline) {
+      await Bun.sleep(30);
+    }
+    expect(existsSync(join(status, 'detached-heartbeat'))).toBe(true);
+    writeFileSync(join(status, 'cancel.flag'), JSON.stringify({ terminateOwner: false }));
+    const result = await running;
+    expect(result.stop).toMatchObject({ activeProcesses: 0, reason: 'cancelled' });
+    const heartbeat = readFileSync(join(status, 'detached-heartbeat'), 'utf8');
+    await Bun.sleep(120);
+    expect(readFileSync(join(status, 'detached-heartbeat'), 'utf8')).toBe(heartbeat);
   } finally {
     await removeEventually(root);
   }

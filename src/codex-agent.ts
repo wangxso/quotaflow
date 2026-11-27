@@ -90,8 +90,8 @@ function defaultFactory(
   args: string[],
   options: { cwd: string; env: NodeJS.ProcessEnv; attemptDir: string },
 ): CodexServer {
-  if (process.platform !== 'win32') {
-    throw new Error('Supervised Codex App Server currently requires Windows');
+  if (process.platform !== 'win32' && process.platform !== 'darwin') {
+    throw new Error('Supervised Codex App Server requires Windows or macOS');
   }
   const command = [
     executable,

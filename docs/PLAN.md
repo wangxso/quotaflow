@@ -53,6 +53,8 @@
 
 2026-11-27 在 macOS 完成两组真实模型复测。原生 ChatGPT 当前返回用量上限后，Codex 改经 Magpie 的零标价 `hy4-flash-free` 完成解析器和交接草稿；本地代理在草稿有效后注入 HTTP 429。三次带笔记和三次仅原提示的 OpenCode 接手均 3/3 通过，且只修改 `label.ts`。带笔记组工具调用共 25 次、对照组 28 次；计入笔记生成后，输入 Token 多 519、输出 Token 少 4,899，耗时多 3.16 秒。该结果支持保留显式启用的交接路径，样本量还不足以改变默认策略。服务商账单仍为 `UNKNOWN`。 [真实模型交接证据](evidence/phase1-live-handoff-2026-11-27.json) · [首轮对照证据](evidence/phase1-macos-handoff-experiment-2026-11-27.json)
 
+同日完成默认 Adapter 的 macOS 进程监督闭环。Codex App Server 经受监督 stdio 代理写入 `app.txt=41`，零推理预检的后台子进程在关闭时被回收。OpenCode 默认路径写入 `app.txt=42`，四个 Magpie 请求行完成会话级回写，服务模型为 `hy4-flash-free`，停止凭证均为 `activeProcesses=0`。 [默认 Adapter 证据](evidence/phase1-macos-default-adapters-2026-11-27.json)
+
 ## mcarplay 试点
 
 1. 以[源码初筛的 CI 基线](RESEARCH.md#mcarplay-首个试点)作为起点。开跑前重新核对基线 SHA、默认分支、实际目标分支、受保护分支规则及必需检查。
