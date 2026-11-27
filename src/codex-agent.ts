@@ -24,14 +24,25 @@ type Response = {
   code?: string | number;
 };
 
+type CodexEvent = {
+  turn?: { id?: string; status?: string };
+  turnId?: string;
+  item?: {
+    type?: string;
+    text?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
 export interface CodexServer {
   initialize(capabilities?: unknown): Promise<Response>;
   call(method: string, params?: unknown, timeout?: number): Promise<Response>;
   notification(
     method: string,
-    filter: (event: { turn?: { id?: string; status?: string } }) => boolean,
+    filter: (event: CodexEvent) => boolean,
     timeout?: number,
-  ): Promise<{ turn?: { id?: string; status?: string } } | null>;
+  ): Promise<CodexEvent | null>;
   close(): Promise<void>;
   readonly stderr: string;
 }
@@ -57,9 +68,10 @@ function isVerifiedStopReceipt(value: unknown): value is SupervisorStop {
 type RuntimePreflight = (
   server: CodexServer,
   workspace: string,
+  options?: { readOnly?: boolean },
 ) => Promise<{
   inferenceCalls: number;
-  commandExec: { status?: string; exitCode?: number; fileWritten?: boolean };
+  commandExec: { status?: string; exitCode?: number; fileWritten?: boolean; workspaceRead?: boolean };
 }>;
 
 function defaultFactory(
@@ -85,6 +97,7 @@ function defaultFactory(
 
 export class CodexAppServerAgent implements AgentAdapter {
   readonly id: string;
+  readonly supportsReadOnly = true;
   readonly #lane: LaneConfig;
   readonly #factory: CodexServerFactory;
   readonly #preflight: RuntimePreflight;
@@ -163,6 +176,7 @@ export class CodexAppServerAgent implements AgentAdapter {
   }
 
   async #execute(context: AgentContext, server: CodexServer): Promise<AgentResult> {
+    const readOnly = context.task.accessMode === 'read_only';
     const initialize = await server.initialize({ experimentalApi: true });
     if (!initialize.value) throw new Error(`Codex App Server initialize failed (${initialize.code ?? 'unknown'})`);
     if (context.signal?.aborted) {
@@ -172,11 +186,11 @@ export class CodexAppServerAgent implements AgentAdapter {
         tests: 'not_run',
       };
     }
-    const runtime = await this.#preflight(server, context.workspacePath);
+    const runtime = await this.#preflight(server, context.workspacePath, { readOnly });
     if (
       runtime.commandExec.status !== 'completed'
       || runtime.commandExec.exitCode !== 0
-      || !runtime.commandExec.fileWritten
+      || (readOnly ? runtime.commandExec.workspaceRead !== true : !runtime.commandExec.fileWritten)
     ) {
       throw new Error('Codex workspace runtime preflight failed');
     }
@@ -190,7 +204,7 @@ export class CodexAppServerAgent implements AgentAdapter {
 
     const started = await server.call('thread/start', {
       cwd: context.workspacePath,
-      sandbox: 'workspace-write',
+      sandbox: readOnly ? 'read-only' : 'workspace-write',
       approvalPolicy: 'never',
       modelProvider: 'openai',
       model: this.#lane.model,
@@ -209,13 +223,15 @@ export class CodexAppServerAgent implements AgentAdapter {
     const turn = await server.call('turn/start', {
       threadId,
       input: [{ type: 'text', text: context.handoff?.prompt ?? context.task.prompt }],
-      sandboxPolicy: {
-        type: 'workspaceWrite',
-        writableRoots: [context.workspacePath, ...(context.handoff ? [context.handoff.directory] : [])],
-        networkAccess: false,
-        excludeTmpdirEnvVar: true,
-        excludeSlashTmp: true,
-      },
+      sandboxPolicy: readOnly
+        ? { type: 'readOnly', networkAccess: false }
+        : {
+          type: 'workspaceWrite',
+          writableRoots: [context.workspacePath, ...(context.handoff ? [context.handoff.directory] : [])],
+          networkAccess: false,
+          excludeTmpdirEnvVar: true,
+          excludeSlashTmp: true,
+        },
     });
     const turnId = turn.value?.turn?.id;
     if (!turnId) throw new Error(`Codex turn start failed (${turn.code ?? 'missing turn'})`);
@@ -258,11 +274,20 @@ export class CodexAppServerAgent implements AgentAdapter {
       throw new Error('Timed out waiting for the Codex turn');
     }
     const status = completed.turn?.status;
+    const message = await server.notification(
+      'item/completed',
+      (event) => event.turnId === turnId
+        && event.item?.type === 'agentMessage'
+        && typeof event.item.text === 'string',
+      1_000,
+    );
+    const output = message?.item?.text?.trim().slice(0, 50_000);
     return {
       status: status === 'completed' ? 'completed' : 'failed',
       reason: status === 'completed' ? 'codex_turn_completed' : `codex_turn_${status ?? 'unknown'}`,
       tests: 'not_run',
       actualModel: started.value?.model ?? this.#lane.model,
+      ...(output ? { output } : {}),
     };
   }
 }

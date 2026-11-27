@@ -16,7 +16,7 @@
 
 方案获审后已执行 Phase 0 并提交 [验证报告](PHASE-0.md)、[PoC](../poc/README.md) 和[许可证审查](LICENSING-REVIEW.md)。确定性故障恢复用例通过。2026-11-27 已完成真实 Codex Agent 写入、检查点恢复和 OpenCode 接续，技术门禁有条件通过；Codex 实际经 Magpie 路由到第三方模型，原生 ChatGPT 路径、商用路由组和服务商账单仍未验证。Phase 1 已形成三平台监督、预算审计和恢复闭环。Phase 2 已启动，QuotaFlow 在 `mcarplay` Issue #82 上生成 Draft PR #141，完整 CI 通过，Pull Request 门禁、本地签名 Webhook 服务、Review–Fix／CI 动作计划和受限任务物化已接入。详见 [Phase 1](PHASE-1.md)、[Phase 2](PHASE-2.md) 与[门禁收口记录](PHASE-0-GATE-CLOSURE.md)。
 
-2026-11-28 将 GitHub 动作计划接入 QuotaFlow 任务创建。只有独立审查、Review–Fix 和 CI 修复可物化为 Agent 任务；任务绑定 PR HEAD，按稳定动作键幂等，沿用每任务最多 3 次尝试和配置预算。人工 Ready、冲突处理、证据刷新与合并仍不派发给 Agent。详见 [Phase 2 证据](evidence/phase2-github-materialization-2026-11-28.json)。
+2026-11-28 将 GitHub 动作计划接入 QuotaFlow 任务创建。只有独立审查、Review–Fix 和 CI 修复可物化为 Agent 任务；任务绑定 PR HEAD，按稳定动作键幂等，沿用每任务最多 3 次尝试和配置预算。独立审查使用 SQLite v9 的任务级只读模式，禁止不能保证只读的 Adapter，并在结束后拒绝任何工作树变化。人工 Ready、冲突处理、证据刷新与合并仍不派发给 Agent。PR #141 的内部只读审查已由免费 Magpie 路由完成，未发现阻断问题，源仓库和审查 worktree 均无改动；GitHub 官方 Review 仍为 0。详见 [Phase 2 证据](evidence/phase2-github-materialization-2026-11-28.json)。
 
 ## Phase 0 · 调研与可行性验证
 

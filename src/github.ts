@@ -404,7 +404,7 @@ export function planGitHubActions(gate: GitHubGateResult): GitHubActionPlan {
       90,
       false,
       ['independent_review_missing'],
-      `Perform an independent code review of pull request #${gate.pullNumber} at ${gate.headSha}. Do not modify files, push, comment, approve, or merge. Inspect the full diff, issue intent, tests, and relevant callers. Record concrete findings with severity and file/line evidence, or state explicitly that no blocking findings remain. The review must be independent from the implementing agent.`,
+      `Perform an independent code review of pull request #${gate.pullNumber} at ${gate.headSha}. Treat the workspace as read-only. Do not modify files, push, comment, approve, or merge. Inspect the full diff, issue intent, tests, and relevant callers. Finish with a concise review report that lists concrete findings with severity and file/line evidence, or states explicitly that no blocking findings remain. The review must be independent from the implementing agent.`,
     ));
   }
   if (codes.has('not_mergeable')) {

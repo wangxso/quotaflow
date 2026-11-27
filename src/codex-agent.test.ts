@@ -35,6 +35,7 @@ const task: Task = {
   status: 'running',
   priority: 0,
   critical: false,
+  accessMode: 'write',
   checkpoint: null,
   nextWakeAt: null,
   createdAt: 1,
@@ -79,7 +80,10 @@ function fakeServer(calls: Array<{ method: string; params: unknown }>): CodexSer
       if (method === 'turn/start') return { value: { turn: { id: 'turn-1' } } };
       return { value: {} };
     },
-    async notification() {
+    async notification(method: string) {
+      if (method === 'item/completed') {
+        return { turnId: 'turn-1', item: { type: 'agentMessage', text: 'Review complete' } };
+      }
       return { turn: { id: 'turn-1', status: 'completed' } };
     },
     async close() {},
@@ -113,6 +117,33 @@ test('injects the task prompt, model and explicit base URL into App Server calls
   expect(calls.find((call) => call.method === 'turn/start')?.params).toMatchObject({
     input: [{ type: 'text', text: task.prompt }],
   });
+});
+
+test('enforces a read-only workspace and captures the final review report', async () => {
+  const calls: Array<{ method: string; params: unknown }> = [];
+  let preflightOptions: { readOnly?: boolean } | undefined;
+  const agent = new CodexAppServerAgent(
+    lane,
+    () => fakeServer(calls),
+    async (_server, _workspace, options) => {
+      preflightOptions = options;
+      return {
+        inferenceCalls: 0,
+        commandExec: { status: 'completed', exitCode: 0, fileWritten: false, workspaceRead: true },
+      };
+    },
+    verifyStop,
+  );
+  const result = await agent.run({
+    ...context,
+    task: { ...task, accessMode: 'read_only' },
+  });
+  expect(preflightOptions).toEqual({ readOnly: true });
+  expect(calls.find((call) => call.method === 'thread/start')?.params)
+    .toMatchObject({ sandbox: 'read-only' });
+  expect(calls.find((call) => call.method === 'turn/start')?.params)
+    .toMatchObject({ sandboxPolicy: { type: 'readOnly', networkAccess: false } });
+  expect(result).toMatchObject({ output: 'Review complete', status: 'completed' });
 });
 
 test('does not send a turn when the zero-inference preflight fails', async () => {

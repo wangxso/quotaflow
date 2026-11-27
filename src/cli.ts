@@ -26,7 +26,7 @@ import { materializeGitHubActions } from './github-materialize';
 
 const usage = `
 quotaflow config validate [--config <file>]
-quotaflow task add <title> [--prompt <text>] [--repo <path>] [--workspace <path>] [--priority <n>] [--critical] [--handoff] [--handoff-protect <path>]... [--config <file>]
+quotaflow task add <title> [--prompt <text>] [--repo <path>] [--workspace <path>] [--priority <n>] [--critical] [--read-only] [--handoff] [--handoff-protect <path>]... [--config <file>]
 quotaflow task list [--status <status>] [--config <file>]
 quotaflow task show <id> [--config <file>]
 quotaflow task events <id> [--config <file>]
@@ -125,6 +125,7 @@ async function main() {
       const priority = Number(priorityText);
       if (!Number.isFinite(priority)) throw new Error('--priority must be a finite number');
       const critical = flag(rest, '--critical');
+      const accessMode = flag(rest, '--read-only') ? 'read_only' : 'write';
       const protectedPaths: string[] = [];
       for (let path = option(rest, '--handoff-protect'); path !== undefined; path = option(rest, '--handoff-protect')) {
         protectedPaths.push(path);
@@ -141,6 +142,7 @@ async function main() {
         workspacePath,
         priority,
         critical,
+        accessMode,
         handoff,
       });
       console.log(JSON.stringify(task, null, 2));

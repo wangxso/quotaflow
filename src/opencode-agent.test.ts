@@ -28,6 +28,7 @@ const task: Task = {
   status: 'running',
   priority: 0,
   critical: false,
+  accessMode: 'write',
   checkpoint: null,
   nextWakeAt: null,
   createdAt: 1,
@@ -146,6 +147,7 @@ test('runs OpenCode with isolated Magpie config and parses JSON events', async (
     const output = [
       'diagnostic line',
       JSON.stringify({ type: 'step_start', sessionID: 'session-1' }),
+      JSON.stringify({ type: 'text', sessionID: 'session-1', part: { type: 'text', text: 'No blocking findings' } }),
       JSON.stringify({
         type: 'step_finish',
         sessionID: 'session-1',
@@ -185,6 +187,7 @@ test('runs OpenCode with isolated Magpie config and parses JSON events', async (
       tests: 'not_run',
       activeProcesses: 0,
       actualModel: 'hy4-flash-free',
+      output: 'No blocking findings',
       usage: {
         status: 'recorded',
         sessionId: 'session-1',
@@ -229,6 +232,19 @@ test('runs OpenCode with isolated Magpie config and parses JSON events', async (
             apiKey: 'magpie',
           },
         },
+      },
+    });
+
+    await agent.run({
+      ...context(root),
+      task: { ...task, accessMode: 'read_only' },
+    });
+    const reviewConfig = JSON.parse(readFileSync(String(environment.OPENCODE_CONFIG), 'utf8'));
+    expect(reviewConfig).toMatchObject({
+      permission: {
+        edit: 'deny',
+        bash: 'deny',
+        external_directory: 'deny',
       },
     });
   } finally {

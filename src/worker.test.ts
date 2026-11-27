@@ -572,6 +572,144 @@ test('worker blocks a task and releases its budget lease when no adapter is regi
   }
 });
 
+test('worker blocks read-only tasks when the adapter cannot enforce read-only access', async () => {
+  const { root, repo, db, store, config } = setup();
+  try {
+    store.createTask({
+      id: 'read-only-unsupported',
+      title: 'review task',
+      repoPath: repo,
+      workspacePath: join(root, 'read-only-unsupported'),
+      accessMode: 'read_only',
+    });
+    let invoked = false;
+    const result = await runOnce(store, config, () => ({
+      id: 'write-only-fixture',
+      async run() {
+        invoked = true;
+        return { status: 'completed', reason: 'fixture', tests: 'not_run' };
+      },
+    }));
+    expect(invoked).toBe(false);
+    expect(result).toMatchObject({
+      task: { status: 'blocked' },
+      agentStatus: 'failed',
+      error: 'Agent adapter write-only-fixture does not support read-only tasks',
+    });
+    expect(store.events('read-only-unsupported')).toContainEqual(expect.objectContaining({
+      kind: 'attempt_finished',
+      detail: expect.objectContaining({ reason: 'read_only_adapter_unsupported' }),
+    }));
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('worker refuses and does not checkpoint modifications from a read-only task', async () => {
+  const { root, repo, db, store, config } = setup();
+  try {
+    const initialCheckpoint = worktreeGit(repo, ['rev-parse', 'HEAD']);
+    store.createTask({
+      id: 'read-only-violation',
+      title: 'review task',
+      repoPath: repo,
+      workspacePath: join(root, 'read-only-violation'),
+      accessMode: 'read_only',
+      initialCheckpoint,
+    });
+    const result = await runOnce(store, config, () => ({
+      id: 'read-only-fixture',
+      supportsReadOnly: true,
+      async run({ workspacePath }) {
+        writeFileSync(join(workspacePath, 'app.txt'), 'unexpected write\n');
+        return {
+          status: 'completed',
+          reason: 'fixture',
+          tests: 'not_run',
+          output: 'No blocking findings',
+        };
+      },
+    }));
+    expect(result).toMatchObject({
+      task: { status: 'blocked', checkpoint: initialCheckpoint },
+      agentStatus: 'failed',
+      checkpoint: initialCheckpoint,
+      output: 'No blocking findings',
+    });
+    expect(result?.error).toContain('Read-only workspace was modified');
+    expect(store.events('read-only-violation')).toContainEqual(expect.objectContaining({
+      kind: 'attempt_finished',
+      detail: expect.objectContaining({
+        agentOutput: 'No blocking findings',
+        checkpointRejected: 'read_only_workspace_modified',
+      }),
+    }));
+    expect(readFileSync(join(root, 'read-only-violation', 'app.txt'), 'utf8')).toBe('unexpected write\n');
+
+    store.retry('read-only-violation');
+    let reinvoked = false;
+    const retried = await runOnce(store, config, () => ({
+      id: 'read-only-fixture',
+      supportsReadOnly: true,
+      async run() {
+        reinvoked = true;
+        return { status: 'completed', reason: 'should_not_run', tests: 'not_run' };
+      },
+    }));
+    expect(reinvoked).toBe(false);
+    expect(retried).toMatchObject({
+      task: { status: 'blocked', checkpoint: initialCheckpoint },
+      agentStatus: 'failed',
+    });
+    expect(retried?.error).toContain('Read-only workspace was modified');
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('worker completes a clean read-only task and persists its report without a new checkpoint', async () => {
+  const { root, repo, db, store, config } = setup();
+  try {
+    const initialCheckpoint = worktreeGit(repo, ['rev-parse', 'HEAD']);
+    store.createTask({
+      id: 'read-only-review',
+      title: 'review task',
+      repoPath: repo,
+      workspacePath: join(root, 'read-only-review'),
+      accessMode: 'read_only',
+      initialCheckpoint,
+    });
+    const result = await runOnce(store, config, () => ({
+      id: 'read-only-fixture',
+      supportsReadOnly: true,
+      async run() {
+        return {
+          status: 'completed',
+          reason: 'review_completed',
+          tests: 'not_run',
+          output: 'No blocking findings',
+        };
+      },
+    }));
+    expect(result).toMatchObject({
+      task: { status: 'completed', checkpoint: initialCheckpoint },
+      agentStatus: 'completed',
+      checkpoint: initialCheckpoint,
+      output: 'No blocking findings',
+    });
+    expect(store.events('read-only-review')).toContainEqual(expect.objectContaining({
+      kind: 'attempt_finished',
+      detail: expect.objectContaining({ agentOutput: 'No blocking findings' }),
+    }));
+    expect(worktreeGit(repo, ['status', '--short'])).toBe('');
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('worker prepares a new worktree when a checkpoint exists', async () => {
   const { root, repo, db, store, config } = setup();
   try {

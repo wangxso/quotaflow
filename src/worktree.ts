@@ -45,6 +45,24 @@ export function currentCommit(repoPath: string): string | null {
   return gitOrNull(resolve(repoPath), ['rev-parse', 'HEAD']);
 }
 
+export class ReadOnlyWorkspaceViolationError extends Error {}
+
+export function verifyReadOnlyWorkspace(repoPath: string, expectedCommit: string | null): void {
+  const workspace = resolve(repoPath);
+  const head = currentCommit(workspace);
+  if (expectedCommit && head !== expectedCommit) {
+    throw new ReadOnlyWorkspaceViolationError(
+      `Read-only workspace HEAD changed from ${expectedCommit} to ${head ?? 'unknown'}`,
+    );
+  }
+  const changed = git(workspace, ['status', '--porcelain', '-z']).split('\0').filter(Boolean);
+  if (changed.length > 0) {
+    throw new ReadOnlyWorkspaceViolationError(
+      `Read-only workspace was modified: ${changed.slice(0, 20).join(', ')}`,
+    );
+  }
+}
+
 export function ensureWorktree(repoPath: string, workspacePath: string, base = 'HEAD'): string {
   const repo = resolve(repoPath);
   const workspace = resolve(workspacePath);

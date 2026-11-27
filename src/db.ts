@@ -91,6 +91,7 @@ const schema = `
     status TEXT NOT NULL,
     priority INTEGER NOT NULL,
     critical INTEGER NOT NULL,
+    access_mode TEXT NOT NULL DEFAULT 'write',
     handoff_config TEXT,
     checkpoint TEXT,
     next_wake_at INTEGER,
@@ -165,12 +166,12 @@ export function openDatabase(file: string): Database {
   `);
   const version = db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version ?? 0;
   try {
-    if (version > 8) throw new Error(`Unsupported QuotaFlow database version ${version}`);
-    if (version < 8) {
+    if (version > 9) throw new Error(`Unsupported QuotaFlow database version ${version}`);
+    if (version < 9) {
       migrate(db, () => {
         const current = db.query<{ user_version: number }, []>('PRAGMA user_version').get()!.user_version;
-        if (current > 8) throw new Error(`Unsupported QuotaFlow database version ${current}`);
-        if (current === 8) return;
+        if (current > 9) throw new Error(`Unsupported QuotaFlow database version ${current}`);
+        if (current === 9) return;
         if (current < 1) {
           db.exec(schema);
         } else {
@@ -184,8 +185,9 @@ export function openDatabase(file: string): Database {
           }
           if (current >= 5 && current < 7) db.run('ALTER TABLE budget_leases ADD COLUMN expired_at INTEGER');
           if (current < 8) db.exec(githubSchema);
+          if (current < 9) db.run("ALTER TABLE tasks ADD COLUMN access_mode TEXT NOT NULL DEFAULT 'write'");
         }
-        db.run('PRAGMA user_version = 8');
+        db.run('PRAGMA user_version = 9');
       });
     }
     return db;

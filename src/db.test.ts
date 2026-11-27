@@ -82,13 +82,13 @@ function createLegacyDatabase(version: 1 | 2 | 3 | 4 | 5 | 6 | 7): { root: strin
 }
 
 for (const version of [1, 2, 3, 4, 5, 6, 7] as const) {
-  test(`migrates schema v${version} to v8 without losing task data`, () => {
+  test(`migrates schema v${version} to v9 without losing task data`, () => {
     const { root, file } = createLegacyDatabase(version);
     const db = openDatabase(file);
     try {
-      expect(db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version).toBe(8);
-      expect(db.query("SELECT prompt, handoff_config FROM tasks WHERE id = 'legacy'").get())
-        .toEqual({ prompt: version === 1 ? '' : 'kept prompt', handoff_config: null });
+      expect(db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version).toBe(9);
+      expect(db.query("SELECT prompt, access_mode, handoff_config FROM tasks WHERE id = 'legacy'").get())
+        .toEqual({ prompt: version === 1 ? '' : 'kept prompt', access_mode: 'write', handoff_config: null });
       expect(db.query("SELECT actual_model, handoff_note FROM attempts WHERE task_id = 'legacy'").get())
         .toEqual({ actual_model: null, handoff_note: null });
       expect(db.query<{ name: string }, []>(
@@ -111,3 +111,41 @@ for (const version of [1, 2, 3, 4, 5, 6, 7] as const) {
     }
   });
 }
+
+test('migrates schema v8 to v9 and defaults existing tasks to writable', () => {
+  const root = mkdtempSync(join(tmpdir(), 'quotaflow-db-v8-'));
+  const file = join(root, 'state.sqlite');
+  const legacy = new Database(file);
+  legacy.exec(`
+    CREATE TABLE tasks (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      prompt TEXT NOT NULL DEFAULT '',
+      repo_path TEXT NOT NULL,
+      workspace_path TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL,
+      priority INTEGER NOT NULL,
+      critical INTEGER NOT NULL,
+      handoff_config TEXT,
+      checkpoint TEXT,
+      next_wake_at INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    INSERT INTO tasks
+      (id, title, prompt, repo_path, workspace_path, status, priority, critical, created_at, updated_at)
+    VALUES ('v8', 'v8 task', 'keep me', 'repo', 'workspace', 'queued', 0, 0, 1, 1);
+    PRAGMA user_version = 8;
+  `);
+  legacy.close();
+
+  const db = openDatabase(file);
+  try {
+    expect(db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version).toBe(9);
+    expect(db.query("SELECT prompt, access_mode FROM tasks WHERE id = 'v8'").get())
+      .toEqual({ prompt: 'keep me', access_mode: 'write' });
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

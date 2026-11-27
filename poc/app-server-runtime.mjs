@@ -19,11 +19,12 @@ function removeProbe(target) {
   unlinkSync(target);
 }
 
-export async function probeAppServerRuntime(server, workspace) {
+export async function probeAppServerRuntime(server, workspace, options = {}) {
   const windows = process.platform === 'win32';
   const shell = windows ? findPowerShell() : '/bin/sh';
   const root = realpathSync(workspace);
-  const target = join(root, `.quotaflow-runtime-${process.pid}-${Date.now()}.tmp`);
+  const readOnly = options.readOnly === true;
+  const target = readOnly ? null : join(root, `.quotaflow-runtime-${process.pid}-${Date.now()}.tmp`);
   const result = {
     inferenceCalls: 0,
     shell,
@@ -32,11 +33,18 @@ export async function probeAppServerRuntime(server, workspace) {
   };
 
   try {
-    removeProbe(target);
+    if (target) removeProbe(target);
     let command;
     if (windows) {
       const readiness = await server.call('windowsSandbox/readiness', {}, 10_000);
       result.windowsSandbox = readiness.value?.status ?? readiness.code ?? 'unknown';
+    }
+    if (readOnly && windows) {
+      command = [shell, '-NoProfile', '-NonInteractive', '-Command',
+        `if (Test-Path -LiteralPath ${quotePowerShell(root)} -PathType Container) { exit 0 } else { exit 9 }`];
+    } else if (readOnly) {
+      command = [shell, '-c', 'test -d "$1"', 'quotaflow-preflight', root];
+    } else if (windows) {
       const script = `[IO.File]::WriteAllText(${quotePowerShell(target)}, '41'); `
         + `if ((Get-Content -Raw -LiteralPath ${quotePowerShell(target)}).Trim() -ne '41') { exit 9 }`;
       command = [shell, '-NoProfile', '-NonInteractive', '-Command', script];
@@ -47,13 +55,15 @@ export async function probeAppServerRuntime(server, workspace) {
     const execution = await server.call('command/exec', {
       command,
       cwd: root,
-      sandboxPolicy: {
-        type: 'workspaceWrite',
-        writableRoots: [root],
-        networkAccess: false,
-        excludeTmpdirEnvVar: true,
-        excludeSlashTmp: true,
-      },
+      sandboxPolicy: readOnly
+        ? { type: 'readOnly', networkAccess: false }
+        : {
+          type: 'workspaceWrite',
+          writableRoots: [root],
+          networkAccess: false,
+          excludeTmpdirEnvVar: true,
+          excludeSlashTmp: true,
+        },
       timeoutMs: 15_000,
     }, 20_000);
 
@@ -63,13 +73,15 @@ export async function probeAppServerRuntime(server, workspace) {
         exitCode: execution.value.exitCode,
         stdout: String(execution.value.stdout ?? '').slice(-1_000),
         stderr: String(execution.value.stderr ?? '').slice(-1_000),
-        fileWritten: existsSync(target) && readFileSync(target, 'utf8').trim() === '41',
+        ...(readOnly
+          ? { workspaceRead: execution.value.exitCode === 0, fileWritten: false }
+          : { fileWritten: Boolean(target) && existsSync(target) && readFileSync(target, 'utf8').trim() === '41' }),
       };
     } else {
       result.commandExec = { status: 'error', code: execution.code ?? 'unknown' };
     }
     return result;
   } finally {
-    removeProbe(target);
+    if (target) removeProbe(target);
   }
 }

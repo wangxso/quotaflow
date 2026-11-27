@@ -19,7 +19,7 @@ QuotaFlow 已在 `wangxso/mcarplay` Issue #82 上创建独立 Worktree，由 Cod
 
 `github gate` 还会输出下一步动作计划。动作按当前阻断阶段排序，避免同时派出多个写任务。CI 失败和 `CHANGES_REQUESTED` 会合并成一个 Review–Fix 任务提示，修复完成后再次运行门禁才会生成独立审查动作。Draft、冲突、HEAD／base 变化和最终合并保留为人工动作。计划包含稳定的 `actionKey`、优先级、原因和可直接交给 Agent 的任务提示。
 
-`--materialize <repo>` 只会为 `independent_review`、`review_fix` 或 `ci_fix` 创建任务。任务 ID 由 `actionKey` 稳定派生，因此 Webhook 重放或重复执行门禁不会创建重复任务。任务初始检查点固定为 PR HEAD，仓库中必须已经存在当前 base／head 提交，否则命令会在写库前失败。执行沿用 QuotaFlow 的每任务最多 3 次尝试和配置预算，任务提示禁止 Agent push、评论、批准、合并或修改仓库权限。Draft、冲突、刷新证据和人工合并只作为 `human_required` 返回，不会派发。PR #141 已在隔离数据库中完成只物化不执行的试点，重复事件仍只有一个排队任务。 [物化证据](evidence/phase2-github-materialization-2026-11-28.json)
+`--materialize <repo>` 只会为 `independent_review`、`review_fix` 或 `ci_fix` 创建任务。任务 ID 由 `actionKey` 稳定派生，因此 Webhook 重放或重复执行门禁不会创建重复任务。任务初始检查点固定为 PR HEAD，仓库中必须已经存在当前 base／head 提交，否则命令会在写库前失败。执行沿用 QuotaFlow 的每任务最多 3 次尝试和配置预算，任务提示禁止 Agent push、评论、批准、合并或修改仓库权限。`independent_review` 使用 SQLite v9 的任务级只读模式，Agent 不能写入 worktree，其他 Adapter 如果无法保证只读会被 Worker 拒绝，完成后还会再次校验 HEAD 和工作树。Draft、冲突、刷新证据和人工合并只作为 `human_required` 返回，不会派发。 [物化与执行证据](evidence/phase2-github-materialization-2026-11-28.json)
 
 检查快照时使用：
 
@@ -57,9 +57,9 @@ bun run src/cli.ts github gate pr.json \
 
 ## 幂等与审计
 
-SQLite v8 新增 `github_deliveries` 和 `github_gate_results`。同一 GitHub delivery 重放只返回原结果，不会重复处理。相同事件内容即使换用另一个 delivery ID，也通过逻辑事件键去重。同一 delivery ID 携带不同内容会被拒绝。Gate 结果按仓库、PR、HEAD SHA 和策略哈希保存，变更 HEAD 会生成独立记录。
+SQLite v8 新增 `github_deliveries` 和 `github_gate_results`，v9 为任务增加 `access_mode`。同一 GitHub delivery 重放只返回原结果，不会重复处理。相同事件内容即使换用另一个 delivery ID，也通过逻辑事件键去重。同一 delivery ID 携带不同内容会被拒绝。Gate 结果按仓库、PR、HEAD SHA 和策略哈希保存，变更 HEAD 会生成独立记录。
 
-实时快照验证中，PR #141 的三项当前 HEAD 检查均成功，但门禁因 `draft` 和 `independent_review_missing` 保持阻断。重复投递保持相同 `updatedAt`，已验证 delivery 与逻辑事件两层幂等。 [门禁证据](evidence/phase2-github-gate-2026-11-27.json)
+实时快照验证中，PR #141 的三项当前 HEAD 检查均成功，但门禁因 `draft` 和 `independent_review_missing` 保持阻断。重复投递保持相同 `updatedAt`，已验证 delivery 与逻辑事件两层幂等。2026-11-28 使用 `opencode-go/hy4-flash-free` 对同一 HEAD 完成 QuotaFlow 内部只读审查，报告为 `P1×0, P2×0, P3×0`；源仓库与审查 worktree 均保持干净。该结果尚未作为 GitHub 正式 Review 发布，官方批准数仍为 0。 [门禁证据](evidence/phase2-github-gate-2026-11-27.json)
 
 ## Signed Webhook 入口
 
@@ -88,7 +88,7 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
 
 - GitHub App 或最小权限凭据、公网 TLS 回调部署、反向代理和自动拉取 PR 快照。
 - 自动抓取 PR HEAD／base 并在物化前校验本地提交可用性。
-- 执行物化后的独立审查或修复任务，并用新 HEAD 重新运行门禁。
+- 获取并核验 GitHub 上的正式独立批准；内部审查不能替代该批准。
 - Check-run 日志抓取、失败分类细节和同 SHA 复跑绑定。
 - 写入应答丢失、重复 Webhook、越权请求和凭据轮换演练。
 - Draft 转 Ready、人工批准与合并操作。当前所有合并保持人工执行。
@@ -96,6 +96,6 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
 ## 下一里程碑
 
 1. 接入 GitHub App 凭据，并将本地监听器部署到受控公网反向代理。
-2. 运行物化后的独立审查或修复任务，以新 HEAD 重新评估门禁。
-3. 在 PR #141 获得独立审查后重新评估门禁，保持人工合并。
+2. 在 PR #141 获得正式独立 GitHub Review 后重新评估门禁，保持人工合并。
+3. 对后续 Review–Fix／CI 修复任务重复执行、复跑和门禁闭环。
 4. Phase 2 核心验收完成后进入 Phase 3 Dashboard 与部署。

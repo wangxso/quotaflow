@@ -97,6 +97,7 @@ test('materializes one head-bound agent task and leaves human actions untouched'
         status: 'queued',
         checkpoint: headSha,
         priority: 120,
+        accessMode: 'write',
         handoff: { protectedPaths: [] },
       },
     });

@@ -18,11 +18,13 @@ export interface AgentResult {
   retryAfterMs?: number;
   activeProcesses?: number;
   actualModel?: string;
+  output?: string;
   usage?: UsageReport;
 }
 
 export interface AgentAdapter {
   id: string;
+  readonly supportsReadOnly?: boolean;
   maxPromptLength?: number;
   run(context: AgentContext): Promise<AgentResult>;
 }

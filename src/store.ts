@@ -13,6 +13,7 @@ import type {
   LaneFilter,
   Reservation,
   Task,
+  TaskAccessMode,
   TaskStatus,
   UsageReport,
 } from './domain';
@@ -40,6 +41,7 @@ export interface CreateTaskInput {
   workspacePath: string;
   priority?: number;
   critical?: boolean;
+  accessMode?: TaskAccessMode;
   handoff?: HandoffOptions;
   initialCheckpoint?: string | null;
   eventDetail?: Record<string, unknown>;
@@ -59,6 +61,7 @@ interface PreparedTaskInput {
   workspacePath: string;
   priority: number;
   critical: number;
+  accessMode: TaskAccessMode;
   handoff: HandoffOptions | null;
   initialCheckpoint: string | null;
   eventDetail?: Record<string, unknown>;
@@ -74,6 +77,7 @@ type TaskRow = {
   status: TaskStatus;
   priority: number;
   critical: number;
+  access_mode: TaskAccessMode;
   handoff_config: string | null;
   checkpoint: string | null;
   next_wake_at: number | null;
@@ -181,6 +185,7 @@ function taskFrom(row: TaskRow): Task {
     status: row.status,
     priority: row.priority,
     critical: row.critical === 1,
+    accessMode: row.access_mode,
     ...(row.handoff_config ? { handoff: parseHandoffOptions(JSON.parse(row.handoff_config)) } : {}),
     checkpoint: row.checkpoint,
     nextWakeAt: row.next_wake_at,
@@ -334,7 +339,14 @@ export class TaskStore {
     const prompt = input.prompt ?? input.title;
     const priority = input.priority ?? 0;
     if (!Number.isFinite(priority)) throw new Error('Task priority must be finite');
+    const accessMode = input.accessMode ?? 'write';
+    if (accessMode !== 'write' && accessMode !== 'read_only') {
+      throw new Error(`Unknown task access mode ${accessMode}`);
+    }
     const handoff = input.handoff ? parseHandoffOptions(input.handoff) : null;
+    if (accessMode === 'read_only' && handoff) {
+      throw new Error('Read-only tasks cannot use handoff drafts');
+    }
     const prepared: PreparedTaskInput = {
       id,
       title: input.title,
@@ -343,6 +355,7 @@ export class TaskStore {
       workspacePath: input.workspacePath,
       priority,
       critical: Number(input.critical ?? false),
+      accessMode,
       handoff,
       initialCheckpoint: input.initialCheckpoint?.trim() || null,
       ...(input.eventDetail ? { eventDetail: input.eventDetail } : {}),
@@ -354,21 +367,26 @@ export class TaskStore {
         if (existing.repoPath !== input.repoPath || existing.workspacePath !== input.workspacePath) {
           throw new Error(`Task ${id} already exists with a different repository or workspace`);
         }
+        if (existing.accessMode !== prepared.accessMode) {
+          throw new Error(`Task ${id} already exists with access mode ${existing.accessMode}`);
+        }
         return { task: existing, created: false };
       }
       this.db.run(
         `INSERT INTO tasks
-          (id, title, prompt, repo_path, workspace_path, status, priority, critical, handoff_config,
-            checkpoint, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?)`,
+          (id, title, prompt, repo_path, workspace_path, status, priority, critical, access_mode,
+            handoff_config, checkpoint, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?)`,
         [prepared.id, prepared.title, prepared.prompt, prepared.repoPath, prepared.workspacePath,
-          prepared.priority, prepared.critical, prepared.handoff ? JSON.stringify(prepared.handoff) : null,
-          prepared.initialCheckpoint, prepared.now, prepared.now],
+          prepared.priority, prepared.critical, prepared.accessMode,
+          prepared.handoff ? JSON.stringify(prepared.handoff) : null, prepared.initialCheckpoint,
+          prepared.now, prepared.now],
       );
       this.#event(prepared.id, null, 'task_created', {
         ...prepared.eventDetail,
         priority,
         critical: Boolean(prepared.critical),
+        accessMode: prepared.accessMode,
         ...(prepared.handoff ? { handoff: prepared.handoff } : {}),
         ...(prepared.initialCheckpoint ? { initialCheckpoint: prepared.initialCheckpoint } : {}),
         now,

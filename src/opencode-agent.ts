@@ -12,10 +12,12 @@ import {
 
 type OpenCodeEvent = {
   type?: string;
+  text?: string;
   model?: string;
   sessionID?: string;
   part?: {
     type?: string;
+    text?: string;
     reason?: string;
     model?: string;
     tokens?: unknown;
@@ -86,8 +88,22 @@ function isQuotaFailure(log: string): boolean {
   return /\b(429|quota|rate[-\s]?limit|usage limit|insufficient (?:credit|balance)|capacity)\b/i.test(log);
 }
 
+function outputText(events: OpenCodeEvent[]): string | undefined {
+  const parts: string[] = [];
+  for (const event of events) {
+    if (event.part?.type === 'text' && typeof event.part.text === 'string') {
+      parts.push(event.part.text);
+    } else if (event.type === 'text' && typeof event.text === 'string') {
+      parts.push(event.text);
+    }
+  }
+  const output = parts.join('\n').trim().slice(0, 50_000);
+  return output || undefined;
+}
+
 export class OpenCodeAgent implements AgentAdapter {
   readonly id: string;
+  readonly supportsReadOnly = true;
   readonly maxPromptLength = 24_000;
   readonly #lane: LaneConfig;
   readonly #runner: OpenCodeRunner;
@@ -107,6 +123,7 @@ export class OpenCodeAgent implements AgentAdapter {
   async run(context: AgentContext): Promise<AgentResult> {
     const baseUrl = this.#lane.baseUrl;
     if (!baseUrl) throw new Error(`OpenCode lane ${this.#lane.id} requires baseUrl`);
+    const readOnly = context.task.accessMode === 'read_only';
     const prompt = context.handoff?.prompt ?? context.task.prompt;
     if (prompt.length > this.maxPromptLength) {
       throw new Error('Task prompt exceeds the OpenCode Windows command-line limit');
@@ -135,13 +152,13 @@ export class OpenCodeAgent implements AgentAdapter {
       permission: {
         '*': 'deny',
         read: 'allow',
-        edit: 'allow',
+        edit: readOnly ? 'deny' : 'allow',
         glob: 'allow',
         grep: 'allow',
         list: 'allow',
-        bash: 'allow',
+        bash: readOnly ? 'deny' : 'allow',
         task: 'deny',
-        external_directory: context.handoff
+        external_directory: !readOnly && context.handoff
           ? { '*': 'deny', [join(context.handoff.directory, '*')]: 'allow' }
           : 'deny',
         webfetch: 'deny',
@@ -281,12 +298,14 @@ export class OpenCodeAgent implements AgentAdapter {
       }
     }
     const actualModel = usageActualModel(usage);
+    const output = outputText(events);
     return {
       status: 'completed',
       reason: 'opencode_run_completed',
       tests: 'not_run',
       activeProcesses: stop.activeProcesses,
       ...(actualModel ? { actualModel } : {}),
+      ...(output ? { output } : {}),
       usage,
     };
   }

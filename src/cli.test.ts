@@ -63,6 +63,15 @@ test('adds and lists a task through the CLI', async () => {
     const listed = await cli(root, ['task', 'list']);
     expect(listed.stdout).toContain(task.id);
     expect(listed.stdout).toContain('queued');
+    const review = JSON.parse((await cli(root, [
+      'task', 'add', 'CLI read-only review', '--repo', root, '--read-only',
+    ])).stdout);
+    expect(review).toMatchObject({ status: 'queued', accessMode: 'read_only' });
+    const incompatible = await cliResult(root, [
+      'task', 'add', 'Invalid review', '--repo', root, '--read-only', '--handoff',
+    ]);
+    expect(incompatible.exitCode).toBe(1);
+    expect(incompatible.stderr).toContain('Read-only tasks cannot use handoff drafts');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -234,11 +243,12 @@ test('materializes a GitHub review action once at the exact pull head', async ()
         actions: [{
           kind: 'independent_review',
           outcome: 'task_created',
-          task: { status: 'queued', checkpoint: headSha },
+          task: { status: 'queued', checkpoint: headSha, accessMode: 'read_only' },
           attempts: { used: 0, limit: 3 },
         }],
       },
     });
+    expect(first.materialization.actions[0].task.handoff).toBeUndefined();
     const taskId = first.materialization.actions[0].taskId as string;
     const repeated = JSON.parse((await cli(root, args)).stdout);
     expect(repeated).toMatchObject({

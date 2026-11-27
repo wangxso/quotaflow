@@ -30,7 +30,14 @@ import {
   writeAttemptOwner,
 } from './recovery';
 import { hasSupervisorEvidence, verifySupervisedStop } from './supervisor';
-import { checkpoint, ensureWorktree, ProtectedPathsChangedError, verifyProtectedPaths } from './worktree';
+import {
+  checkpoint,
+  ensureWorktree,
+  ProtectedPathsChangedError,
+  ReadOnlyWorkspaceViolationError,
+  verifyProtectedPaths,
+  verifyReadOnlyWorkspace,
+} from './worktree';
 
 export interface WorkerResult {
   task: Task;
@@ -41,6 +48,7 @@ export interface WorkerResult {
   usageStatus: UsageStatus | null;
   usage: AttemptUsageRecord[];
   checkpoint: string | null;
+  output?: string;
   error?: string;
 }
 
@@ -102,6 +110,30 @@ export async function runOnce(
       error: `No agent adapter for lane ${lane.id}`,
     };
   }
+  if (task.accessMode === 'read_only' && !agent.supportsReadOnly) {
+    const settledAt = finishedAt();
+    store.releaseBudgetLease(attempt.id, 'read_only_adapter_unsupported', settledAt);
+    store.beginCheckpoint(attempt.id, 'read_only_adapter_unsupported', 0, settledAt);
+    const settled = store.settle(
+      attempt.id,
+      task.checkpoint ?? '',
+      'blocked',
+      'read_only_adapter_unsupported',
+      1000,
+      settledAt,
+    );
+    return {
+      task: settled,
+      attempt: store.getAttempt(attempt.id),
+      agent: agent.id,
+      agentStatus: 'failed',
+      actualModel: null,
+      usageStatus: null,
+      usage: [],
+      checkpoint: task.checkpoint,
+      error: `Agent adapter ${agent.id} does not support read-only tasks`,
+    };
+  }
 
   const cancellation = new AbortController();
   const observeCancellation = () => {
@@ -122,6 +154,9 @@ export async function runOnce(
 
     try {
       ensureWorktree(task.repoPath, task.workspacePath, task.checkpoint ?? 'HEAD');
+      if (task.accessMode === 'read_only') {
+        verifyReadOnlyWorkspace(task.workspacePath, task.checkpoint);
+      }
       if (task.handoff) {
         assertSeparateAttemptDirectory(task.workspacePath, statusDir);
         if (protection) verifyProtectedPaths(task.workspacePath, config.worktreeRoot, protection);
@@ -141,6 +176,9 @@ export async function runOnce(
       });
       if ((result.activeProcesses ?? 0) !== 0) {
         throw new ProcessStopUnverifiedError('Agent left active processes after returning');
+      }
+      if (task.accessMode === 'read_only') {
+        verifyReadOnlyWorkspace(task.workspacePath, task.checkpoint);
       }
       verifiedStop = result.activeProcesses === 0;
     } catch (error) {
@@ -170,9 +208,12 @@ export async function runOnce(
       };
     }
 
+    const readOnlyViolation = failure?.error instanceof ReadOnlyWorkspaceViolationError;
     let checkpointSha = task.checkpoint ?? '';
     let published = false;
-    const maySnapshot = !failure || (existsSync(task.workspacePath) && (!task.handoff || started));
+    const maySnapshot = task.accessMode !== 'read_only'
+      && !readOnlyViolation
+      && (!failure || (existsSync(task.workspacePath) && (!task.handoff || started)));
     if (maySnapshot) {
       try {
         checkpointSha = checkpoint(task.workspacePath, config.worktreeRoot, task.id, attempt.id, protection);
@@ -186,7 +227,8 @@ export async function runOnce(
     const cancelled = cancellation.signal.aborted || store.cancelRequested(task.id, attempt.id);
     const error = failure?.error;
     const protectedPaths = error instanceof ProtectedPathsChangedError ? error.paths : null;
-    const rejection = protectedPaths ? 'handoff_protected_paths_changed'
+    const rejection = readOnlyViolation ? 'read_only_workspace_modified'
+      : protectedPaths ? 'handoff_protected_paths_changed'
       : error instanceof HandoffSetupError ? 'handoff_setup_failed' : null;
     if (task.handoff && !started && failure) store.releaseBudgetLease(attempt.id, rejection ?? 'worker_error', settledAt);
     const reason = cancelled ? 'cancelled_by_operator' : rejection ?? (failure ? 'worker_error' : result?.reason ?? 'worker_error');
@@ -209,7 +251,10 @@ export async function runOnce(
       {
         preserveCheckpoint: Boolean(rejection),
         handoff: savedHandoff,
-        ...(rejection ? { detail: { checkpointRejected: rejection, ...(protectedPaths ? { protectedPaths } : {}) } } : {}),
+        detail: {
+          ...(result?.output ? { agentOutput: result.output } : {}),
+          ...(rejection ? { checkpointRejected: rejection, ...(protectedPaths ? { protectedPaths } : {}) } : {}),
+        },
       },
     );
     const settledAttempt = store.getAttempt(attempt.id);
@@ -222,6 +267,7 @@ export async function runOnce(
       usageStatus: usage?.status ?? null,
       usage: store.usage(attempt.id),
       checkpoint: settled.checkpoint,
+      ...(result?.output ? { output: result.output } : {}),
       ...(failure ? { error: errorMessage(failure.error) } : {}),
     };
   } finally {

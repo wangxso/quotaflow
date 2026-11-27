@@ -59,3 +59,27 @@ test('runtime probe reports a failed command without leaving a fixture', async (
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('read-only runtime probe checks workspace access without writing', async () => {
+  const root = workspace();
+  try {
+    const server = {
+      async call(method: string, params: any) {
+        expect(method).toBe('command/exec');
+        expect(params.cwd).toBe(realpathSync(root));
+        expect(params.sandboxPolicy).toEqual({ type: 'readOnly', networkAccess: false });
+        return { value: { exitCode: 0, stdout: '', stderr: '' } };
+      },
+    };
+    const result = await probeAppServerRuntime(server, root, { readOnly: true });
+    expect(result.commandExec).toMatchObject({
+      status: 'completed',
+      exitCode: 0,
+      fileWritten: false,
+      workspaceRead: true,
+    });
+    expect(readdirSync(root)).toEqual([]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -133,7 +133,8 @@ export function materializeGitHubActions(
       repoPath,
       workspacePath,
       priority: action.priority,
-      handoff: { protectedPaths: [] },
+      accessMode: action.kind === 'independent_review' ? 'read_only' : 'write',
+      ...(action.kind === 'independent_review' ? {} : { handoff: { protectedPaths: [] } }),
       initialCheckpoint: plan.headSha,
       eventDetail: {
         source: 'github_action_plan',

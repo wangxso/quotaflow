@@ -66,9 +66,9 @@
     "githubEvaluationTests": 13,
     "reviewFixPlanningTests": 2,
     "githubPersistenceTests": 2,
-    "schemaMigrationTests": "v1 through v7 migrate to v8",
+    "schemaMigrationTests": "v1 through v8 migrate to v9",
     "cliTests": "snapshot parsing, live gate shape, same-delivery retry and logical-event redelivery",
-    "fullSuite": { "macOS": 124, "linux": 124, "windowsOnlySkipped": 1, "failed": 0 }
+    "fullSuite": { "macOS": 131, "linux": 131, "windowsOnlySkipped": 1, "failed": 0 }
   },
   "scope": {
     "automaticMerge": false,

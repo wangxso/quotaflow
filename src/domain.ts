@@ -1,5 +1,6 @@
 export type Provider = 'native' | 'local' | 'magpie';
 export type AgentKind = 'codex' | 'opencode';
+export type TaskAccessMode = 'write' | 'read_only';
 
 export const TASK_STATUSES = [
   'queued',
@@ -120,6 +121,7 @@ export interface Task {
   status: TaskStatus;
   priority: number;
   critical: boolean;
+  accessMode: TaskAccessMode;
   handoff?: HandoffOptions;
   checkpoint: string | null;
   nextWakeAt: number | null;

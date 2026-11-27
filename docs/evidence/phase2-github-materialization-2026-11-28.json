@@ -1,6 +1,6 @@
 {
   "recordedOn": "2026-11-28",
-  "baseRevision": "7b3136cb65e41e60548a7b5ebd80b8f1e3efa806",
+  "baseRevision": "aab586b49f8c66279219ff658900eb89ea300fae",
   "command": "bun run src/cli.ts github gate <snapshot.json> --materialize <repo> --config <file>",
   "policy": {
     "agentActionKinds": [
@@ -16,6 +16,7 @@
     ],
     "taskId": "Stable gh- prefix plus the first 32 hexadecimal characters of actionKey",
     "initialCheckpoint": "Exact pull request head SHA",
+    "independentReviewAccess": "SQLite v9 task-level read_only mode with native agent sandbox and a post-run worktree check",
     "headAndBaseEvidence": "Both commits must exist locally before a task is written",
     "attemptLimit": 3,
     "budgetEnforcement": "Configured QuotaFlow account budgets remain enforced by the scheduler; configurations without a budget report quota_only",
@@ -44,15 +45,44 @@
     "budgetEnforcement": "configured in an isolated temporary database",
     "taskCountAfterRetry": 1,
     "sourceHeadAfterRun": "daf67e87a72aa9033a4d62f88e9a9d05ce047d9e",
-    "agentInvoked": false,
+    "agentInvokedDuringMaterialization": false,
     "sourceFilesModified": false
+  },
+  "livePilotExecution": {
+    "taskId": "gh-00750a889869474904c16542fda57c50",
+    "status": "completed",
+    "accessMode": "read_only",
+    "actualModel": "opencode-go/hy4-flash-free",
+    "findings": {
+      "P1": 0,
+      "P2": 0,
+      "P3": 0
+    },
+    "resultLocation": "attempt_finished.detail.agentOutput",
+    "checkpointBeforeAndAfter": "abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48",
+    "reviewWorktreeHead": "abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48",
+    "reviewWorktreeClean": true,
+    "sourceFilesModified": false,
+    "officialGitHubReviewCount": 0,
+    "budgetLease": {
+      "amount": 0.05,
+      "state": "pending",
+      "priced": false,
+      "providerInvoice": "UNKNOWN"
+    }
   },
   "verification": {
     "materializationTests": 3,
     "cliIntegrationTests": 1,
+    "readOnlyRuntimePreflightTests": 1,
+    "codexReadOnlyTests": 1,
+    "openCodeReadOnlyConfigTests": 1,
+    "workerReadOnlyTests": 3,
+    "accessModeIdempotencyTests": 1,
+    "schemaMigrationTests": "v1 through v8 migrate to v9",
     "fullSuite": {
-      "macOS": 124,
-      "linux": 124,
+      "macOS": 131,
+      "linux": 131,
       "windowsOnlySkipped": 1,
       "failed": 0
     },
@@ -61,7 +91,7 @@
   },
   "scope": {
     "automaticSnapshotFetch": "not implemented",
-    "liveAgentExecution": "not run; the live pilot stopped after idempotent task materialization",
+    "liveAgentExecution": "completed the internal read-only PR #141 review; no GitHub review, comment, approval, or merge was created",
     "automaticPushOrComment": false,
     "automaticReadyOrMerge": false
   }

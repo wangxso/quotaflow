@@ -542,3 +542,24 @@ test('task IDs are restricted to safe reference characters', () => {
     close(root, db);
   }
 });
+
+test('idempotent task creation rejects a changed access mode', () => {
+  const root = mkdtempSync(join(tmpdir(), 'quotaflow-store-'));
+  const db = openDatabase(':memory:');
+  const store = new TaskStore(db);
+  try {
+    const input = {
+      id: 'stable',
+      title: 'stable task',
+      repoPath: root,
+      workspacePath: join(root, 'stable'),
+      accessMode: 'write' as const,
+    };
+    expect(store.createTaskOnce(input)).toMatchObject({ created: true, task: { accessMode: 'write' } });
+    expect(() => store.createTaskOnce({ ...input, accessMode: 'read_only' }))
+      .toThrow('already exists with access mode write');
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
