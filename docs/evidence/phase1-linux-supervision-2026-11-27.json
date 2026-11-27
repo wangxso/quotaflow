@@ -1,0 +1,71 @@
+{
+  "recordedOn": "2026-11-27",
+  "baseRevision": "64e6fa727bfca77506be760a6b44dd83bfe3936c",
+  "environment": {
+    "os": "Linux 6.12.76-linuxkit aarch64",
+    "containerBase": "oven/bun:1.4.5",
+    "bun": "1.4.5",
+    "git": "2.47.3",
+    "gcc": "14.2.0",
+    "codex": "0.171.0"
+  },
+  "verification": {
+    "fullSuite": { "passed": 95, "failed": 0, "windowsOnlySkipped": 1 },
+    "build": "bun run build",
+    "configurationValidation": "bun dist/cli.js config validate --config quotaflow.config.example.json",
+    "nativeGuard": "gcc -std=c11 -O2 -Wall -Wextra -Werror",
+    "codexSmoke": "docker run --privileged ... bun run poc/codex-app-server-guarded-smoke.ts codex"
+  },
+  "supervisor": {
+    "backend": "linux_subreaper",
+    "containment": [
+      "PR_SET_CHILD_SUBREAPER adopts descendants that lose their original parent",
+      "PR_SET_PDEATHSIG terminates the native guard when the QuotaFlow controller exits",
+      "Procfs parsing tracks PID, parent PID, process group, session, state, and process start time",
+      "The worker starts in a separate session and process group",
+      "SIGKILL is sent to tracked identities and groups, followed by repeated /proc verification and reaping"
+    ],
+    "receipts": [
+      { "scenario": "worker exit with detached two-level descendants", "exitCode": 73, "activeProcesses": 0, "reason": "worker_exit" },
+      { "scenario": "cancellation with detached descendants", "component": "supervisor fixture", "activeProcesses": 0, "reason": "cancelled" },
+      { "scenario": "controller SIGKILL", "component": "Phase 0 and worker restart recovery", "activeProcesses": 0, "reason": "controller_closed" },
+      { "scenario": "command timeout", "activeProcesses": 0, "reason": "controller_closed" }
+    ]
+  },
+  "codexZeroInference": {
+    "containerFlags": ["--privileged"],
+    "reasonForPrivilegedFlag": "Docker Desktop denied Codex bubblewrap user namespaces in the default container profile.",
+    "initialize": "passed",
+    "commandExec": "passed",
+    "fileWrittenAndReadBack": true,
+    "detachedDescendant": "stopped",
+    "inferenceTurnsRequested": 0,
+    "stop": { "activeProcesses": 0, "exitCode": 0, "reason": "worker_exit" }
+  },
+  "customCodexStopContract": {
+    "rule": "CodexServer.close cannot certify its own stop state. The adapter invokes a separate CodexStopVerifier after close.",
+    "defaultVerifier": "Reads and validates stopped.json.",
+    "customFactoryRequirement": "Pass an independent verifier appropriate to the custom process supervisor.",
+    "rejections": [
+      "missing stop receipt",
+      "activeProcesses other than zero",
+      "non-positive supervisor or worker PID",
+      "malformed exit code or missing reason"
+    ],
+    "workerSafety": "A ProcessStopUnverifiedError blocks write transfer and preserves the previous checkpoint."
+  },
+  "codexDefaultVerifierLive": {
+    "platform": "macOS 26.6.2 arm64",
+    "taskId": "codex-verifier-live",
+    "requestedModel": "opencode-go/hy4-flash-free",
+    "finalStatus": "completed",
+    "checkpoint": "1dfc275407de45056d52ea3133ff64ae264cb188",
+    "workspaceResult": { "app.txt": "43\n" },
+    "stop": { "activeProcesses": 0, "exitCode": 0, "reason": "worker_exit" }
+  },
+  "limitations": [
+    "Docker Desktop requires a container profile that permits Codex bubblewrap namespaces for the zero-inference command/exec smoke.",
+    "The Linux supervisor is lifecycle supervision for trusted workloads, not an external security sandbox.",
+    "Codex request-level usage remains unavailable. Avoid conflation with the OpenCode exact-session reconciliation path."
+  ]
+}

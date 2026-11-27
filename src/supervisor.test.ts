@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { launchGuardedAppServer, launchSupervised, verifySupervisedStop } from './supervisor';
 
 const fixture = fileURLToPath(new URL('./fixture-agent.ts', import.meta.url));
-const supervisedTest = test.skipIf(process.platform !== 'win32' && process.platform !== 'darwin');
+const supervisedTest = test.skipIf(process.platform !== 'win32' && process.platform !== 'darwin' && process.platform !== 'linux');
+const nativeDetachedTest = test.skipIf(process.platform !== 'darwin' && process.platform !== 'linux');
 
 async function removeEventually(path: string) {
   for (let attempt = 0; attempt < 40; attempt += 1) {
@@ -142,7 +143,7 @@ supervisedTest('guarded stdio keeps the worker pipe live and publishes a stop re
   }
 }, 20_000);
 
-test.skipIf(process.platform !== 'darwin')('a detached process tree is stopped before a worker-exit receipt', async () => {
+nativeDetachedTest('a detached process tree is stopped before a worker-exit receipt', async () => {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-supervisor-tree-'));
   try {
     const status = join(root, 'attempt');
@@ -160,7 +161,7 @@ test.skipIf(process.platform !== 'darwin')('a detached process tree is stopped b
   }
 }, 20_000);
 
-test.skipIf(process.platform !== 'darwin')('cancellation stops detached descendants in other process groups', async () => {
+nativeDetachedTest('cancellation stops detached descendants in other process groups', async () => {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-supervisor-tree-cancel-'));
   try {
     const status = join(root, 'attempt');

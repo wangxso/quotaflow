@@ -105,7 +105,7 @@ function usageReport(servedModel = 'hy4-flash-free'): UsageReport {
   };
 }
 
-test.skipIf(process.platform !== 'darwin')('uses the macOS supervisor for the default OpenCode runner', async () => {
+test.skipIf(process.platform !== 'darwin' && process.platform !== 'linux')('uses the native supervisor for the default OpenCode runner', async () => {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-opencode-guard-'));
   let childPid: number | undefined;
   try {

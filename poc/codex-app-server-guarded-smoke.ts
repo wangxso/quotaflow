@@ -24,9 +24,9 @@ try {
     if (!initialized.value) throw new Error(`App Server initialize failed (${initialized.code ?? 'unknown'})`);
     const runtime = await probeAppServerRuntime(server, root);
     if (runtime.commandExec.status !== 'completed' || runtime.commandExec.exitCode !== 0 || !runtime.commandExec.fileWritten) {
-      throw new Error('App Server command/exec runtime probe failed');
+      throw new Error(`App Server command/exec runtime probe failed: ${JSON.stringify(runtime.commandExec)}`);
     }
-    if (process.platform === 'darwin') {
+    if (process.platform === 'darwin' || process.platform === 'linux') {
       const execution = await server.call('command/exec', {
         command: ['/bin/sh', '-c', 'sleep 60 & echo $! > "$1"', 'quotaflow-tree-smoke', detachedMarker],
         cwd: root,
@@ -58,7 +58,7 @@ try {
   console.log(JSON.stringify({
     initialized: true,
     commandExec: 'passed',
-    detachedProcessTree: process.platform === 'darwin' ? 'stopped' : 'not_applicable',
+    detachedProcessTree: process.platform === 'darwin' || process.platform === 'linux' ? 'stopped' : 'not_applicable',
     inferenceTurnsRequested: 0,
     stop: {
       activeProcesses: stop.activeProcesses,

@@ -4,11 +4,11 @@
 
 - `src/cli.ts` is the QuotaFlow CLI entry point. `src/config.ts` and `src/domain.ts` define configuration and shared types. `src/db.ts` and `src/store.ts` manage SQLite state.
 - Scheduling, execution, recovery, and Git worktrees live in `src/`, alongside the Codex and OpenCode adapters. Tests sit beside the code as `*.test.ts`.
-- `poc/` contains Phase 0 experiments, fixture workers, and the Windows process guard. See `docs/PHASE-1.md` for current workflows, `docs/adr/` for design decisions, and `docs/evidence/` for recorded verification results.
+- `poc/` contains Phase 0 experiments and fixture workers. Platform process guards live in `src/`. See `docs/PHASE-1.md` for current workflows, `docs/adr/` for design decisions, and `docs/evidence/` for recorded verification results.
 
 ## Build, Test, and Development Commands
 
-Run commands from the repository root with Bun and Git available. The Windows process-guard scenarios also use PowerShell. The macOS scenarios use the C compiler from Xcode or Command Line Tools.
+Run commands from the repository root with Bun and Git available. The Windows process-guard scenarios also use PowerShell. macOS uses the C compiler from Xcode or Command Line Tools. Linux uses a C compiler and libc development headers.
 
 - `bun run start --help` lists CLI commands.
 - `bun run src/cli.ts config validate` validates local configuration. Copy `quotaflow.config.example.json` to `quotaflow.config.json` before configuring a local run.

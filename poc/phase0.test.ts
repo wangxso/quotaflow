@@ -7,7 +7,7 @@ import { createLab, git, restoreNewWorktree, verifyCheckpoint, worktree } from '
 import { drive, fixtureLanes } from './run.ts';
 import { State, type Lane } from './state.ts';
 
-const supervisedTest = test.skipIf(process.platform !== 'win32' && process.platform !== 'darwin');
+const supervisedTest = test.skipIf(process.platform !== 'win32' && process.platform !== 'darwin' && process.platform !== 'linux');
 
 function setup() {
   const lab = createLab();

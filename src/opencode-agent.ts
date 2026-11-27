@@ -38,8 +38,8 @@ const providerId = 'magpie';
 const providerPackage = '@ai-sdk/openai-compatible';
 
 const runGuardedOpenCode: OpenCodeRunner = (command, cwd, statusDir, options) => {
-  if (process.platform !== 'win32' && process.platform !== 'darwin') {
-    throw new Error('Supervised OpenCode requires Windows or macOS');
+  if (process.platform !== 'win32' && process.platform !== 'darwin' && process.platform !== 'linux') {
+    throw new Error('Supervised OpenCode requires Windows, macOS, or Linux');
   }
   return launchSupervised(command, cwd, statusDir, options);
 };

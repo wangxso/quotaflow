@@ -13,7 +13,7 @@ import { TaskStore } from './store';
 import { runOnce } from './worker';
 import { checkpoint, ensureWorktree, restoreCheckpoint, worktreeGit } from './worktree';
 
-const supervisedTest = test.skipIf(process.platform !== 'win32' && process.platform !== 'darwin');
+const supervisedTest = test.skipIf(process.platform !== 'win32' && process.platform !== 'darwin' && process.platform !== 'linux');
 const draft = {
   version: 1,
   completed: ['Verified app.txt'],

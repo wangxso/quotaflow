@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { attemptDirectory, writeAttemptOwner } from './recovery';
 import { worktreeGit } from './worktree';
 
-const supervisedTest = test.skipIf(process.platform !== 'win32' && process.platform !== 'darwin');
+const supervisedTest = test.skipIf(process.platform !== 'win32' && process.platform !== 'darwin' && process.platform !== 'linux');
 const cliEntry = fileURLToPath(new URL('./cli.ts', import.meta.url));
 
 function setup() {

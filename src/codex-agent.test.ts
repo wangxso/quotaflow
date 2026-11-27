@@ -4,6 +4,16 @@ import { CodexAppServerAgent, type CodexServer } from './codex-agent';
 import type { Attempt, LaneConfig, Task } from './domain';
 import type { SupervisorStop } from './supervisor';
 
+const stopReceipt: SupervisorStop = {
+  supervisorPid: 1,
+  workerPid: 2,
+  exitCode: 0,
+  activeProcesses: 0,
+  reason: 'worker_exit',
+};
+
+const verifyStop = () => stopReceipt;
+
 const lane: LaneConfig = {
   id: 'codex-magpie',
   agent: 'codex',
@@ -56,13 +66,6 @@ const context: AgentContext = {
 };
 
 function fakeServer(calls: Array<{ method: string; params: unknown }>): CodexServer {
-  const stop: SupervisorStop = {
-    supervisorPid: 1,
-    workerPid: 2,
-    exitCode: 0,
-    activeProcesses: 0,
-    reason: 'worker_exit',
-  };
   return {
     stderr: '',
     async initialize() {
@@ -79,9 +82,7 @@ function fakeServer(calls: Array<{ method: string; params: unknown }>): CodexSer
     async notification() {
       return { turn: { id: 'turn-1', status: 'completed' } };
     },
-    async close() {
-      return stop;
-    },
+    async close() {},
   };
 }
 
@@ -98,6 +99,7 @@ test('injects the task prompt, model and explicit base URL into App Server calls
       inferenceCalls: 0,
       commandExec: { status: 'completed', exitCode: 0, fileWritten: true },
     }),
+    verifyStop,
   );
   const result = await agent.run(context);
   expect(result).toMatchObject({
@@ -122,6 +124,7 @@ test('does not send a turn when the zero-inference preflight fails', async () =>
       inferenceCalls: 0,
       commandExec: { status: 'error', exitCode: 127, fileWritten: false },
     }),
+    verifyStop,
   );
   await expect(agent.run(context)).rejects.toThrow('preflight failed');
   expect(calls.some((call) => call.method === 'thread/start')).toBe(false);
@@ -130,10 +133,15 @@ test('does not send a turn when the zero-inference preflight fails', async () =>
 
 test('uses the handoff prompt and grants a dedicated writable directory for its draft', async () => {
   const calls: Array<{ method: string; params: unknown }> = [];
-  const agent = new CodexAppServerAgent(lane, () => fakeServer(calls), async () => ({
-    inferenceCalls: 0,
-    commandExec: { status: 'completed', exitCode: 0, fileWritten: true },
-  }));
+  const agent = new CodexAppServerAgent(
+    lane,
+    () => fakeServer(calls),
+    async () => ({
+      inferenceCalls: 0,
+      commandExec: { status: 'completed', exitCode: 0, fileWritten: true },
+    }),
+    verifyStop,
+  );
   const handoff = { directory: 'C:/attempt/handoff', file: 'C:/attempt/handoff/draft.json',
     prompt: 'Task plus verified handoff notes', source: null };
   await agent.run({ ...context, handoff });
@@ -148,16 +156,7 @@ test('cancellation interrupts the active turn and closes the server', async () =
   const server = fakeServer(calls);
   server.notification = async () => new Promise(() => {});
   let closed = false;
-  server.close = async () => {
-    closed = true;
-    return {
-      supervisorPid: 1,
-      workerPid: 2,
-      exitCode: 0,
-      activeProcesses: 0,
-      reason: 'worker_exit',
-    };
-  };
+  server.close = async () => { closed = true; };
   const agent = new CodexAppServerAgent(
     lane,
     () => server,
@@ -165,6 +164,7 @@ test('cancellation interrupts the active turn and closes the server', async () =
       inferenceCalls: 0,
       commandExec: { status: 'completed', exitCode: 0, fileWritten: true },
     }),
+    verifyStop,
   );
   const controller = new AbortController();
   const running = agent.run({ ...context, signal: controller.signal });
@@ -184,10 +184,9 @@ test('cancellation interrupts the active turn and closes the server', async () =
   expect(closed).toBe(true);
 });
 
-test('refuses to report a stopped process set without a supervisor receipt', async () => {
+test('requires an independent stop verifier for a custom Codex server', async () => {
   const calls: Array<{ method: string; params: unknown }> = [];
   const server = fakeServer(calls);
-  server.close = async () => null;
   const agent = new CodexAppServerAgent(
     lane,
     () => server,
@@ -195,6 +194,7 @@ test('refuses to report a stopped process set without a supervisor receipt', asy
       inferenceCalls: 0,
       commandExec: { status: 'completed', exitCode: 0, fileWritten: true },
     }),
+    () => { throw new Error('no stop receipt'); },
   );
 
   await expect(agent.run(context)).rejects.toBeInstanceOf(ProcessStopUnverifiedError);
@@ -203,13 +203,6 @@ test('refuses to report a stopped process set without a supervisor receipt', asy
 test('refuses a stop receipt that still reports active processes', async () => {
   const calls: Array<{ method: string; params: unknown }> = [];
   const server = fakeServer(calls);
-  server.close = async () => ({
-    supervisorPid: 1,
-    workerPid: 2,
-    exitCode: null,
-    activeProcesses: 1,
-    reason: 'controller_closed',
-  });
   const agent = new CodexAppServerAgent(
     lane,
     () => server,
@@ -217,6 +210,22 @@ test('refuses a stop receipt that still reports active processes', async () => {
       inferenceCalls: 0,
       commandExec: { status: 'completed', exitCode: 0, fileWritten: true },
     }),
+    () => ({ ...stopReceipt, exitCode: null, activeProcesses: 1, reason: 'controller_closed' }),
+  );
+
+  await expect(agent.run(context)).rejects.toBeInstanceOf(ProcessStopUnverifiedError);
+});
+
+test('rejects a malformed custom stop receipt', async () => {
+  const calls: Array<{ method: string; params: unknown }> = [];
+  const agent = new CodexAppServerAgent(
+    lane,
+    () => fakeServer(calls),
+    async () => ({
+      inferenceCalls: 0,
+      commandExec: { status: 'completed', exitCode: 0, fileWritten: true },
+    }),
+    () => ({ ...stopReceipt, supervisorPid: 0 }),
   );
 
   await expect(agent.run(context)).rejects.toBeInstanceOf(ProcessStopUnverifiedError);

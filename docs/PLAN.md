@@ -55,6 +55,8 @@
 
 同日完成默认 Adapter 的 macOS 进程监督闭环。Codex App Server 经受监督 stdio 代理写入 `app.txt=41`，零推理预检的后台子进程在关闭时被回收。OpenCode 默认路径写入 `app.txt=42`，四个 Magpie 请求行完成会话级回写，服务模型为 `hy4-flash-free`，停止凭证均为 `activeProcesses=0`。 [默认 Adapter 证据](evidence/phase1-macos-default-adapters-2026-11-27.json)
 
+Linux 采用 child subreaper 与 `/proc` 进程树枚举，补齐全套停止、取消、stdio 和 detached 后代测试。Bun 官方 Linux 容器中完整测试为 95 通过、1 个 Windows 专用用例跳过；Codex CLI 0.171.0 的零推理 `command/exec` 与后台子进程回收通过。自定义 Codex Server 也必须由独立 verifier 提供停止证明，关闭接口自身不能自证成功；默认 verifier 另经 macOS 真实 Magpie 任务复验。 [Linux 与停止契约证据](evidence/phase1-linux-supervision-2026-11-27.json)
+
 ## mcarplay 试点
 
 1. 以[源码初筛的 CI 基线](RESEARCH.md#mcarplay-首个试点)作为起点。开跑前重新核对基线 SHA、默认分支、实际目标分支、受保护分支规则及必需检查。

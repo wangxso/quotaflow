@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { ProcessStopUnverifiedError } from './agent';
 import guardMacSource from './guard-macos.c' with { type: 'text' };
+import guardLinuxSource from './guard-linux.c' with { type: 'text' };
 
 export interface SupervisorStop {
   supervisorPid: number;
@@ -101,8 +102,8 @@ export function launchGuardedAppServer(
   statusDir: string,
   options: { env?: NodeJS.ProcessEnv } = {},
 ): ChildProcessWithoutNullStreams {
-  if (process.platform !== 'win32' && process.platform !== 'darwin') {
-    throw new Error('Supervised Codex App Server requires Windows or macOS');
+  if (process.platform !== 'win32' && process.platform !== 'darwin' && process.platform !== 'linux') {
+    throw new Error('Supervised Codex App Server requires Windows, macOS, or Linux');
   }
   if (command.length === 0) throw new Error('A supervised command is required');
   const env: NodeJS.ProcessEnv = { ...process.env, ...options.env };
@@ -152,6 +153,45 @@ function launchMacGuard(
   }
 }
 
+function launchLinuxGuard(
+  command: string[],
+  cwd: string,
+  statusDir: string,
+  env: NodeJS.ProcessEnv,
+  proxyStdio: boolean,
+) {
+  const buildDir = mkdtempSync(join(tmpdir(), 'quotaflow-guard-'));
+  const removeBuild = () => rmSync(buildDir, { recursive: true, force: true });
+  try {
+    const executable = join(buildDir, 'guard-linux');
+    const compiler = process.env.QUOTAFLOW_CC ?? '/usr/bin/cc';
+    const build = spawnSync(compiler, [
+      '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', '-x', 'c', '-', '-o', executable,
+    ], { input: guardLinuxSource, encoding: 'utf8', timeout: 30_000 });
+    if (build.error) throw build.error;
+    if (build.status !== 0) {
+      throw new Error(`Could not build the Linux process supervisor. Install a C compiler and libc development headers. ${build.stderr.trim()}`);
+    }
+    recordLaunch(statusDir, 'linux_subreaper');
+    const guard = spawn(executable, [String(process.pid), statusDir, ...command], {
+      cwd,
+      detached: true,
+      stdio: proxyStdio ? ['pipe', 'pipe', 'pipe'] : ['pipe', 'ignore', 'pipe'],
+      env: {
+        ...env,
+        QUOTAFLOW_GUARD_STATUS: statusDir,
+        QUOTAFLOW_GUARD_PROXY_STDIO: proxyStdio ? '1' : '0',
+        QUOTAFLOW_ATTEMPT_DIR: statusDir,
+      },
+    });
+    guard.once('close', removeBuild);
+    return guard;
+  } catch (error) {
+    removeBuild();
+    throw error;
+  }
+}
+
 function launchCommandGuard(
   command: string[],
   cwd: string,
@@ -160,6 +200,7 @@ function launchCommandGuard(
   proxyStdio = false,
 ) {
   if (process.platform === 'darwin') return launchMacGuard(command, cwd, statusDir, env, proxyStdio);
+  if (process.platform === 'linux') return launchLinuxGuard(command, cwd, statusDir, env, proxyStdio);
   recordLaunch(statusDir, 'windows_job');
   return spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', guardScript], {
     windowsHide: true,
@@ -187,8 +228,8 @@ export async function launchSupervised(
   statusDir: string,
   options: SupervisorOptions = {},
 ): Promise<{ stop: SupervisorStop; outcome: SupervisorOutcome | null }> {
-  if (process.platform !== 'win32' && process.platform !== 'darwin') {
-    throw new Error('Supervised commands require Windows or macOS');
+  if (process.platform !== 'win32' && process.platform !== 'darwin' && process.platform !== 'linux') {
+    throw new Error('Supervised commands require Windows, macOS, or Linux');
   }
   if (command.length === 0) throw new Error('A supervised command is required');
   const timeoutMs = options.timeoutMs ?? 60_000;

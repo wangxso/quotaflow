@@ -32,7 +32,7 @@ export interface CodexServer {
     filter: (event: { turn?: { id?: string; status?: string } }) => boolean,
     timeout?: number,
   ): Promise<{ turn?: { id?: string; status?: string } } | null>;
-  close(): Promise<SupervisorStop | null>;
+  close(): Promise<void>;
   readonly stderr: string;
 }
 
@@ -42,6 +42,18 @@ export type CodexServerFactory = (
   options: { cwd: string; env: NodeJS.ProcessEnv; attemptDir: string },
 ) => CodexServer;
 
+export type CodexStopVerifier = (attemptDir: string) => Promise<SupervisorStop> | SupervisorStop;
+
+function isVerifiedStopReceipt(value: unknown): value is SupervisorStop {
+  if (!value || typeof value !== 'object') return false;
+  const stop = value as Partial<SupervisorStop>;
+  return Number.isInteger(stop.supervisorPid) && stop.supervisorPid! > 0
+    && Number.isInteger(stop.workerPid) && stop.workerPid! > 0
+    && (stop.exitCode === null || Number.isInteger(stop.exitCode))
+    && stop.activeProcesses === 0
+    && typeof stop.reason === 'string' && stop.reason.length > 0;
+}
+
 type RuntimePreflight = (
   server: CodexServer,
   workspace: string,
@@ -50,48 +62,13 @@ type RuntimePreflight = (
   commandExec: { status?: string; exitCode?: number; fileWritten?: boolean };
 }>;
 
-class SupervisedCodexServer implements CodexServer {
-  readonly #server: CodexServer;
-  readonly #statusDir: string;
-
-  constructor(server: CodexServer, statusDir: string) {
-    this.#server = server;
-    this.#statusDir = statusDir;
-  }
-
-  get stderr() {
-    return this.#server.stderr;
-  }
-
-  initialize(capabilities?: unknown) {
-    return this.#server.initialize(capabilities);
-  }
-
-  call(method: string, params?: unknown, timeout?: number) {
-    return this.#server.call(method, params, timeout);
-  }
-
-  notification(
-    method: string,
-    filter: (event: { turn?: { id?: string; status?: string } }) => boolean,
-    timeout?: number,
-  ) {
-    return this.#server.notification(method, filter, timeout);
-  }
-
-  async close() {
-    await this.#server.close();
-    return verifySupervisedStop(this.#statusDir);
-  }
-}
-
 function defaultFactory(
   executable: string,
   args: string[],
   options: { cwd: string; env: NodeJS.ProcessEnv; attemptDir: string },
 ): CodexServer {
-  if (process.platform !== 'win32' && process.platform !== 'darwin') {
-    throw new Error('Supervised Codex App Server requires Windows or macOS');
+  if (process.platform !== 'win32' && process.platform !== 'darwin' && process.platform !== 'linux') {
+    throw new Error('Supervised Codex App Server requires Windows, macOS, or Linux');
   }
   const command = [
     executable,
@@ -103,8 +80,7 @@ function defaultFactory(
   const child = launchGuardedAppServer(command, options.cwd, options.attemptDir, {
     env: options.env,
   });
-  const server = new AppServer(executable, args, { child }) as unknown as CodexServer;
-  return new SupervisedCodexServer(server, options.attemptDir);
+  return new AppServer(executable, args, { child }) as unknown as CodexServer;
 }
 
 export class CodexAppServerAgent implements AgentAdapter {
@@ -112,16 +88,19 @@ export class CodexAppServerAgent implements AgentAdapter {
   readonly #lane: LaneConfig;
   readonly #factory: CodexServerFactory;
   readonly #preflight: RuntimePreflight;
+  readonly #verifyStop: CodexStopVerifier;
 
   constructor(
     lane: LaneConfig,
     factory: CodexServerFactory = defaultFactory,
     preflight: RuntimePreflight = probeAppServerRuntime as RuntimePreflight,
+    verifyStop: CodexStopVerifier = verifySupervisedStop,
   ) {
     this.id = `codex:${lane.id}`;
     this.#lane = lane;
     this.#factory = factory;
     this.#preflight = preflight;
+    this.#verifyStop = verifyStop;
   }
 
   async run(context: AgentContext): Promise<AgentResult> {
@@ -150,18 +129,33 @@ export class CodexAppServerAgent implements AgentAdapter {
       failure = error;
     }
 
-    let stop: SupervisorStop | null = null;
+    let closeFailure: unknown;
     try {
-      stop = await server.close();
+      await server.close();
     } catch (error) {
+      closeFailure = error;
+    }
+
+    let stop: SupervisorStop;
+    try {
+      stop = await this.#verifyStop(context.attemptDir);
+    } catch (error) {
+      const details = [failure, closeFailure, error]
+        .filter((entry): entry is Error => entry instanceof Error)
+        .map((entry) => entry.message);
+      throw new ProcessStopUnverifiedError(
+        `Codex App Server stop was not verified${details.length ? `: ${details.join('; ')}` : ''}`,
+      );
+    }
+    if (!isVerifiedStopReceipt(stop)) {
+      const detail = failure instanceof Error ? `: ${failure.message}` : '';
+      throw new ProcessStopUnverifiedError(`Codex App Server returned an invalid stop receipt${detail}`);
+    }
+    if (closeFailure) {
       if (!failed) {
         failed = true;
-        failure = error;
+        failure = closeFailure;
       }
-    }
-    if (stop?.activeProcesses !== 0) {
-      const detail = failure instanceof Error ? `: ${failure.message}` : '';
-      throw new ProcessStopUnverifiedError(`Codex App Server stop was not verified${detail}`);
     }
     if (failed) throw failure;
     if (!result) throw new Error('Codex App Server returned no result');
