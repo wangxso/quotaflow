@@ -4,14 +4,14 @@
 
 QuotaFlow schedules AI software development tasks using account quotas, concurrency limits, and budgets. It runs Codex or OpenCode in dedicated Git worktrees and saves checkpoints so interrupted work can resume.
 
-**Status as of 2026-11-27.** Phase 0 passed its technical gate with conditions. Phase 1 now has three-platform supervision, checkpoint recovery, budget audits, and optional handoff notes. Phase 2 now enforces current-head CI, independent review, Draft state, and mandatory human merge, with signed webhook verification plus delivery and logical-event idempotency. Draft PR [#141](https://github.com/wangxso/mcarplay/pull/141) has passing CI and remains correctly blocked pending independent review. The GUI is planned for Phase 3. [Phase 1](docs/PHASE-1.md) · [Phase 2](docs/PHASE-2.md) · [mcarplay pilot evidence](docs/evidence/phase1-mcarplay-issue-82-2026-11-27.json)
+**Status as of 2026-11-27.** Phase 0 passed its technical gate with conditions. Phase 1 now has three-platform supervision, checkpoint recovery, budget audits, and optional handoff notes. Phase 2 now enforces current-head CI, independent review, Draft state, and mandatory human merge, with a local signed webhook listener plus delivery and logical-event idempotency. Draft PR [#141](https://github.com/wangxso/mcarplay/pull/141) has passing CI and remains correctly blocked pending independent review. The GUI is planned for Phase 3. [Phase 1](docs/PHASE-1.md) · [Phase 2](docs/PHASE-2.md) · [mcarplay pilot evidence](docs/evidence/phase1-mcarplay-issue-82-2026-11-27.json)
 
 ## Current capabilities
 
 - **Scheduling.** SQLite v8 stores tasks, attempts, events, budget leases, and GitHub gate records. The scheduler reserves account concurrency slots, quota, and any configured budget in one transaction. `budget audit` reports expired leases, and an unknown hold created during recovery propagates to account cooldowns.
 - **Execution and recovery.** The CLI can submit, inspect, cancel, and retry tasks. Windows uses Job Objects. The native macOS supervisor tracks roots, children, and process groups. Linux enables child-subreaper mode to adopt detached descendants and scans `/proc`. Checkpointing and recovery require an independently verified stop receipt. A launched supervised attempt with a missing receipt stays `blocked` and retains write ownership. `--handoff` can pass a checkpoint-bound note to the next agent after an interruption.
 - **Adapters and usage.** The default Codex App Server and OpenCode adapters support supervised execution on Windows, macOS, and Linux. Magpie routing requires explicit configuration approval. Gateway estimates back budget leases, and provider invoice attribution remains `UNKNOWN`. [Configuration and adapter details](docs/PHASE-1.md)
-- **GitHub gate.** `github gate` validates current-head checks, independent review, Draft/mergeable state, and mandatory human merge. `github webhook` verifies HMAC-SHA256 before parsing and provides delivery plus logical-event idempotency. [Phase 2 notes](docs/PHASE-2.md)
+- **GitHub gate.** `github gate` validates current-head checks, independent review, Draft/mergeable state, and mandatory human merge. `github serve-webhook` verifies HMAC-SHA256 before parsing and provides health checks, GitHub ping handling, and two-level idempotency. [Phase 2 notes](docs/PHASE-2.md)
 
 ## Quick start
 

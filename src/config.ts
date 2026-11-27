@@ -3,6 +3,7 @@ import { dirname, isAbsolute, resolve } from 'node:path';
 import type {
   AgentKind,
   BudgetPolicy,
+  GitHubWebhookConfig,
   LaneConfig,
   Provider,
   QuotaFlowConfig,
@@ -123,6 +124,28 @@ function parseBudget(value: unknown, index: number): BudgetPolicy {
   };
 }
 
+function parseGitHubWebhook(value: unknown): GitHubWebhookConfig {
+  const raw = object(value, 'githubWebhook');
+  const port = number(raw.port, 'githubWebhook.port');
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    fail('githubWebhook.port must be an integer between 1 and 65535');
+  }
+  const path = text(raw.path, 'githubWebhook.path');
+  if (!path.startsWith('/') || path === '/healthz' || path.includes('?') || path.includes('#') || path.length > 256) {
+    fail('githubWebhook.path must be an absolute URL path without query or fragment');
+  }
+  const secretEnv = text(raw.secretEnv, 'githubWebhook.secretEnv');
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(secretEnv)) {
+    fail('githubWebhook.secretEnv must name an environment variable');
+  }
+  return {
+    host: text(raw.host, 'githubWebhook.host'),
+    port,
+    path,
+    secretEnv,
+  };
+}
+
 export function normalizeConfig(value: unknown, file: string): QuotaFlowConfig {
   const raw = object(value, 'config');
   if (raw.version !== 1) fail('version must be 1');
@@ -174,6 +197,7 @@ export function normalizeConfig(value: unknown, file: string): QuotaFlowConfig {
       accounts.add(budget.account);
     }
   }
+  const githubWebhook = raw.githubWebhook === undefined ? undefined : parseGitHubWebhook(raw.githubWebhook);
 
   return {
     version: 1,
@@ -181,6 +205,7 @@ export function normalizeConfig(value: unknown, file: string): QuotaFlowConfig {
     worktreeRoot: resolvePath(root, text(raw.worktreeRoot, 'worktreeRoot')),
     ...(raw.defaultRepo === undefined ? {} : { defaultRepo: resolvePath(root, text(raw.defaultRepo, 'defaultRepo')) }),
     routing: { allowedProviders, ...(routedModelApproval ? { routedModelApproval } : {}) },
+    ...(githubWebhook ? { githubWebhook } : {}),
     budgets,
     lanes,
   };

@@ -142,3 +142,26 @@ test('rejects disallowed providers and duplicate lanes', () => {
   expect(() => normalizeConfig({ ...base, lanes: [base.lanes[0], base.lanes[0]] }, join(tmpdir(), 'quotaflow.config.json')))
     .toThrow('duplicate lane');
 });
+
+test('parses and validates GitHub webhook configuration', () => {
+  const base = {
+    version: 1,
+    database: 'state.sqlite',
+    worktreeRoot: 'worktrees',
+    routing: { allowedProviders: ['native'] },
+    githubWebhook: {
+      host: '127.0.0.1',
+      port: 8787,
+      path: '/github/webhook',
+      secretEnv: 'GITHUB_WEBHOOK_SECRET',
+    },
+    lanes: [],
+  };
+  expect(normalizeConfig(base, join(tmpdir(), 'quotaflow.config.json')).githubWebhook).toEqual(base.githubWebhook);
+  expect(() => normalizeConfig({ ...base, githubWebhook: { ...base.githubWebhook, port: 0 } },
+    join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubWebhook.port');
+  expect(() => normalizeConfig({ ...base, githubWebhook: { ...base.githubWebhook, path: '/hooks?secret=1' } },
+    join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubWebhook.path');
+  expect(() => normalizeConfig({ ...base, githubWebhook: { ...base.githubWebhook, secretEnv: 'bad-name' } },
+    join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubWebhook.secretEnv');
+});

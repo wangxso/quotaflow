@@ -53,6 +53,13 @@ export interface RoutingConfig {
   routedModelApproval?: RoutedModelApproval;
 }
 
+export interface GitHubWebhookConfig {
+  host: string;
+  port: number;
+  path: string;
+  secretEnv: string;
+}
+
 export interface BudgetPolicy {
   account: string;
   unit: string;
@@ -95,6 +102,7 @@ export interface QuotaFlowConfig {
   worktreeRoot: string;
   defaultRepo?: string;
   routing: RoutingConfig;
+  githubWebhook?: GitHubWebhookConfig;
   budgets?: BudgetPolicy[];
   lanes: LaneConfig[];
 }

@@ -11,6 +11,22 @@
     "invalidSignatureWrites": 0,
     "tamperedRawByteRejected": true
   },
+  "httpListener": {
+    "command": "bun dist/cli.js github serve-webhook --config <file>",
+    "healthEndpoint": "/healthz",
+    "eventEndpoint": "configurable absolute path, default /github/webhook",
+    "statusCodes": {
+      "newEvent": 202,
+      "duplicateEvent": 200,
+      "invalidSignature": 401,
+      "payloadTooLarge": 413,
+      "unsupportedEvent": 422,
+      "deliveryConflict": 409
+    },
+    "githubPing": "signed ping requests return 200 without writing a business delivery",
+    "shutdown": "SIGINT or SIGTERM stops the Bun server and closes SQLite",
+    "packagedSmoke": "Health GET returned 200 and a signed pull_request POST returned 202 on 127.0.0.1."
+  },
   "normalization": {
     "supportedEvents": ["pull_request", "check_run", "pull_request_review"],
     "commonFields": ["eventType", "action", "repository", "pullNumber", "headSha", "payloadHash"],
@@ -31,11 +47,14 @@
     "webhookNormalizationTests": 1,
     "cliWebhookTests": 1,
     "schemaMigrationTests": "v1 through v7 migrate to v8",
-    "fullSuite": { "macOS": 114, "linux": 114, "windowsOnlySkipped": 1, "failed": 0 },
+    "webhookServerTests": 3,
+    "webhookConfigTests": 1,
+    "fullSuite": { "macOS": 118, "linux": 118, "windowsOnlySkipped": 1, "failed": 0 },
     "buildAndConfig": "passed on macOS and Linux"
   },
   "scope": {
-    "httpReceiver": "not implemented",
+    "httpReceiver": "implemented for local Bun HTTP use",
+    "publicDeployment": "not configured",
     "automaticSnapshotFetch": "not implemented",
     "reviewFixTaskCreation": "not implemented",
     "ciFailureTriage": "not implemented",

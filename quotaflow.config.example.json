@@ -12,6 +12,12 @@
       "note": "Phase 1 permits Magpie-routed models. Provider invoice remains UNKNOWN."
     }
   },
+  "githubWebhook": {
+    "host": "127.0.0.1",
+    "port": 8787,
+    "path": "/github/webhook",
+    "secretEnv": "GITHUB_WEBHOOK_SECRET"
+  },
   "budgets": [
     {
       "account": "magpie-default",

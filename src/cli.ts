@@ -20,6 +20,7 @@ import {
   parseGitHubPullSnapshot,
   verifyGitHubWebhookSignature,
 } from './github';
+import { startGitHubWebhookServer } from './github-webhook-server';
 
 const usage = `
 quotaflow config validate [--config <file>]
@@ -37,6 +38,7 @@ quotaflow budget status [--config <file>]
 quotaflow budget audit [--limit <n>] [--config <file>]
 quotaflow github gate <snapshot.json> [--delivery-id <id>] [--event-type <type>] [--expected-head <sha>] [--expected-base <sha>] [--require-check <name>]... [--required-approvals <n>] [--allow-author-self-approval] [--config <file>]
 quotaflow github webhook <payload.json> --event <type> --delivery-id <id> --signature <sha256=...> [--secret-env GITHUB_WEBHOOK_SECRET] [--config <file>]
+quotaflow github serve-webhook [--host <host>] [--port <n>] [--path <path>] [--secret-env <name>] [--config <file>]
 `.trim();
 
 function option(args: string[], name: string): string | undefined {
@@ -95,6 +97,7 @@ async function main() {
       worktreeRoot: config.worktreeRoot,
       allowedProviders: config.routing.allowedProviders,
       routedModelApproval: config.routing.routedModelApproval ?? null,
+      githubWebhook: config.githubWebhook ?? null,
       budgets: config.budgets ?? [],
       lanes: config.lanes.map((lane) => ({
         id: lane.id,
@@ -286,6 +289,39 @@ async function main() {
         eventKey: githubEventKey(baseDelivery),
       });
       console.log(JSON.stringify({ event: normalized, delivery }, null, 2));
+      return;
+    }
+
+    if (scope === 'github' && action === 'serve-webhook') {
+      const defaults = config.githubWebhook ?? {
+        host: '127.0.0.1',
+        port: 8787,
+        path: '/github/webhook',
+        secretEnv: 'GITHUB_WEBHOOK_SECRET',
+      };
+      const host = option(rest, '--host') ?? defaults.host;
+      const portText = option(rest, '--port') ?? String(defaults.port);
+      const port = Number(portText);
+      const path = option(rest, '--path') ?? defaults.path;
+      const secretName = option(rest, '--secret-env') ?? defaults.secretEnv;
+      if (rest.length > 0) throw new Error(`Unexpected github serve-webhook arguments: ${rest.join(' ')}`);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        throw new Error('--port must be an integer between 1 and 65535');
+      }
+      if (!path.startsWith('/') || path === '/healthz' || path.includes('?') || path.includes('#') || path.length > 256) {
+        throw new Error('--path must be an absolute URL path other than /healthz, without query or fragment');
+      }
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(secretName)) throw new Error('--secret-env must name an environment variable');
+      const secret = process.env[secretName];
+      if (!secret) throw new Error(`GitHub webhook secret is missing from ${secretName}`);
+      const server = startGitHubWebhookServer({ host, port, path, secret, store });
+      console.log(JSON.stringify({ listening: server.url.toString(), path, health: '/healthz' }, null, 2));
+      const stopped = new Promise<void>((resolve) => {
+        process.once('SIGINT', resolve);
+        process.once('SIGTERM', resolve);
+      });
+      await stopped;
+      server.stop(true);
       return;
     }
 

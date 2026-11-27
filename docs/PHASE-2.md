@@ -67,11 +67,21 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github webhook payload.json \
   --signature sha256=...
 ```
 
+本地 HTTP 监听器使用配置中的 `githubWebhook`，或通过命令行覆盖：
+
+```sh
+GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
+# GET /healthz -> {"status":"ok"}
+# POST /github/webhook -> 202 accepted / 200 duplicate
+```
+
+监听器返回稳定的 HTTP 状态：新事件 `202`，重复事件 `200`，签名无效 `401`，载荷过大 `413`，不支持的事件 `422`，已知 delivery 内容冲突 `409`。GitHub 建立 Webhook 时发送的签名 `ping` 返回 `200`，业务事件与健康检查都不回显 Secret 或原始载荷。
+
 当前支持 `pull_request`、`check_run` 和 `pull_request_review`。事件会归一化为仓库、PR、HEAD SHA、action 和原始字节哈希。相同 delivery 或相同逻辑事件重放不会重复处理，冲突内容会被拒绝。签名无效或载荷超过 2 MB 时不会写库。 [Webhook 验证证据](evidence/phase2-github-webhook-2026-11-27.json)
 
 ## 尚未完成
 
-- GitHub App 或最小权限凭据、HTTP Webhook 监听器、回调部署和自动拉取 PR 快照。
+- GitHub App 或最小权限凭据、公网 TLS 回调部署、反向代理和自动拉取 PR 快照。
 - Review–Fix 任务生成与轮次、预算上限。
 - CI 失败分类、定向修复任务和同 SHA 复跑绑定。
 - 写入应答丢失、重复 Webhook、越权请求和凭据轮换演练。
@@ -79,7 +89,7 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github webhook payload.json \
 
 ## 下一里程碑
 
-1. 将签名验证器接入 HTTP 监听器和 GitHub App 凭据。
+1. 接入 GitHub App 凭据，并将本地监听器部署到受控公网反向代理。
 2. 根据阻断原因创建 Review 或 Fix 任务，并限制轮次与预算。
 3. 在 PR #141 获得独立审查后重新评估门禁，保持人工合并。
 4. Phase 2 核心验收完成后进入 Phase 3 Dashboard 与部署。

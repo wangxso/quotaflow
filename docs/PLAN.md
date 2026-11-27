@@ -14,7 +14,7 @@
 
 ### 本轮执行状态
 
-方案获审后已执行 Phase 0 并提交 [验证报告](PHASE-0.md)、[PoC](../poc/README.md) 和[许可证审查](LICENSING-REVIEW.md)。确定性故障恢复用例通过。2026-11-27 已完成真实 Codex Agent 写入、检查点恢复和 OpenCode 接续，技术门禁有条件通过；Codex 实际经 Magpie 路由到第三方模型，原生 ChatGPT 路径、商用路由组和服务商账单仍未验证。Phase 1 已形成三平台监督、预算审计和恢复闭环。Phase 2 已启动，QuotaFlow 在 `mcarplay` Issue #82 上生成 Draft PR #141，完整 CI 通过，Pull Request 门禁已能验证同 HEAD 检查、独立审查和人工合并要求，签名 Webhook 入口已接入。详见 [Phase 1](PHASE-1.md)、[Phase 2](PHASE-2.md) 与[门禁收口记录](PHASE-0-GATE-CLOSURE.md)。
+方案获审后已执行 Phase 0 并提交 [验证报告](PHASE-0.md)、[PoC](../poc/README.md) 和[许可证审查](LICENSING-REVIEW.md)。确定性故障恢复用例通过。2026-11-27 已完成真实 Codex Agent 写入、检查点恢复和 OpenCode 接续，技术门禁有条件通过；Codex 实际经 Magpie 路由到第三方模型，原生 ChatGPT 路径、商用路由组和服务商账单仍未验证。Phase 1 已形成三平台监督、预算审计和恢复闭环。Phase 2 已启动，QuotaFlow 在 `mcarplay` Issue #82 上生成 Draft PR #141，完整 CI 通过，Pull Request 门禁与本地签名 Webhook 服务已接入。详见 [Phase 1](PHASE-1.md)、[Phase 2](PHASE-2.md) 与[门禁收口记录](PHASE-0-GATE-CLOSURE.md)。
 
 ## Phase 0 · 调研与可行性验证
 
