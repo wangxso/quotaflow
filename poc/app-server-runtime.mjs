@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, readFileSync, unlinkSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, realpathSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
 export function findPowerShell() {
@@ -20,8 +20,10 @@ function removeProbe(target) {
 }
 
 export async function probeAppServerRuntime(server, workspace) {
-  const shell = findPowerShell();
-  const target = join(workspace, `.quotaflow-runtime-${process.pid}-${Date.now()}.tmp`);
+  const windows = process.platform === 'win32';
+  const shell = windows ? findPowerShell() : '/bin/sh';
+  const root = realpathSync(workspace);
+  const target = join(root, `.quotaflow-runtime-${process.pid}-${Date.now()}.tmp`);
   const result = {
     inferenceCalls: 0,
     shell,
@@ -31,17 +33,23 @@ export async function probeAppServerRuntime(server, workspace) {
 
   try {
     removeProbe(target);
-    const readiness = await server.call('windowsSandbox/readiness', {}, 10_000);
-    result.windowsSandbox = readiness.value?.status ?? readiness.code ?? 'unknown';
+    let command;
+    if (windows) {
+      const readiness = await server.call('windowsSandbox/readiness', {}, 10_000);
+      result.windowsSandbox = readiness.value?.status ?? readiness.code ?? 'unknown';
+      const script = `[IO.File]::WriteAllText(${quotePowerShell(target)}, '41'); `
+        + `if ((Get-Content -Raw -LiteralPath ${quotePowerShell(target)}).Trim() -ne '41') { exit 9 }`;
+      command = [shell, '-NoProfile', '-NonInteractive', '-Command', script];
+    } else {
+      command = [shell, '-c', 'printf "41\\n" > "$1" && test "$(cat "$1")" = 41', 'quotaflow-preflight', target];
+    }
 
-    const script = `[IO.File]::WriteAllText(${quotePowerShell(target)}, '41'); `
-      + `if ((Get-Content -Raw -LiteralPath ${quotePowerShell(target)}).Trim() -ne '41') { exit 9 }`;
     const execution = await server.call('command/exec', {
-      command: [shell, '-NoProfile', '-NonInteractive', '-Command', script],
-      cwd: workspace,
+      command,
+      cwd: root,
       sandboxPolicy: {
         type: 'workspaceWrite',
-        writableRoots: [workspace],
+        writableRoots: [root],
         networkAccess: false,
         excludeTmpdirEnvVar: true,
         excludeSlashTmp: true,

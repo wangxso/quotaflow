@@ -8,7 +8,7 @@
 
 ## Build, Test, and Development Commands
 
-Run commands from the repository root with Bun and Git available. The Windows process-guard scenarios also use PowerShell.
+Run commands from the repository root with Bun and Git available. The Windows process-guard scenarios also use PowerShell. The macOS scenarios use the C compiler from Xcode or Command Line Tools.
 
 - `bun run start --help` lists CLI commands.
 - `bun run src/cli.ts config validate` validates local configuration. Copy `quotaflow.config.example.json` to `quotaflow.config.json` before configuring a local run.

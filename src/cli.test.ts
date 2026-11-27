@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { attemptDirectory, writeAttemptOwner } from './recovery';
 import { worktreeGit } from './worktree';
 
+const supervisedTest = test.skipIf(process.platform !== 'win32' && process.platform !== 'darwin');
+const cliEntry = fileURLToPath(new URL('./cli.ts', import.meta.url));
+
 function setup() {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-cli-'));
   const config = join(root, 'quotaflow.config.json');
@@ -20,10 +23,10 @@ function setup() {
   return { root, config };
 }
 
-async function cliResult(root: string, args: string[]) {
+async function cliResult(root: string, args: string[], entrypoint = cliEntry) {
   const process = Bun.spawn([
     globalThis.process.execPath,
-    fileURLToPath(new URL('./cli.ts', import.meta.url)),
+    entrypoint,
     ...args,
     '--config',
     join(root, 'quotaflow.config.json'),
@@ -58,6 +61,19 @@ test('adds and lists a task through the CLI', async () => {
     const listed = await cli(root, ['task', 'list']);
     expect(listed.stdout).toContain(task.id);
     expect(listed.stdout).toContain('queued');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the bundled CLI starts without running the live probe', async () => {
+  const { root, config } = setup();
+  try {
+    const bundle = await Bun.build({ entrypoints: [cliEntry], outdir: root, target: 'bun' });
+    expect(bundle.success).toBe(true);
+    const result = await cliResult(root, ['config', 'validate'], bundle.outputs[0].path);
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ config });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -183,8 +199,7 @@ test('runs worker recovery as an idempotent CLI command', async () => {
   }
 });
 
-test('retries a failed task through the CLI', async () => {
-  if (process.platform !== 'win32') return;
+supervisedTest('retries a failed task through the CLI', async () => {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-cli-retry-'));
   try {
     const repo = join(root, 'repo');
@@ -220,7 +235,7 @@ test('retries a failed task through the CLI', async () => {
         ],
       }],
     }));
-    const added = JSON.parse((await cli(root, ['task', 'add', 'retry task', '--repo', root])).stdout);
+    const added = JSON.parse((await cli(root, ['task', 'add', 'retry task', '--repo', repo])).stdout);
     const failed = JSON.parse((await cli(root, ['worker', 'once'])).stdout);
     expect(failed.task).toMatchObject({ id: added.id, status: 'failed' });
     const retried = JSON.parse((await cli(root, ['task', 'retry', added.id])).stdout);
@@ -230,9 +245,9 @@ test('retries a failed task through the CLI', async () => {
   }
 });
 
-test('cancels an active supervised task from a second CLI process', async () => {
-  if (process.platform !== 'win32') return;
+supervisedTest('cancels an active supervised task from a second CLI process', async () => {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-cli-cancel-'));
+  let worker: ReturnType<typeof Bun.spawn> | null = null;
   try {
     const repo = join(root, 'repo');
     worktreeGit(root, ['init', '--initial-branch=main', repo]);
@@ -269,7 +284,7 @@ test('cancels an active supervised task from a second CLI process', async () => 
       }],
     }));
     const added = JSON.parse((await cli(root, ['task', 'add', 'cancel task', '--repo', repo])).stdout);
-    const worker = Bun.spawn([
+    worker = Bun.spawn([
       globalThis.process.execPath,
       fileURLToPath(new URL('./cli.ts', import.meta.url)),
       'worker',
@@ -283,12 +298,13 @@ test('cancels an active supervised task from a second CLI process', async () => 
       stdin: 'ignore',
       windowsHide: true,
     });
-    const ready = join(root, '.quotaflow', 'worktrees', '.attempts', added.id, '1', 'ready.json');
+    const app = join(root, '.quotaflow', 'worktrees', added.id, 'app.txt');
+    const ready = () => existsSync(app) && readFileSync(app, 'utf8') === 'partial\n';
     const deadline = Date.now() + 15_000;
-    while (!existsSync(ready) && Date.now() < deadline) {
+    while (!ready() && Date.now() < deadline && worker.exitCode === null) {
       await Bun.sleep(30);
     }
-    expect(existsSync(ready)).toBe(true);
+    expect(ready()).toBe(true);
 
     const requested = JSON.parse((await cli(root, ['task', 'cancel', added.id])).stdout);
     expect(requested.status).toBe('cancelling');
@@ -307,14 +323,14 @@ test('cancels an active supervised task from a second CLI process', async () => 
     const events = JSON.parse((await cli(root, ['task', 'events', added.id])).stdout);
     expect(shown.task).toMatchObject({ status: 'cancelled' });
     expect(events.find((event: { kind: string }) => event.kind === 'cancel_requested')).toBeTruthy();
-    expect(readFileSync(join(root, '.quotaflow', 'worktrees', added.id, 'app.txt'), 'utf8')).toBe('partial\n');
+    expect(readFileSync(app, 'utf8')).toBe('partial\n');
   } finally {
+    if (worker?.exitCode === null) worker.kill();
     rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   }
 }, 30_000);
 
-test('force-cancels an unresponsive supervised worker after verified process stop', async () => {
-  if (process.platform !== 'win32') return;
+supervisedTest('force-cancels an unresponsive supervised worker after verified process stop', async () => {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-cli-force-cancel-'));
   let worker: ReturnType<typeof Bun.spawn> | null = null;
   try {
@@ -365,13 +381,15 @@ test('force-cancels an unresponsive supervised worker after verified process sto
       windowsHide: true,
     });
     const statusDir = join(root, '.quotaflow', 'worktrees', '.attempts', added.id, '1');
-    const ready = join(statusDir, 'ready.json');
+    const app = join(root, '.quotaflow', 'worktrees', added.id, 'app.txt');
+    const ready = () => existsSync(join(statusDir, 'ready.json'))
+      && existsSync(app) && readFileSync(app, 'utf8') === 'partial\n';
     const readyDeadline = Date.now() + 15_000;
-    while (!existsSync(ready) && Date.now() < readyDeadline) {
+    while (!ready() && Date.now() < readyDeadline) {
       if (worker.exitCode !== null) throw new Error(`Unresponsive worker exited before readiness (${worker.exitCode})`);
       await Bun.sleep(30);
     }
-    expect(existsSync(ready)).toBe(true);
+    expect(ready()).toBe(true);
 
     const result = JSON.parse((
       await cli(root, ['task', 'cancel', added.id, '--force', '--wait', '5000'])
@@ -393,7 +411,7 @@ test('force-cancels an unresponsive supervised worker after verified process sto
       activeProcesses: 0,
       reason: 'cancelled',
     });
-    expect(readFileSync(join(root, '.quotaflow', 'worktrees', added.id, 'app.txt'), 'utf8')).toBe('partial\n');
+    expect(readFileSync(app, 'utf8')).toBe('partial\n');
     const events = JSON.parse((await cli(root, ['task', 'events', added.id])).stdout);
     expect(events.find((event: { kind: string }) => event.kind === 'cancel_forced')).toBeTruthy();
     expect(events.find((event: { kind: string }) => event.kind === 'attempt_recovered')?.detail)
@@ -484,8 +502,7 @@ test('reports cancellation timeout and refuses unverified Codex write transfer',
   }
 }, 20_000);
 
-test('runs one supervised fixture through the CLI worker', async () => {
-  if (process.platform !== 'win32') return;
+supervisedTest('runs one supervised fixture through the CLI worker', async () => {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-cli-worker-'));
   try {
     const repo = join(root, 'repo');

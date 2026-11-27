@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AgentAdapter, AgentContext, AgentResult } from './agent';
+import { ProcessStopUnverifiedError, type AgentAdapter, type AgentContext, type AgentResult } from './agent';
 import type { LaneConfig, UsageReport } from './domain';
 import { reconcileMagpieUsage, usageActualModel } from './magpie-usage';
 import {
@@ -36,6 +36,11 @@ export type OpenCodeUsageLookup = typeof reconcileMagpieUsage;
 
 const providerId = 'magpie';
 const providerPackage = '@ai-sdk/openai-compatible';
+
+const runGuardedOpenCode: OpenCodeRunner = (command, cwd, statusDir, options) => {
+  if (process.platform !== 'win32') throw new Error('Supervised OpenCode currently requires Windows');
+  return launchSupervised(command, cwd, statusDir, options);
+};
 
 function openCodeModel(lane: LaneConfig): { modelId: string; fullModel: string } {
   if (lane.provider !== providerId) {
@@ -87,7 +92,7 @@ export class OpenCodeAgent implements AgentAdapter {
 
   constructor(
     lane: LaneConfig,
-    runner: OpenCodeRunner = launchSupervised,
+    runner: OpenCodeRunner = runGuardedOpenCode,
     usage: OpenCodeUsageLookup = reconcileMagpieUsage,
   ) {
     this.id = `opencode:${lane.id}`;
@@ -201,7 +206,9 @@ export class OpenCodeAgent implements AgentAdapter {
       timeoutMs: this.#lane.timeoutMs ?? 300_000,
       signal: context.signal,
     });
-    if (stop.activeProcesses !== 0) throw new Error('OpenCode supervisor did not confirm an empty process set');
+    if (stop.activeProcesses !== 0) {
+      throw new ProcessStopUnverifiedError('OpenCode supervisor did not confirm an empty process set');
+    }
     if (context.signal?.aborted) {
       return {
         status: 'cancelled',

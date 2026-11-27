@@ -19,14 +19,14 @@
 - Git Worktree 可显式准备，私有检查点保存已暂存、未暂存、删除和未跟踪内容，并支持从检查点恢复。
 - CLI 支持配置校验、任务提交、列表、详情、事件、活动取消、取消等待与强制升级、重试、Worktree 准备、低层队列领取、Worker 恢复和预算状态。
 - Worker 编排已实现：预留尝试后自动准备 Worktree，运行注入的 Agent Adapter，保存检查点并结算完成、失败、取消或额度等待；fixture 测试覆盖完成、失败、活动取消、额度中断、缺少 Adapter 和从检查点恢复。
-- Windows 受监督命令 Adapter 已接入：只有 `stopped.json` 中出现 `activeProcesses=0` 的监督器停止凭证后，Worker 才保存检查点；`worker once` 可执行配置中的 Lane `command`。
+- 受监督命令 Adapter 支持 Windows 和 macOS。`worker once` 可执行 Lane `command`，并在 `stopped.json` 确认 `activeProcesses=0` 后保存检查点。macOS 的凭证覆盖命令与留在其初始进程组中的子进程。
 - Codex App Server Adapter 已接入：推理前执行零推理工作区预检，使用任务 prompt、Lane 模型和可选 `baseUrl`，并拒绝继承直接 API 环境变量。Windows 路径通过受监督 stdio 代理保留 App Server 双向管道，并把 `app-server` 进程树放入 Job Object；关闭后必须取得 `stopped.json` 的 `activeProcesses=0`，否则抛出停止未验证错误，由 Worker 阻塞任务而不保存检查点。
 - OpenCode Adapter 已接入：当前要求 Magpie Lane 显式配置 `baseUrl`；使用隔离的 `OPENCODE_CONFIG`、`OPENCODE_DB` 和 `XDG_*` 运行 `opencode run --pure --format json`，拒绝外部目录、网络、task 和 skill 权限；必须在 `stopped.json` 确认 `activeProcesses=0`，并从 NDJSON 日志要求至少一个 `step_finish`。
 - Magpie 请求级对账已接入：OpenCode 完成后按精确会话 ID 查询请求行，在本地按尝试时窗复核，写入 `attempt_usage` 并从一致的服务模型回填 `attempts.actual_model`。对账失败只记录 `usage_reconciled` 事件，不阻断任务完成；服务商账单始终保留为 `UNKNOWN`。
 - 预算租约已接入：仅对显式配置 `budgets` 的账户记账；预留时先占用 `holdPerAttempt`，已定价用量结算后收缩到网关估算成本，用量未知或不完整时保留 hold 并标记 `pending`。预算不足会使任务进入 `waiting_quota`、`reason=budget`，并等待最早租约过期。`task show` 与 `budget status` 可审计租约。
-- Worker 重启恢复已接入：每次预留后写入受控 `owner.json`；`worker once` 启动时检查遗留活动尝试。只有旧 owner 已退出且 Windows Job Object 提供 `activeProcesses=0` 的停止凭证时，才保存检查点并把任务重新入队。受监督命令、OpenCode 和默认 Codex App Server 路径都会提供停止凭证；缺少凭证的写入者仍置为 `blocked`，不会转移写权。
-- 显式重试已接入：`task retry` 可从 `failed`、`blocked` 或等待状态重新入队，保留既有检查点和尝试历史；总尝试次数仍限制为 3。
-- 活动取消已接入：第二个 CLI 进程对运行中任务写入 `cancel_requested` 事件并把状态置为 `cancelling`；Worker 轮询后向 Adapter 发送 `AbortSignal`。受监督命令、OpenCode 和默认 Codex App Server 通过 Job Object 停止进程树；Codex 先调用 `turn/interrupt`，再关闭受监督 App Server 并要求 `activeProcesses=0` 的停止凭证，随后保存检查点并结算为 `cancelled`。重启时发现未完成取消请求也会在停止凭证满足后完成取消。
+- Worker 每次预留后写入 `owner.json`，`worker once` 启动时检查遗留活动尝试。已启动的受监督尝试须等旧 owner 退出并取得 `activeProcesses=0` 凭证，才能保存检查点并重新入队。凭证缺失时任务进入 `blocked` 并保留活动尝试。之后取得凭证，可再次执行 `worker recover`。
+- `task retry` 可将没有活动尝试的 `failed`、`blocked` 或等待任务重新入队，保留既有检查点和尝试历史。总尝试次数限制为 3。
+- 活动取消已接入：第二个 CLI 进程对运行中任务写入 `cancel_requested` 事件并把状态置为 `cancelling`；Worker 轮询后向 Adapter 发送 `AbortSignal`。受监督命令由其平台监督器停止，Windows 上的 OpenCode 和默认 Codex App Server 使用 Job Object。Codex 先调用 `turn/interrupt`，再关闭受监督 App Server 并要求 `activeProcesses=0` 的停止凭证，随后保存检查点并结算为 `cancelled`。重启时发现未完成取消请求也会在停止凭证满足后完成取消。
 - 取消超时升级与无响应 Worker 强制回收已接入：`task cancel --wait <ms>` 等待协作取消并明确报告超时；`--force` 写入原子取消标记并记录 `cancel_forced` 事件。受监督路径由 Job Object 监督器停止进程树，再终止无响应的 owner；控制面只在该停止凭证的 `activeProcesses=0` 且 owner 已退出后保存检查点并结算为 `cancelled`。默认 Codex App Server 已纳入该监督范围；自定义或未受监督的 Codex 路径缺少凭证时保守置为 `blocked`，不会转移写权。
 
 预算的 `unit` 是自由文本；示例使用 `magpie-cost-estimate`，表示 Magpie 网关估算，不是服务商发票币种。没有配置预算的 Lane 保持原有额度调度行为。
@@ -71,21 +71,40 @@ bun run src/cli.ts worker once
 
 取消超时升级通过一个故意不轮询取消事件的无响应 owner 演练验证：第二个 CLI 先确认 `--wait` 超时，再使用 `--force` 写入 `cancel.flag`；Windows Job Object 监督器停止进程树并终止 owner，`stopped.json` 提供 `activeProcesses=0`，随后保存部分工作检查点并结算为 `cancelled`。默认 Codex App Server 已使用同一 Job Object 监督；任何自定义、未受监督或无凭证的 Codex 尝试仍置为 `blocked`，检查点保持为空。结果见[取消升级证据](evidence/phase1-cancel-escalation-2026-11-27.json)。
 
-`--wait` 只观察协作取消，超时以退出码 2 报告；`--force` 不会绕过停止凭证。它要求监督器发布空进程集，并要求 `owner.json` 指向的写入进程已经退出，之后才允许检查点与状态转移。`--force` 只对 Job Object 监督路径自动终止 owner；默认 Codex App Server 路径现已纳入该监督范围，自定义或未受监督的 Server 仍会保守置为 `blocked`。
+`--wait` 观察协作取消，超时以退出码 2 报告。`--force` 由 Windows Job Object 或 macOS 本地命令监督器先停止受监督进程集，再终止无响应的 owner。检查点与状态转移须等停止凭证发布，且 `owner.json` 指向的写入进程已经退出。缺少凭证的 Server 仍会保守置为 `blocked`。
 
 Codex 受监督停止契约通过三层验证：受监督 stdio fixture 完成双向管道回显并发布停止凭证；Adapter 缺少 `activeProcesses=0` 时拒绝返回成功，Worker 不保存检查点并阻塞任务；本机 Codex CLI 0.172.0 的 `app-server` 完成零推理初始化和关闭，返回 `exitCode=0`、`activeProcesses=0`、`reason=worker_exit`。可用 `bun run poc/codex-app-server-guarded-smoke.ts <codex.exe>` 复跑。结果见[Codex 受监督停止证据](evidence/phase1-codex-supervised-stop-2026-11-27.json)。
 
-本地 fixture 可在 Lane 中配置为 `["bun", "run", "src/fixture-agent.ts", "complete"]`。当前受监督命令 Adapter 和 OpenCode Adapter 只支持 Windows，并复用 Phase 0 已验证的 `poc/guard-win.ps1` 与 `GuardWin.cs`；打包前需要将监督器提升为独立发布制品。
+## macOS 本地命令验证
+
+Apple Silicon 上已用 macOS 26.6.2、Bun 1.4.5、Git 2.56.1 和 Apple clang 21 验证。运行需要 Bun、Git 以及 Xcode 或 Command Line Tools 提供的 `/usr/bin/cc`。例如，在 macOS 终端运行以下命令复跑本地 PoC 和 App Server 零推理预检。
+
+```sh
+bun run src/cli.ts config validate --config quotaflow.config.example.json
+bun test
+bun run build
+bun dist/cli.js --help
+bun run poc/demo.ts
+node poc/app-server-preflight.mjs codex --transport stdio
+```
+
+在本地 Lane 的 `command` 中指定可执行文件和参数。使用 fixture 时，为 `src/fixture-agent.ts` 提供绝对路径，因为命令会在任务工作树中运行。示例配置中的额度窗口仍为占位值，使用 fixture 时可为 `local` Lane 配置有测试余量的窗口。
+
+启动前先写入 `launch.json`，再由独立的原生监督器创建命令进程组。命令退出、额度中断、超时、取消或控制器退出后，监督器收回该组并用内核进程列表验证停止。`--force` 先停止该组，再终止仍在运行的 owner。只有在旧 owner 退出并收到凭证后，恢复流程才提交检查点。凭证缺失时保留活动尝试和工作树写入权。
+
+macOS 监督适用于可信的前台命令。整个工作负载须留在初始进程组中，另起进程组或会话的工作负载需使用其他监督方式。实测 Codex CLI 0.171.0 的 `command/exec` 会为 shell 创建独立进程组。OpenCode 1.19.6 的 shell 工具也会在非 Windows 平台以 detached 模式启动。默认 Codex App Server 和 OpenCode Lane 继续使用 Windows Job Object。 [OpenCode shell 实现](https://github.com/anomalyco/opencode/blob/v1.19.6/packages/core/src/tool/bash.ts)
+
+打包后的 CLI 在 QuotaFlow 临时克隆中完成了强制终止控制器、验证子进程停止、保存检查点、重建工作树和第二次尝试。复跑 `worker recover` 未产生重复恢复。Codex 安装版通过 `/bin/sh` 写入和读回预检，OpenCode 安装版使用模拟的环回响应完成一次 `step_finish`。两项 CLI 验证均使用临时配置，远程模型请求为 0。 [macOS 验证记录](evidence/phase1-macos-supervision-2026-11-27.json)
 
 ## 尚未完成
 
-- 非 Windows 平台上的 Job Object 等价停止凭证和进程回收验证。
+- Linux 进程监督，以及 macOS 上跨进程组的默认模型适配器停止凭证。
 - 自定义或未受监督 Codex App Server 工厂的停止契约；缺少凭证时仍会保守置为 `blocked`。
 - 基于实际 Provider 账单的预算归属；当前预算只使用网关估算租约。
-- 真实任务级端到端测试、Worktree 生命周期自动化和 Linux／macOS 行为验证。
+- 真实模型任务的端到端验证和 Worktree 生命周期自动化。
 
 ## 下一里程碑
 
-1. 扩展 Linux／macOS 进程回收验证，并完成真实仓库端到端恢复演练。
+1. 扩展 Linux 进程回收验证，明确 macOS 上跨进程组的模型适配器监督方式。
 2. 完善预算租约的过期审计、恢复后冷却联动和重试策略，继续保留服务商账单为 `UNKNOWN`。
 3. 在 mcarplay 或等价真实仓库完成端到端任务，并补并发、额度等待和失败恢复测试。

@@ -1,12 +1,11 @@
-import { spawn, spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { launchSupervised, type SupervisorStop } from '../src/supervisor';
 import { checkpoint, git, verifyCheckpoint } from './git.ts';
 import { State, type Attempt, type Lane } from './state.ts';
 
-type Stop = { workerPid: number; activeProcesses: number; exitCode: number | null; reason: string };
 type Outcome = { kind: 'quota' | 'success'; completed: string[]; pending: string[]; tests: string };
 export type FirstMode = 'quota' | 'worker-exit' | 'hold';
 const source = (name: string) => fileURLToPath(new URL(name, import.meta.url));
@@ -28,7 +27,7 @@ async function waitFor<T>(readValue: () => T | null, deadline = 14_000) {
 
 function checkGuard(dir: string) {
   if (existsSync(join(dir, 'guard-error.txt'))) throw new Error(readFileSync(join(dir, 'guard-error.txt'), 'utf8'));
-  return read<Stop>(join(dir, 'stopped.json'));
+  return read<SupervisorStop>(join(dir, 'stopped.json'));
 }
 
 async function recoverStop(dir: string) {
@@ -46,44 +45,12 @@ async function recoverStop(dir: string) {
 }
 
 async function launch(dir: string, workspace: string, mode: string, handoff?: string) {
-  if (process.platform !== 'win32') throw new Error('The Phase 0 process supervisor requires Windows');
-  // The input pipe requests cancellation. The supervisor also waits on the controller's process handle.
-  const guard = spawn('powershell.exe', guardArgs, {
-    windowsHide: true,
-    cwd: workspace,
-    stdio: ['pipe', 'ignore', 'pipe'],
-    env: {
-      ...process.env,
-      QUOTAFLOW_GUARD_EXE: process.execPath,
-      QUOTAFLOW_GUARD_ARGS: JSON.stringify({ args: [source('fixture-worker.ts'), mode, dir, ...(handoff ? [handoff] : [])] }),
-      QUOTAFLOW_GUARD_CWD: workspace,
-      QUOTAFLOW_GUARD_STATUS: dir,
-      QUOTAFLOW_GUARD_OWNER: String(process.pid),
-      QUOTAFLOW_GUARD_CREATED_BY: String(Date.now()),
-      QUOTAFLOW_GUARD_JOB: `QuotaFlow-Phase0-${randomUUID()}`,
-      QUOTAFLOW_GUARD_VERIFY: '0',
-    },
-  });
-  let guardExit: number | null = null;
-  guard.on('error', () => { guardExit = 70; });
-  guard.on('close', (code) => { guardExit = code ?? 70; });
-  let diagnostics = '';
-  guard.stderr.on('data', (chunk) => { diagnostics = (diagnostics + String(chunk)).slice(-2000); });
-  guard.stdin.on('error', () => {});
-  try {
-    // Quota exhaustion freezes the entire Job Object before the checkpoint is made.
-    return await waitFor(() => {
-      if (read<Outcome>(join(dir, 'outcome.json'))?.kind === 'quota' && !guard.stdin.writableEnded) guard.stdin.end();
-      const proof = checkGuard(dir);
-      if (!proof && guardExit !== null) throw new Error(`Supervisor exited without a stop receipt (${guardExit}) ${diagnostics.trim()}`);
-      return proof;
-    }, 35_000);
-  } finally {
-    guard.stdin.end();
-  }
+  const command = [process.execPath, source('fixture-worker.ts'), mode, dir, ...(handoff ? [handoff] : [])];
+  const { stop } = await launchSupervised(command, workspace, dir, { timeoutMs: 35_000 });
+  return stop;
 }
 
-function finish(root: string, store: State, attempt: Attempt, stop: Stop, fault?: string) {
+function finish(root: string, store: State, attempt: Attempt, stop: SupervisorStop, fault?: string) {
   const task = store.get(attempt.task);
   const dir = join(root, `attempt-${attempt.id}`);
   const expected = read<Outcome>(join(dir, 'outcome.json'));

@@ -7,6 +7,8 @@ import { createLab, git, restoreNewWorktree, verifyCheckpoint, worktree } from '
 import { drive, fixtureLanes } from './run.ts';
 import { State, type Lane } from './state.ts';
 
+const supervisedTest = test.skipIf(process.platform !== 'win32' && process.platform !== 'darwin');
+
 function setup() {
   const lab = createLab();
   const state = new State(join(lab.root, 'phase0.sqlite'));
@@ -46,7 +48,7 @@ function checkCompleted(root: string, workspace: string) {
   }
 }
 
-test('quota signal stops descendants and hands staged, unstaged, deleted and untracked files to a new agent', async () => {
+supervisedTest('quota signal stops descendants and hands staged, unstaged, deleted and untracked files to a new agent', async () => {
   const lab = setup();
   const first = await drive(lab.root, 'task', 'quota');
   expect(first.state).toBe('pending');
@@ -60,7 +62,7 @@ test('quota signal stops descendants and hands staged, unstaged, deleted and unt
   checkCompleted(lab.root, lab.workspace);
 }, 60_000);
 
-test('a worker exiting with an active descendant is contained and another agent finishes', async () => {
+supervisedTest('a worker exiting with an active descendant is contained and another agent finishes', async () => {
   const lab = setup();
   await drive(lab.root, 'task', 'worker-exit');
   const stop = JSON.parse(readFileSync(join(lab.root, 'attempt-1', 'stopped.json'), 'utf8'));
@@ -69,14 +71,18 @@ test('a worker exiting with an active descendant is contained and another agent 
   checkCompleted(lab.root, lab.workspace);
 }, 60_000);
 
-test('forcing the controller to exit closes the old job and recovery restarts the task', async () => {
+supervisedTest('forcing the controller to exit stops the old processes and recovery restarts the task', async () => {
   const lab = setup();
   const run = controller(lab.root, 'hold');
   try {
     await waitForFile(join(lab.root, 'attempt-1', 'ready.json'), run);
     await waitForFile(join(lab.root, 'attempt-1', 'heartbeat'), run);
-    const killed = spawnSync('taskkill.exe', ['/PID', String(run.pid), '/F'], { windowsHide: true });
-    expect(killed.status).toBe(0);
+    if (process.platform === 'win32') {
+      const killed = spawnSync('taskkill.exe', ['/PID', String(run.pid), '/F'], { windowsHide: true });
+      expect(killed.status).toBe(0);
+    } else {
+      run.kill('SIGKILL');
+    }
     expect(await run.exited).not.toBe(0);
   } finally {
     if (run.exitCode === null) run.kill('SIGKILL');
@@ -93,7 +99,7 @@ test('forcing the controller to exit closes the old job and recovery restarts th
 }, 60_000);
 
 for (const [fault, exit] of [['before-ref', 91], ['after-ref', 92]] as const) {
-  test(`checkpoint survives a controller exit ${fault} without a duplicate Git reference`, async () => {
+  supervisedTest(`checkpoint survives a controller exit ${fault} without a duplicate Git reference`, async () => {
     const lab = setup();
     const run = controller(lab.root, 'quota', fault);
     expect(await run.exited).toBe(exit);

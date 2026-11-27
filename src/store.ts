@@ -634,12 +634,19 @@ export class TaskStore {
     }).immediate();
   }
 
-  block(taskId: string, reason: string, now = Date.now()): Task {
+  block(
+    taskId: string,
+    reason: string,
+    now = Date.now(),
+    expected?: { attemptId: number; detail?: Record<string, unknown> },
+  ): Task {
     return this.db.transaction(() => {
       const task = this.getTask(taskId);
       if (task.status === 'completed' || task.status === 'cancelled') return task;
+      const active = this.activeAttempt(taskId);
+      if (expected && (expected.attemptId !== active?.id || task.status === 'blocked')) return task;
       this.#updateStatus(taskId, 'blocked', null, now);
-      this.#event(taskId, this.activeAttempt(taskId)?.id ?? null, 'blocked', { reason, now });
+      this.#event(taskId, active?.id ?? null, 'blocked', { reason, ...expected?.detail, now });
       return this.getTask(taskId);
     }).immediate();
   }

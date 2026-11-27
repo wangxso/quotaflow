@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { join } from 'node:path';
 import type { Attempt, QuotaFlowConfig } from './domain';
 import type { TaskStore } from './store';
-import { verifySupervisedStop, type SupervisorStop } from './supervisor';
+import { supervisorLaunchFile, verifySupervisedStop, type SupervisorStop } from './supervisor';
 import { checkpoint } from './worktree';
 
 export interface AttemptOwner {
@@ -131,7 +131,7 @@ export function recoverInterruptedAttempts(
     const owner = readAttemptOwner(statusDir);
     const ownerPid = owner?.pid ?? null;
     const ownerAlive = ownerPid === null ? null : probe(ownerPid);
-    const launched = existsSync(join(statusDir, 'ready.json'));
+    const launched = existsSync(join(statusDir, supervisorLaunchFile)) || existsSync(join(statusDir, 'ready.json'));
     const stopPresent = existsSync(join(statusDir, 'stopped.json'));
 
     if (ownerAlive === true) {
@@ -158,18 +158,16 @@ export function recoverInterruptedAttempts(
 
     if (!supervisorStop && (launched || stopPresent)) {
       try {
-        store.recoverAttempt(attempt.id, {
-          status: 'blocked',
-          reason: 'writer_stop_unverified',
+        const blocked = store.block(task.id, 'writer_stop_unverified', now, {
+          attemptId: attempt.id,
           detail: { ownerPid, verificationError },
-          now,
         });
         items.push({
           taskId: task.id,
           attemptId: attempt.id,
           agent: attempt.agent,
-          outcome: 'blocked',
-          reason: 'writer_stop_unverified',
+          outcome: blocked.status === 'blocked' ? 'blocked' : 'skipped',
+          reason: blocked.status === 'blocked' ? 'writer_stop_unverified' : 'attempt_no_longer_active',
           ownerPid,
           error: verificationError ?? undefined,
         });

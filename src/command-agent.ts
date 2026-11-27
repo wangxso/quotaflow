@@ -39,6 +39,7 @@ export function supervisedCommandAgent(lane: LaneConfig): AgentAdapter {
     id: `command:${lane.id}`,
     async run(context) {
       const { stop, outcome } = await launchSupervised(command, context.workspacePath, context.attemptDir, {
+        timeoutMs: lane.timeoutMs,
         signal: context.signal,
       });
       const cancelled = Boolean(context.signal?.aborted) || stop.reason === 'cancelled';

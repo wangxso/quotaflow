@@ -13,6 +13,8 @@ import { TaskStore } from './store';
 import { runOnce } from './worker';
 import { checkpoint, ensureWorktree, restoreCheckpoint, worktreeGit } from './worktree';
 
+const supervisedTest = test.skipIf(process.platform !== 'win32' && process.platform !== 'darwin');
+
 function setup() {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-worker-'));
   const repo = join(root, 'repo');
@@ -258,7 +260,7 @@ test('worker cooperatively cancels an active adapter and saves a checkpoint', as
   }
 });
 
-test('worker blocks without a checkpoint when an agent cannot verify process stop', async () => {
+test.each(['missing receipt', 'active processes'])('worker blocks without a checkpoint for %s', async (stop) => {
   const { root, repo, db, store, config } = setup();
   try {
     store.createTask({
@@ -271,7 +273,8 @@ test('worker blocks without a checkpoint when an agent cannot verify process sto
       id: 'unverified-stop',
       async run(context) {
         writeFileSync(join(context.workspacePath, 'app.txt'), 'partial\n');
-        throw new ProcessStopUnverifiedError('missing supervisor receipt');
+        if (stop === 'missing receipt') throw new ProcessStopUnverifiedError('missing supervisor receipt');
+        return { status: 'completed', reason: 'fixture_returned', tests: 'passed', activeProcesses: 1 };
       },
     }));
 
@@ -292,8 +295,7 @@ test('worker blocks without a checkpoint when an agent cannot verify process sto
   }
 });
 
-test('worker checkpoints and parks a quota-held supervised task', async () => {
-  if (process.platform !== 'win32') return;
+supervisedTest('worker checkpoints and parks a quota-held supervised task', async () => {
   const { root, repo, db, store, config } = setup();
   try {
     config.lanes[0].command = [
@@ -339,10 +341,10 @@ test('worker checkpoints and parks a quota-held supervised task', async () => {
   }
 });
 
-test('worker recovers a crashed controller from verified supervisor evidence', async () => {
-  if (process.platform !== 'win32') return;
+supervisedTest('worker recovers a crashed controller from verified supervisor evidence', async () => {
   const { root, repo, db, config } = setup();
   let fileDb: ReturnType<typeof openDatabase> | null = null;
+  let crashed: ReturnType<typeof Bun.spawn> | null = null;
   try {
     const fixture = fileURLToPath(new URL('./fixture-agent.ts', import.meta.url));
     const helper = fileURLToPath(new URL('./recovery-crash-helper.ts', import.meta.url));
@@ -354,7 +356,7 @@ test('worker recovers a crashed controller from verified supervisor evidence', a
       defaultRepo: repo,
       lanes: [{
         ...config.lanes[0],
-        command: [process.execPath, fixture, 'quota'],
+        command: [process.execPath, fixture, 'hold'],
       }],
     };
     const configFile = join(root, 'crash.config.json');
@@ -368,7 +370,7 @@ test('worker recovers a crashed controller from verified supervisor evidence', a
       workspacePath: join(root, 'crash-task'),
     });
 
-    const crashed = Bun.spawn([
+    crashed = Bun.spawn([
       process.execPath,
       helper,
       configFile,
@@ -388,13 +390,20 @@ test('worker recovers a crashed controller from verified supervisor evidence', a
     }
     if (!first) throw new Error('Crash helper did not reserve an attempt');
     const statusDir = attemptDirectory(helperConfig, first.taskId, first.attemptId);
+    const app = join(root, 'crash-task', 'app.txt');
+    const ready = () => existsSync(join(statusDir, 'ready.json'))
+      && existsSync(app) && readFileSync(app, 'utf8') === 'partial\n';
     const readyDeadline = Date.now() + 10_000;
-    while (!existsSync(join(statusDir, 'ready.json')) && Date.now() < readyDeadline) {
+    while (!ready() && Date.now() < readyDeadline && crashed.exitCode === null) {
       await Bun.sleep(30);
     }
-    expect(existsSync(join(statusDir, 'ready.json'))).toBe(true);
-    const killed = spawnSync('taskkill.exe', ['/PID', String(crashed.pid), '/F'], { windowsHide: true });
-    expect(killed.status).toBe(0);
+    expect(ready()).toBe(true);
+    if (process.platform === 'win32') {
+      const killed = spawnSync('taskkill.exe', ['/PID', String(crashed.pid), '/F'], { windowsHide: true });
+      expect(killed.status).toBe(0);
+    } else {
+      crashed.kill('SIGKILL');
+    }
     expect(await crashed.exited).not.toBe(0);
     const deadline = Date.now() + 15_000;
     while (!existsSync(join(statusDir, 'stopped.json')) && Date.now() < deadline) {
@@ -403,6 +412,7 @@ test('worker recovers a crashed controller from verified supervisor evidence', a
     expect(existsSync(join(statusDir, 'stopped.json'))).toBe(true);
     expect(JSON.parse(readFileSync(join(statusDir, 'stopped.json'), 'utf8'))).toMatchObject({
       activeProcesses: 0,
+      reason: 'controller_closed',
     });
 
     helperConfig.lanes[0].command = [process.execPath, fixture, 'complete'];
@@ -421,6 +431,7 @@ test('worker recovers a crashed controller from verified supervisor evidence', a
       .toMatchObject({ reason: 'worker_restart_verified', recovered: true });
     expect(readFileSync(join(root, 'crash-task', 'app.txt'), 'utf8')).toBe('agent\n');
   } finally {
+    if (crashed?.exitCode === null) crashed.kill();
     fileDb?.close();
     db.close();
     try {
@@ -495,8 +506,7 @@ test('worker prepares a new worktree when a checkpoint exists', async () => {
   }
 });
 
-test('worker runs a supervised command adapter end to end', async () => {
-  if (process.platform !== 'win32') return;
+supervisedTest('worker runs a supervised command adapter end to end', async () => {
   const { root, repo, db, store, config } = setup();
   try {
     config.lanes[0].command = [

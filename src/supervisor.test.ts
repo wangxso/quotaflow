@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { launchGuardedAppServer, launchSupervised, verifySupervisedStop } from './supervisor';
 
 const fixture = fileURLToPath(new URL('./fixture-agent.ts', import.meta.url));
+const supervisedTest = test.skipIf(process.platform !== 'win32' && process.platform !== 'darwin');
 
 async function removeEventually(path: string) {
   for (let attempt = 0; attempt < 40; attempt += 1) {
@@ -22,8 +23,7 @@ async function removeEventually(path: string) {
   rmSync(path, { recursive: true, force: true });
 }
 
-test('supervised fixture confirms process stop before returning', async () => {
-  if (process.platform !== 'win32') return;
+supervisedTest('supervised fixture confirms process stop before returning', async () => {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-supervisor-'));
   try {
     const status = join(root, 'attempt');
@@ -38,8 +38,7 @@ test('supervised fixture confirms process stop before returning', async () => {
   }
 });
 
-test('supervised fixture stops a quota-held worker after its outcome', async () => {
-  if (process.platform !== 'win32') return;
+supervisedTest('supervised fixture stops a quota-held worker after its outcome', async () => {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-supervisor-'));
   try {
     const result = await launchSupervised(
@@ -54,8 +53,7 @@ test('supervised fixture stops a quota-held worker after its outcome', async () 
   }
 });
 
-test('an abort signal stops the supervised job before returning', async () => {
-  if (process.platform !== 'win32') return;
+supervisedTest('an abort signal stops the supervised command before returning', async () => {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-supervisor-cancel-'));
   try {
     const status = join(root, 'attempt');
@@ -79,8 +77,7 @@ test('an abort signal stops the supervised job before returning', async () => {
   }
 });
 
-test('a cancellation flag stops the job and reports an empty process set', async () => {
-  if (process.platform !== 'win32') return;
+supervisedTest('a cancellation flag stops the command and reports an empty process set', async () => {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-supervisor-force-'));
   try {
     const status = join(root, 'attempt');
@@ -108,8 +105,7 @@ test('a cancellation flag stops the job and reports an empty process set', async
   }
 });
 
-test('guarded stdio keeps the worker pipe live and publishes a stop receipt', async () => {
-  if (process.platform !== 'win32') return;
+test.skipIf(process.platform !== 'win32')('guarded stdio keeps the worker pipe live and publishes a stop receipt', async () => {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-supervisor-stdio-'));
   try {
     const status = join(root, 'attempt');
@@ -146,8 +142,7 @@ test('guarded stdio keeps the worker pipe live and publishes a stop receipt', as
   }
 }, 20_000);
 
-test('verification reconstructs a missing stop receipt only after the job is empty', async () => {
-  if (process.platform !== 'win32') return;
+test.skipIf(process.platform !== 'win32')('verification reconstructs a missing stop receipt only after the job is empty', async () => {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-supervisor-verify-'));
   try {
     const status = join(root, 'attempt');
@@ -160,3 +155,15 @@ test('verification reconstructs a missing stop receipt only after the job is emp
     await removeEventually(root);
   }
 });
+
+supervisedTest('command timeout reports failure only after verifying process stop', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'quotaflow-supervisor-timeout-'));
+  try {
+    const status = join(root, 'attempt');
+    await expect(launchSupervised([process.execPath, fixture, 'hold'], root, status, { timeoutMs: 1000 }))
+      .rejects.toThrow('Timed out waiting for the supervised command');
+    expect(verifySupervisedStop(status)).toMatchObject({ activeProcesses: 0, reason: 'controller_closed' });
+  } finally {
+    await removeEventually(root);
+  }
+}, 15_000);

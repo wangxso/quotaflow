@@ -4,13 +4,13 @@
 
 QuotaFlow schedules AI software development tasks using account quotas, concurrency limits, and budgets. It runs Codex or OpenCode in dedicated Git worktrees and saves checkpoints so interrupted work can resume.
 
-**Status as of 2026-11-27.** Phase 0 passed its technical gate with conditions, and the Phase 1 single-host CLI is in development. Phase 0 demonstrated Codex writing changes, checkpointing, and OpenCode resuming in a temporary repository. Phase 1 has verified Magpie-routed tasks, request-level usage reconciliation for OpenCode, supervised task recovery on Windows, and supervised shutdown for Codex App Server. The first GitHub pilot is planned for Phase 2 with `mcarplay`. [Phase 0 gate results](docs/PHASE-0-GATE-CLOSURE.md) · [Phase 1 implementation and verification](docs/PHASE-1.md)
+**Status as of 2026-11-27.** Phase 0 passed its technical gate with conditions and demonstrated Codex writing changes, Git checkpointing, and OpenCode resuming in a temporary repository. The Phase 1 single-host CLI is in development. Windows verification covers Magpie-routed tasks, request-level OpenCode usage reconciliation, and supervised recovery. macOS verification covers local command cancellation, child process cleanup, and recovery from a Git checkpoint. The first GitHub pilot is planned for Phase 2 with `mcarplay`. [Phase 0 gate results](docs/PHASE-0-GATE-CLOSURE.md) · [Phase 1 implementation and verification](docs/PHASE-1.md)
 
 ## Current capabilities
 
 - **Scheduling.** SQLite stores tasks, attempts, and events. The scheduler reserves account concurrency slots, quota, and any configured budget in one transaction.
-- **Execution and recovery.** The CLI can submit, inspect, cancel, and retry tasks. The Windows Job Object supervisor covers the default Codex App Server, OpenCode, and supervised commands. Checkpointing and recovery require confirmation that the previous process tree has stopped. Attempts without stop verification become `blocked`.
-- **Adapters and usage.** QuotaFlow supports Codex App Server, OpenCode, and supervised commands. Magpie routing requires explicit configuration approval. Gateway estimates back budget leases, and provider invoice attribution remains `UNKNOWN`. These execution paths currently run on Windows only. [Configuration and adapter details](docs/PHASE-1.md)
+- **Execution and recovery.** The CLI can submit, inspect, cancel, and retry tasks. Windows uses Job Objects. macOS supports supervised local `command` lanes whose commands and children stay in the original process group. Checkpointing and recovery require a stop receipt. A launched supervised attempt with a missing receipt stays `blocked` and retains write ownership.
+- **Adapters and usage.** The default Codex App Server and OpenCode adapters require Windows process supervision. Magpie routing requires explicit configuration approval. Gateway estimates back budget leases, and provider invoice attribution remains `UNKNOWN`. [Configuration and adapter details](docs/PHASE-1.md)
 
 ## Quick start
 
@@ -34,7 +34,7 @@ bun run src/cli.ts task events TASK_ID
 bun run src/cli.ts budget status
 ```
 
-On Windows, run `bun run poc/demo.ts` to see a simulated quota interruption and checkpoint handoff in a temporary Git repository. The demo uses fixture agents and requires no model credentials. Use `bun test` for the test suite and `bun run build` to bundle the CLI into `dist/`. [PoC instructions](poc/README.md)
+On Windows or macOS, run `bun run poc/demo.ts` to see a simulated quota interruption and checkpoint handoff in a temporary Git repository. The demo uses fixture agents and requires no model credentials. macOS also requires the C compiler from Xcode or Command Line Tools. Use `bun test` for the test suite and `bun run build` to bundle the CLI into `dist/`. [PoC instructions](poc/README.md) · [macOS verification](docs/PHASE-1.md#macos-本地命令验证)
 
 ## Documentation
 

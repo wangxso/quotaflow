@@ -1,0 +1,101 @@
+{
+  "recordedOn": "2026-11-27",
+  "environment": {
+    "os": "macOS 26.6.2",
+    "build": "25G83",
+    "architecture": "arm64",
+    "bun": "1.4.5",
+    "git": "2.56.1",
+    "compiler": "Apple clang 21.0.0",
+    "node": "24.11.1"
+  },
+  "verification": {
+    "bunTest": {
+      "passed": 83,
+      "failed": 0,
+      "skipped": [
+        "Windows guarded App Server stdio",
+        "Windows Job Object stop receipt reconstruction"
+      ]
+    },
+    "checksPassed": [
+      "bun run build",
+      "bun dist/cli.js --help",
+      "bun dist/cli.js config validate --config quotaflow.config.example.json",
+      "git diff --check"
+    ],
+    "phase0Demo": {
+      "command": "bun run poc/demo.ts",
+      "result": "completed",
+      "answer": 42,
+      "scenarios": ["injected quota interruption", "verified stop", "checkpoint handoff"]
+    },
+    "supervisedCommands": [
+      "normal completion",
+      "descendant cleanup after command exit",
+      "quota interruption",
+      "timeout with verified stop",
+      "cooperative cancellation from a second CLI",
+      "forced cancellation of an unresponsive owner",
+      "controller crash and checkpoint recovery",
+      "missing receipt retains the writer claim"
+    ],
+    "delayedSupervisor": {
+      "injectedFault": "SIGSTOP to the guard until the command and stop timeouts elapsed",
+      "controllerExitedWithUnverifiedStop": true,
+      "stopAfterResume": { "activeProcesses": 0, "reason": "controller_closed" }
+    }
+  },
+  "repositoryRecovery": {
+    "repository": "QuotaFlow temporary clone",
+    "base": "9dd01cf3ab33a8861e920a7e98d467b45c91eb52",
+    "cli": "dist/cli.js",
+    "injectedFault": "SIGKILL to worker once after its descendant started appending a heartbeat",
+    "controllerExitCode": 137,
+    "stop": { "activeProcesses": 0, "reason": "controller_closed" },
+    "heartbeatStopped": true,
+    "recoveryReason": "worker_restart_verified",
+    "firstCheckpoint": "36c55df7acc038ba574fc5dc3499726ff1c8a2c4",
+    "repeatedRecoveryCount": 0,
+    "restoredFromCheckpointInNewWorktree": true,
+    "resumeStop": { "activeProcesses": 0, "exitCode": 0, "reason": "worker_exit" },
+    "finalStatus": "completed",
+    "finalCheckpoint": "2cbb2ffc8dd2d6c07ee3f8e8b8ae35edc94b8894",
+    "finalTree": "017b9dde260030019fde7c497da5cdfa045e9927",
+    "changedFiles": ["quotaflow-macos-smoke.txt"],
+    "testsFromRestoredWorktree": { "command": "bun test src/store.test.ts", "passed": 14 },
+    "cloneMainCheckoutClean": true,
+    "events": [
+      "task_created",
+      "attempt_reserved",
+      "attempt_recovered",
+      "attempt_finished",
+      "attempt_reserved",
+      "checkpoint_intent",
+      "attempt_finished"
+    ]
+  },
+  "providerCliRuntime": {
+    "codex": {
+      "version": "0.171.0",
+      "command": "node poc/app-server-preflight.mjs codex --transport stdio",
+      "initialize": "ok",
+      "shell": "/bin/sh",
+      "sandboxPolicy": "workspaceWrite",
+      "exitCode": 0,
+      "fileWrittenAndReadBack": true,
+      "inferenceCalls": 0,
+      "commandExecShellUsedSeparateProcessGroup": true
+    },
+    "opencode": {
+      "version": "1.19.6",
+      "command": "opencode run --pure --format json with an isolated profile and a loopback SSE fixture",
+      "exitCode": 0,
+      "loopbackRequests": 2,
+      "stepFinishes": 1,
+      "fixtureTextReceived": true,
+      "remoteModelRequests": 0
+    }
+  },
+  "scope": "macOS stop receipts cover the initial process group for trusted local commands. The default Codex App Server and OpenCode lanes use Windows Job Object supervision."
+}

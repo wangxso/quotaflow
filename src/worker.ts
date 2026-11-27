@@ -120,7 +120,9 @@ export async function runOnce(
       attemptDir: statusDir,
       signal: cancellation.signal,
     });
-    if ((result.activeProcesses ?? 0) !== 0) throw new Error('Agent left active processes after returning');
+    if ((result.activeProcesses ?? 0) !== 0) {
+      throw new ProcessStopUnverifiedError('Agent left active processes after returning');
+    }
     const cancelled = cancellation.signal.aborted || store.cancelRequested(task.id, attempt.id);
     const checkpointSha = checkpoint(task.workspacePath, config.worktreeRoot, task.id, attempt.id);
     const settledAt = finishedAt();
@@ -150,7 +152,7 @@ export async function runOnce(
     };
   } catch (error) {
     if (error instanceof ProcessStopUnverifiedError) {
-      const blocked = store.block(task.id, 'process_stop_unverified', finishedAt());
+      const blocked = store.block(task.id, 'process_stop_unverified', finishedAt(), { attemptId: attempt.id });
       return {
         task: blocked,
         attempt: store.getAttempt(attempt.id),

@@ -10,6 +10,7 @@ import {
   writeAttemptOwner,
 } from './recovery';
 import { TaskStore } from './store';
+import { supervisorLaunchFile } from './supervisor';
 import { ensureWorktree, worktreeGit } from './worktree';
 
 function setup() {
@@ -115,6 +116,48 @@ test('an unverified Codex writer blocks recovery instead of transferring write a
       reason: 'writer_unverified',
       recovered: true,
     });
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a launch intent retains the writer claim until the stop receipt arrives', () => {
+  const { root, repo, now, config, db, store } = setup();
+  try {
+    config.lanes[0].command = ['fixture'];
+    const workspace = ensureWorktree(repo, join(root, 'in-flight'));
+    store.createTask({
+      id: 'in-flight',
+      title: 'interrupted during launch',
+      repoPath: repo,
+      workspacePath: workspace,
+      now,
+    });
+    const { attempt } = store.reserve('in-flight', config.lanes, now)!;
+    const status = attemptDirectory(config, 'in-flight', attempt.id);
+    writeAttemptOwner(status, 999_999, now);
+    writeFileSync(join(status, supervisorLaunchFile), '{}');
+    writeFileSync(join(workspace, 'app.txt'), 'partial\n');
+    const recover = () => recoverInterruptedAttempts(store, config, { isProcessAlive: () => false });
+
+    expect(recover().items[0]).toMatchObject({ outcome: 'blocked', reason: 'writer_stop_unverified' });
+    expect(store.getTask('in-flight')).toMatchObject({ status: 'blocked', checkpoint: null });
+    expect(store.activeAttempt('in-flight')?.id).toBe(attempt.id);
+    expect(() => store.retry('in-flight')).toThrow('active attempt');
+
+    writeFileSync(join(status, 'stopped.json'), JSON.stringify({
+      supervisorPid: 100,
+      workerPid: 101,
+      exitCode: null,
+      activeProcesses: 0,
+      reason: 'controller_closed',
+    }));
+    expect(recover().items[0]).toMatchObject({ outcome: 'recovered', reason: 'worker_restart_verified' });
+    const task = store.getTask('in-flight');
+    expect(task.status).toBe('queued');
+    expect(store.activeAttempt('in-flight')).toBeNull();
+    expect(worktreeGit(workspace, ['show', `${task.checkpoint}:app.txt`])).toBe('partial');
   } finally {
     db.close();
     rmSync(root, { recursive: true, force: true });

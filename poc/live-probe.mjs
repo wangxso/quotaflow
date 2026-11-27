@@ -208,7 +208,7 @@ async function probeMagpie(address) {
 
 export { AppServer, probeCodex, probeMagpie };
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (import.meta.main ?? (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)) {
   const [mode, value] = process.argv.slice(2);
   if (mode === 'codex') console.log(JSON.stringify(await probeCodex(value ?? 'codex')));
   else if (mode === 'magpie' && value) console.log(JSON.stringify(await probeMagpie(value)));

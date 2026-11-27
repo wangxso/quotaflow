@@ -4,13 +4,13 @@
 
 QuotaFlow 是一个额度感知的 AI 软件研发调度工具。它按账户额度、并发和预算安排 Codex 或 OpenCode 执行任务，将改动保存在独立的 Git 工作树和检查点中，供中断后恢复。
 
-**当前状态（2026-11-27）**　Phase 0 技术门禁有条件通过，Phase 1 单机 CLI 正在开发。Phase 0 已在临时仓库验证 Codex 写入、保存检查点和 OpenCode 接续。Phase 1 已验证 Magpie 路由任务、OpenCode 请求级用量回写、Windows 受监督任务恢复和 Codex App Server 的受监督停止。首个 GitHub 试点计划使用 `mcarplay`，安排在 Phase 2。 [Phase 0 验收](docs/PHASE-0-GATE-CLOSURE.md) · [Phase 1 实现与验证](docs/PHASE-1.md)
+**当前状态（2026-11-27）**　Phase 0 技术门禁有条件通过，已在临时仓库验证 Codex 写入、保存检查点和 OpenCode 接续。Phase 1 单机 CLI 正在开发。Windows 已验证 Magpie 路由任务、OpenCode 请求级用量回写和受监督恢复。macOS 已验证本地命令的取消、子进程回收和 Git 检查点恢复。首个 GitHub 试点计划在 Phase 2 使用 `mcarplay`。 [Phase 0 验收](docs/PHASE-0-GATE-CLOSURE.md) · [Phase 1 实现与验证](docs/PHASE-1.md)
 
 ## 当前功能
 
 - **任务调度**　SQLite 持久化任务、尝试和事件。调度器以事务方式预留账户并发槽位、额度和已配置的预算。
-- **执行与恢复**　CLI 支持提交、查看、取消和重试任务。Windows Job Object 监督覆盖默认 Codex App Server、OpenCode 和受监督命令。确认旧进程树退出后，才能保存检查点并恢复任务。缺少停止凭证的任务进入 `blocked`。
-- **模型接入与用量**　提供 Codex App Server、OpenCode 和受监督命令适配器。Magpie 路由需要配置中的显式授权，网关估算用于预算租约，服务商账单归属仍为 `UNKNOWN`。这些执行路径目前仅支持 Windows。 [配置与适配器说明](docs/PHASE-1.md)
+- **执行与恢复**　CLI 支持提交、查看、取消和重试任务。Windows 使用 Job Object。macOS 支持受监督的本地 `command`，命令及子进程须留在初始进程组中。保存检查点和恢复任务均要求停止凭证。已启动的受监督尝试在缺少凭证时进入 `blocked`，并保留写入权。
+- **模型接入与用量**　默认 Codex App Server 与 OpenCode Adapter 需要 Windows 进程监督。Magpie 路由需要配置中的显式授权，网关估算用于预算租约，服务商账单归属仍为 `UNKNOWN`。 [配置与适配器说明](docs/PHASE-1.md)
 
 ## 快速开始
 
@@ -34,7 +34,7 @@ bun run src/cli.ts task events TASK_ID
 bun run src/cli.ts budget status
 ```
 
-在 Windows 上可运行 `bun run poc/demo.ts`，用合成执行器在临时 Git 仓库中体验额度中断和检查点接续，无需模型凭据。开发时使用 `bun test` 跑测试，使用 `bun run build` 将 CLI 打包到 `dist/`。 [PoC 复跑说明](poc/README.md)
+在 Windows 或 macOS 上可运行 `bun run poc/demo.ts`，在临时 Git 仓库中复现额度中断和检查点接续，无需模型凭据。macOS 还需要 Xcode 或 Command Line Tools 提供的 C 编译器。开发时使用 `bun test` 跑测试，使用 `bun run build` 将 CLI 打包到 `dist/`。 [PoC 复跑说明](poc/README.md) · [macOS 本地命令验证](docs/PHASE-1.md#macos-本地命令验证)
 
 ## 项目文档
 

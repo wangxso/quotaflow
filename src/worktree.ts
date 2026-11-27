@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
@@ -45,7 +45,7 @@ export function ensureWorktree(repoPath: string, workspacePath: string, base = '
       throw new Error(`Workspace path is not a directory: ${workspace}`);
     }
     const root = gitOrNull(workspace, ['rev-parse', '--show-toplevel']);
-    if (root && resolve(root) === workspace) return workspace;
+    if (root && realpathSync(root) === realpathSync(workspace)) return workspace;
     throw new Error(`Workspace path already exists and is not a Git worktree: ${workspace}`);
   }
   mkdirSync(dirname(workspace), { recursive: true });

@@ -2,14 +2,14 @@
 
 ## 本地恢复试验
 
-以仓库根目录为当前目录。使用 Windows、Git、Bun 1.4.5 及 Windows PowerShell。示例和测试自动创建专用临时仓库、SQLite 状态库和 Git Worktree。可用 `QUOTAFLOW_LAB_DIR` 指定保留临时产物的目录。
+以仓库根目录为当前目录。需要 Git 和 Bun 1.4.5。Windows 使用 Windows PowerShell，macOS 使用 Xcode 或 Command Line Tools 提供的 `/usr/bin/cc`。示例和测试自动创建专用临时仓库、SQLite 状态库和 Git Worktree。可用 `QUOTAFLOW_LAB_DIR` 指定保留临时产物的目录。
 
-```powershell
+```sh
 bun test poc/phase0.test.ts
 bun run poc/demo.ts
 ```
 
-示例输出包含额度拒绝后的两个尝试、写入者停止凭证、检查点 SHA 和任务结果。`fixture-codex` 与 `fixture-opencode` 是合成执行器。Windows Job Object 控制进程生命周期，记录进程全部退出后才允许交接。试验 Worktree 含固定的合成文件，生产文件权限隔离需要单独验证。
+示例输出包含额度拒绝后的两个尝试、写入者停止凭证、检查点 SHA 和任务结果。`fixture-codex` 与 `fixture-opencode` 是合成执行器。Windows 用 Job Object 验证进程停止，macOS 验证命令及其同组子进程停止。通过验证后才允许交接。 [macOS 监督范围](../docs/PHASE-1.md#macos-本地命令验证)
 
 ## 只读接口探测
 
@@ -24,10 +24,10 @@ Magpie 地址使用本机运行实例的实际端口。需要只读令牌的实�
 
 ## App Server 零推理预检
 
-该预检使用 App Server 的 `command/exec`，在 `workspaceWrite` 策略下执行一次 PowerShell 文件写入和读回。它不创建线程，也不发起模型推理，适合在真实 Agent 回合前排查工作区运行时。
+该预检使用 App Server 的 `command/exec`，在 `workspaceWrite` 策略下写入和读回文件。Windows 使用 PowerShell，macOS 使用 `/bin/sh`。预检的模型推理次数为 0。
 
-```powershell
-node poc/app-server-preflight.mjs $quotaCodex --transport stdio
+```sh
+node poc/app-server-preflight.mjs codex --transport stdio
 ```
 
 输出应包含 `inferenceCalls: 0`、`commandExec.status: "completed"`、`exitCode: 0` 和 `fileWritten: true`。可通过 `QUOTAFLOW_PREFLIGHT_SHELL` 指定 PowerShell 可执行文件；`--keep` 保留临时工作区用于排查。
