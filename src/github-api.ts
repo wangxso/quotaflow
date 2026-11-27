@@ -43,6 +43,13 @@ function mergeability(value: unknown): string {
   return typeof value === 'string' && value.trim() ? value.toLowerCase() : 'unknown';
 }
 
+function reviewAuthorType(value: unknown): 'user' | 'bot' | 'organization' {
+  const type = typeof value === 'string' ? value.toLowerCase() : '';
+  if (type === 'bot') return 'bot';
+  if (type === 'organization') return 'organization';
+  return 'user';
+}
+
 function apiUrl(value: string | undefined): URL {
   const parsed = new URL(value ?? defaultApiUrl);
   if (
@@ -153,9 +160,10 @@ export async function fetchGitHubPullSnapshot(
     const commitSha = optionalText(review.commit_id);
     const submittedAt = optionalText(review.submitted_at);
     if (!reviewer || !commitSha || !submittedAt) return;
+    const reviewerObject = object(reviewer, `GitHub reviews response[${index}].user`);
     reviews.push({
-      authorLogin: text(object(reviewer, `GitHub reviews response[${index}].user`).login,
-        `GitHub reviews response[${index}].user.login`),
+      authorLogin: text(reviewerObject.login, `GitHub reviews response[${index}].user.login`),
+      authorType: reviewAuthorType(reviewerObject.type),
       state: text(review.state, `GitHub reviews response[${index}].state`),
       commitSha,
       submittedAt,

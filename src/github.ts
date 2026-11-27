@@ -12,6 +12,7 @@ export interface GitHubCheckRun {
 
 export interface GitHubReview {
   authorLogin: string;
+  authorType?: 'user' | 'bot' | 'organization';
   state: string;
   commitSha: string;
   submittedAt: string;
@@ -38,6 +39,7 @@ export interface GitHubGatePolicy {
   requiredChecks?: string[];
   requiredApprovals?: number;
   allowAuthorSelfApproval?: boolean;
+  allowBotApprovals?: boolean;
 }
 
 export interface GitHubGateReason {
@@ -182,6 +184,15 @@ export function parseGitHubPullSnapshot(value: unknown): GitHubPullSnapshot {
       const review = record(entry, `update.reviews[${index}]`);
       return {
         authorLogin: stringValue(review.authorLogin, `update.reviews[${index}].authorLogin`),
+        authorType: (() => {
+          const authorType = review.authorType === undefined
+            ? 'user'
+            : stringValue(review.authorType, `update.reviews[${index}].authorType`).toLowerCase();
+          if (authorType !== 'user' && authorType !== 'bot' && authorType !== 'organization') {
+            throw new Error(`update.reviews[${index}].authorType is unsupported`);
+          }
+          return authorType;
+        })(),
         state: stringValue(review.state, `update.reviews[${index}].state`),
         commitSha: shaValue(review.commitSha, `update.reviews[${index}].commitSha`),
         submittedAt: stringValue(review.submittedAt, `update.reviews[${index}].submittedAt`),
@@ -295,6 +306,7 @@ export function evaluateGitHubPull(
   }
   const approvals = reviews.filter((review) =>
     review.state.toUpperCase() === 'APPROVED'
+    && (review.authorType !== 'bot' || policy.allowBotApprovals)
     && (policy.allowAuthorSelfApproval || review.authorLogin.toLowerCase() !== snapshot.authorLogin.toLowerCase()));
   const requiredApprovals = policy.requiredApprovals ?? 1;
   if (!Number.isInteger(requiredApprovals) || requiredApprovals < 0) {
@@ -313,6 +325,7 @@ export function evaluateGitHubPull(
     requiredChecks: requiredNames,
     requiredApprovals,
     allowAuthorSelfApproval: Boolean(policy.allowAuthorSelfApproval),
+    allowBotApprovals: Boolean(policy.allowBotApprovals),
     headSha: snapshot.headSha,
   })).digest('hex');
   return {

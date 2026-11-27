@@ -1,0 +1,72 @@
+{
+  "recordedOn": "2026-11-28",
+  "baseRevision": "7f3b247ca632f482c69465c3e4fc13a5f1ea2cc6",
+  "githubApp": {
+    "appId": 5955591,
+    "slug": "quotaflow-review-gate-wangxso",
+    "installationId": 186560843,
+    "botLogin": "quotaflow-review-gate-wangxso[bot]",
+    "repositoryAccess": [
+      "wangxso/mcarplay"
+    ],
+    "permissions": {
+      "contents": "read",
+      "metadata": "read",
+      "pullRequests": "write"
+    },
+    "privateKeyStorage": "User config directory outside the repository, mode 0600",
+    "webhook": false
+  },
+  "approvalPolicy": {
+    "defaultBotApprovals": false,
+    "localConfig": {
+      "githubApproval": {
+        "allowBotApprovals": true
+      }
+    },
+    "cliOverride": "--allow-bot-approvals",
+    "reviewPrincipal": "authorType=bot",
+    "humanMergeRequired": true
+  },
+  "review": {
+    "id": 6091237629,
+    "state": "APPROVED",
+    "authorType": "Bot",
+    "commitSha": "abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48",
+    "submittedAt": "2026-11-27T16:53:37Z"
+  },
+  "pullRequest": {
+    "number": 141,
+    "state": "open",
+    "draft": false,
+    "merged": false,
+    "mergeable": "mergeable",
+    "baseSha": "daf67e87a72aa9033a4d62f88e9a9d05ce047d9e",
+    "headSha": "abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48"
+  },
+  "gate": {
+    "status": "ready_for_human_merge",
+    "independentApprovals": 1,
+    "reasons": [],
+    "requiredChecksPassed": 3,
+    "policyHash": "92c3679511c04c84c47c0b8c7587cbb6de7bf87f12bc6ad15caf8123e7832967",
+    "action": "human_merge"
+  },
+  "verification": {
+    "botApprovalPolicyTests": 1,
+    "fullSuite": {
+      "macOS": 137,
+      "linux": 137,
+      "windowsOnlySkipped": 1,
+      "failed": 0
+    },
+    "liveSnapshotAndGate": "passed",
+    "jsonAndDiffChecks": "passed"
+  },
+  "scope": {
+    "branchProtection": "none",
+    "githubReviewDecision": "",
+    "automaticMerge": false,
+    "mergeDecision": "pending repository owner action"
+  }
+}

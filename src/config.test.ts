@@ -155,13 +155,20 @@ test('parses and validates GitHub webhook configuration', () => {
       path: '/github/webhook',
       secretEnv: 'GITHUB_WEBHOOK_SECRET',
     },
+    githubApproval: {
+      allowBotApprovals: true,
+    },
     lanes: [],
   };
-  expect(normalizeConfig(base, join(tmpdir(), 'quotaflow.config.json')).githubWebhook).toEqual(base.githubWebhook);
+  const parsed = normalizeConfig(base, join(tmpdir(), 'quotaflow.config.json'));
+  expect(parsed.githubWebhook).toEqual(base.githubWebhook);
+  expect(parsed.githubApproval).toEqual(base.githubApproval);
   expect(() => normalizeConfig({ ...base, githubWebhook: { ...base.githubWebhook, port: 0 } },
     join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubWebhook.port');
   expect(() => normalizeConfig({ ...base, githubWebhook: { ...base.githubWebhook, path: '/hooks?secret=1' } },
     join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubWebhook.path');
   expect(() => normalizeConfig({ ...base, githubWebhook: { ...base.githubWebhook, secretEnv: 'bad-name' } },
     join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubWebhook.secretEnv');
+  expect(() => normalizeConfig({ ...base, githubApproval: { allowBotApprovals: 'yes' } },
+    join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubApproval.allowBotApprovals');
 });

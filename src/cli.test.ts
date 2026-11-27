@@ -261,6 +261,27 @@ test('evaluates and idempotently stores a GitHub pull gate snapshot', async () =
     expect(repeated).toMatchObject({ duplicate: true, delivery: { duplicateDelivery: true, duplicateEvent: true } });
     const redelivered = JSON.parse((await cli(root, [...args.slice(0, 4), 'delivery-redelivery', ...args.slice(5)])).stdout);
     expect(redelivered).toMatchObject({ duplicate: true, delivery: { duplicateDelivery: false, duplicateEvent: true } });
+
+    const botApproved = JSON.parse(readFileSync(snapshotFile, 'utf8'));
+    botApproved.update.draft = false;
+    botApproved.update.reviews = [{
+      authorLogin: 'quotaflow-review-gate[bot]',
+      authorType: 'bot',
+      state: 'APPROVED',
+      commitSha: headSha,
+      submittedAt: '2026-11-27T14:05:00Z',
+    }];
+    writeFileSync(snapshotFile, JSON.stringify(botApproved));
+    const blockedBotArgs = [...args];
+    blockedBotArgs[4] = 'delivery-bot-blocked';
+    expect(JSON.parse((await cli(root, blockedBotArgs)).stdout)).toMatchObject({
+      gate: { evaluation: { status: 'blocked', independentApprovals: 0 } },
+    });
+    const allowedBotArgs = [...args, '--allow-bot-approvals'];
+    allowedBotArgs[4] = 'delivery-bot-allowed';
+    expect(JSON.parse((await cli(root, allowedBotArgs)).stdout)).toMatchObject({
+      gate: { evaluation: { status: 'ready_for_human_merge', independentApprovals: 1 } },
+    });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -3,6 +3,7 @@ import { dirname, isAbsolute, resolve } from 'node:path';
 import type {
   AgentKind,
   BudgetPolicy,
+  GitHubApprovalConfig,
   GitHubWebhookConfig,
   LaneConfig,
   Provider,
@@ -146,6 +147,14 @@ function parseGitHubWebhook(value: unknown): GitHubWebhookConfig {
   };
 }
 
+function parseGitHubApproval(value: unknown): GitHubApprovalConfig {
+  const raw = object(value, 'githubApproval');
+  if (typeof raw.allowBotApprovals !== 'boolean') {
+    fail('githubApproval.allowBotApprovals must be boolean');
+  }
+  return { allowBotApprovals: raw.allowBotApprovals };
+}
+
 export function normalizeConfig(value: unknown, file: string): QuotaFlowConfig {
   const raw = object(value, 'config');
   if (raw.version !== 1) fail('version must be 1');
@@ -198,6 +207,7 @@ export function normalizeConfig(value: unknown, file: string): QuotaFlowConfig {
     }
   }
   const githubWebhook = raw.githubWebhook === undefined ? undefined : parseGitHubWebhook(raw.githubWebhook);
+  const githubApproval = raw.githubApproval === undefined ? undefined : parseGitHubApproval(raw.githubApproval);
 
   return {
     version: 1,
@@ -206,6 +216,7 @@ export function normalizeConfig(value: unknown, file: string): QuotaFlowConfig {
     ...(raw.defaultRepo === undefined ? {} : { defaultRepo: resolvePath(root, text(raw.defaultRepo, 'defaultRepo')) }),
     routing: { allowedProviders, ...(routedModelApproval ? { routedModelApproval } : {}) },
     ...(githubWebhook ? { githubWebhook } : {}),
+    ...(githubApproval ? { githubApproval } : {}),
     budgets,
     lanes,
   };

@@ -70,7 +70,7 @@ test('fetches and normalizes a pull request with current checks and reviews', as
     mergeable: 'mergeable',
     headSha,
     checks: [{ name: 'test', conclusion: 'success' }],
-    reviews: [{ authorLogin: 'reviewer', state: 'APPROVED', commitSha: headSha }],
+    reviews: [{ authorLogin: 'reviewer', authorType: 'user', state: 'APPROVED', commitSha: headSha }],
   });
   expect(snapshot.checks[0]).not.toHaveProperty('passed');
   expect(requests).toHaveLength(3);

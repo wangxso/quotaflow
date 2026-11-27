@@ -15,6 +15,7 @@ QuotaFlow 已在 `wangxso/mcarplay` Issue #82 上创建独立 Worktree，由 Cod
 - 指定检查按名称只采用当前 HEAD 上最新一次结果。旧 HEAD 的检查和审查不会复用。
 - 所有必需检查都必须为 `completed/success`，缺失、运行中、失败或取消都会阻断。
 - 独立批准必须绑定当前 HEAD。PR 作者自批默认不计入，较新的 `CHANGES_REQUESTED` 会覆盖旧批准。
+- Bot 批准默认不计入。`githubApproval.allowBotApprovals=true` 或 `--allow-bot-approvals` 可以显式允许，门禁结果和策略哈希会保存该选择。
 - 输出始终保留 `humanMergeRequired=true`。门禁只允许进入人工合并，不执行自动合并。
 
 `github gate` 还会输出下一步动作计划。动作按当前阻断阶段排序，避免同时派出多个写任务。CI 失败和 `CHANGES_REQUESTED` 会合并成一个 Review–Fix 任务提示，修复完成后再次运行门禁才会生成独立审查动作。Draft、冲突、HEAD／base 变化和最终合并保留为人工动作。计划包含稳定的 `actionKey`、优先级、原因和可直接交给 Agent 的任务提示。
@@ -65,7 +66,9 @@ bun run src/cli.ts github gate pr.json \
 
 SQLite v8 新增 `github_deliveries` 和 `github_gate_results`，v9 为任务增加 `access_mode`。同一 GitHub delivery 重放只返回原结果，不会重复处理。相同事件内容即使换用另一个 delivery ID，也通过逻辑事件键去重。同一 delivery ID 携带不同内容会被拒绝。Gate 结果按仓库、PR、HEAD SHA 和策略哈希保存，变更 HEAD 会生成独立记录。
 
-实时快照验证中，PR #141 的三项当前 HEAD 检查均成功。2026-11-28 使用 `opencode-go/hy4-flash-free` 对同一 HEAD 完成 QuotaFlow 内部只读审查，报告为 `P1×0, P2×0, P3×0`；源仓库与审查 worktree 均保持干净。该结果尚未作为 GitHub 正式 Review 发布。PR 随后转为 Ready，HEAD／base 未变，`mergeable=mergeable`，门禁只剩 `independent_review_missing`，官方批准数仍为 0。 [Ready 门禁证据](evidence/phase2-github-ready-2026-11-28.json)
+实时快照验证中，PR #141 的三项当前 HEAD 检查均成功。2026-11-28 使用 `opencode-go/hy4-flash-free` 对同一 HEAD 完成 QuotaFlow 内部只读审查，报告为 `P1×0, P2×0, P3×0`；源仓库与审查 worktree 均保持干净。PR 随后转为 Ready，HEAD／base 未变，`mergeable=mergeable`。
+
+项目明确采用 Bot 批准路线。`quotaflow-review-gate-wangxso` GitHub App 仅安装到 `mcarplay`，拥有 Contents read、Metadata read 和 Pull requests write。它通过 9 分钟 JWT 换取单仓库短时令牌，并对当前 HEAD 提交 Review ID `6091237629`。门禁将 Review 识别为 `authorType=bot`，在显式允许后计为 1 条独立批准并进入 `ready_for_human_merge`。GitHub 仓库没有分支保护或 Ruleset，因此 GitHub 的 `reviewDecision` 仍为空，合并判断由 QuotaFlow 的显式策略完成。 [Bot 批准证据](evidence/phase2-github-bot-approval-2026-11-28.json)
 
 ## Signed Webhook 入口
 
@@ -94,7 +97,7 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
 
 - GitHub App 或最小权限凭据、公网 TLS 回调部署和反向代理。
 - 在物化前自动抓取 PR HEAD／base 到本地 Git 仓库并校验提交可用性。
-- 获取并核验 GitHub 上的正式独立批准，正式批准后才能进入人工合并。
+- 由仓库管理员确认最终代码、CI 和 Bot 批准证据后执行人工合并。
 - Check-run 日志抓取、失败分类细节和同 SHA 复跑绑定。
 - 写入应答丢失、重复 Webhook、越权请求和凭据轮换演练。
 - Draft 转 Ready、人工批准与合并操作。当前所有合并保持人工执行。
@@ -102,6 +105,6 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
 ## 下一里程碑
 
 1. 接入 GitHub App 凭据，并将本地监听器部署到受控公网反向代理。
-2. 在 PR #141 获得正式独立 GitHub Review 后重新评估门禁，由有权限的人员完成人工合并。
+2. 由仓库管理员完成 PR #141 的人工合并决定。
 3. 对后续 Review–Fix／CI 修复任务重复执行、复跑和门禁闭环。
 4. Phase 2 核心验收完成后进入 Phase 3 Dashboard 与部署。

@@ -61,6 +61,10 @@ export interface GitHubWebhookConfig {
   secretEnv: string;
 }
 
+export interface GitHubApprovalConfig {
+  allowBotApprovals: boolean;
+}
+
 export interface BudgetPolicy {
   account: string;
   unit: string;
@@ -104,6 +108,7 @@ export interface QuotaFlowConfig {
   defaultRepo?: string;
   routing: RoutingConfig;
   githubWebhook?: GitHubWebhookConfig;
+  githubApproval?: GitHubApprovalConfig;
   budgets?: BudgetPolicy[];
   lanes: LaneConfig[];
 }

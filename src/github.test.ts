@@ -111,6 +111,28 @@ test('uses the latest review per reviewer and excludes author self-approval', ()
   expect(result.independentApprovals).toBe(1);
 });
 
+test('counts a bot approval only when the policy explicitly allows bots', () => {
+  const value = snapshot();
+  value.draft = false;
+  value.reviews = [{
+    authorLogin: 'quotaflow-review-gate[bot]',
+    authorType: 'bot',
+    state: 'APPROVED',
+    commitSha: headSha,
+    submittedAt: '2026-11-27T14:05:00Z',
+  }];
+  const blocked = evaluateGitHubPull(value, { expectedHeadSha: headSha, requiredApprovals: 1 });
+  expect(blocked).toMatchObject({ status: 'blocked', independentApprovals: 0 });
+  expect(blocked.reasons.map((reason) => reason.code)).toContain('independent_review_missing');
+
+  const allowed = evaluateGitHubPull(value, {
+    expectedHeadSha: headSha,
+    requiredApprovals: 1,
+    allowBotApprovals: true,
+  });
+  expect(allowed).toMatchObject({ status: 'ready_for_human_merge', independentApprovals: 1 });
+});
+
 test('uses the latest current-head rerun for a required check', () => {
   const value = snapshot();
   value.draft = false;

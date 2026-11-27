@@ -40,7 +40,7 @@ quotaflow worker recover [--config <file>]
 quotaflow budget status [--config <file>]
 quotaflow budget audit [--limit <n>] [--config <file>]
 quotaflow github snapshot --repo <owner/repo> --pull-number <n> [--token-env <name>] [--api-url <url>] [--config <file>]
-quotaflow github gate <snapshot.json> [--delivery-id <id>] [--event-type <type>] [--expected-head <sha>] [--expected-base <sha>] [--require-check <name>]... [--required-approvals <n>] [--allow-author-self-approval] [--materialize <repo>] [--config <file>]
+quotaflow github gate <snapshot.json> [--delivery-id <id>] [--event-type <type>] [--expected-head <sha>] [--expected-base <sha>] [--require-check <name>]... [--required-approvals <n>] [--allow-author-self-approval] [--allow-bot-approvals] [--materialize <repo>] [--config <file>]
 quotaflow github webhook <payload.json> --event <type> --delivery-id <id> --signature <sha256=...> [--secret-env GITHUB_WEBHOOK_SECRET] [--config <file>]
 quotaflow github serve-webhook [--host <host>] [--port <n>] [--path <path>] [--secret-env <name>] [--config <file>]
 `.trim();
@@ -102,6 +102,7 @@ async function main() {
       allowedProviders: config.routing.allowedProviders,
       routedModelApproval: config.routing.routedModelApproval ?? null,
       githubWebhook: config.githubWebhook ?? null,
+      githubApproval: config.githubApproval ?? { allowBotApprovals: false },
       budgets: config.budgets ?? [],
       lanes: config.lanes.map((lane) => ({
         id: lane.id,
@@ -241,6 +242,8 @@ async function main() {
         throw new Error('--required-approvals must be a non-negative integer');
       }
       const allowAuthorSelfApproval = flag(rest, '--allow-author-self-approval');
+      const allowBotApprovals = flag(rest, '--allow-bot-approvals')
+        || Boolean(config.githubApproval?.allowBotApprovals);
       const materializeRepo = option(rest, '--materialize');
       const deliveryId = option(rest, '--delivery-id') ?? `local:${hashGitHubPayload(snapshot).slice(0, 24)}`;
       if (rest.length > 0) throw new Error(`Unexpected github gate arguments: ${rest.join(' ')}`);
@@ -253,6 +256,7 @@ async function main() {
           ...(requiredChecks.length ? { requiredChecks } : {}),
           ...(requiredApprovals === undefined ? {} : { requiredApprovals }),
           allowAuthorSelfApproval,
+          allowBotApprovals,
         },
         deliveryId,
         eventType,

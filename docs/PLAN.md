@@ -22,6 +22,8 @@
 
 PR #141 随后由有权限的操作者转为 Ready。重新拉取快照后，Draft 与 mergeable 阻断均消失，当前 HEAD 和 base 未变，3 条检查继续成功，门禁只剩 `independent_review_missing`。内部只读审查报告仍为 P1/P2/P3 全零，但 GitHub 正式 Review 数仍为 0，因此不满足人工合并门禁。详见 [Ready 门禁证据](evidence/phase2-github-ready-2026-11-28.json)。
 
+同日按项目决策采用 Bot 批准路线。创建 `quotaflow-review-gate-wangxso` GitHub App，仅授予仓库内容只读、元数据和 Pull Request 读写权限，并只安装到 `mcarplay`。App 对 HEAD `abc4c5b` 提交正式 `APPROVED` Review 后，QuotaFlow 通过 `githubApproval.allowBotApprovals=true` 显式计入该批准并进入 `ready_for_human_merge`。Bot 批准默认关闭，代码会读取 Review 的 `authorType`，仅在配置或 `--allow-bot-approvals` 明确允许时计入。PR 仍未自动合并。详见 [Bot 批准证据](evidence/phase2-github-bot-approval-2026-11-28.json)。
+
 ## Phase 0 · 调研与可行性验证
 
 | 顺序 | 工作 | 通过证据 |

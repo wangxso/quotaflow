@@ -18,6 +18,9 @@
     "path": "/github/webhook",
     "secretEnv": "GITHUB_WEBHOOK_SECRET"
   },
+  "githubApproval": {
+    "allowBotApprovals": false
+  },
   "budgets": [
     {
       "account": "magpie-default",
