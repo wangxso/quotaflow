@@ -121,6 +121,48 @@ test('an unverified Codex writer blocks recovery instead of transferring write a
   }
 });
 
+test('a pending cancellation is honored after a verified worker restart', () => {
+  const { root, repo, now, config, db, store } = setup();
+  try {
+    store.createTask({
+      id: 'cancel-recover',
+      title: 'cancel after restart',
+      repoPath: repo,
+      workspacePath: join(root, 'cancel-recover'),
+      now,
+    });
+    const reservation = store.reserve('cancel-recover', config.lanes, now)!;
+    const workspace = ensureWorktree(repo, join(root, 'cancel-recover'));
+    writeFileSync(join(workspace, 'app.txt'), 'partial\n');
+    const statusDir = attemptDirectory(config, 'cancel-recover', reservation.attempt.id);
+    writeAttemptOwner(statusDir, 999_999, now);
+    writeFileSync(join(statusDir, 'ready.json'), '{}');
+    store.cancel('cancel-recover', now + 1);
+
+    const report = recoverInterruptedAttempts(store, config, {
+      now: now + 10,
+      isProcessAlive: () => false,
+      verifyStop: () => ({
+        supervisorPid: 1,
+        workerPid: 2,
+        exitCode: null,
+        activeProcesses: 0,
+        reason: 'controller_closed',
+      }),
+    });
+
+    expect(report).toMatchObject({ recovered: 1, blocked: 0, skipped: 0, errors: 0 });
+    const cancelledTask = store.getTask('cancel-recover');
+    expect(cancelledTask.status).toBe('cancelled');
+    expect(typeof cancelledTask.checkpoint).toBe('string');
+    expect(store.events('cancel-recover').find((event) => event.kind === 'attempt_recovered')?.detail)
+      .toMatchObject({ reason: 'cancellation_completed', status: 'cancelled' });
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('a live worker owner is not preempted', () => {
   const { root, repo, now, config, db, store } = setup();
   try {

@@ -79,6 +79,14 @@ export class CodexAppServerAgent implements AgentAdapter {
     try {
       const initialize = await server.initialize({ experimentalApi: true });
       if (!initialize.value) throw new Error(`Codex App Server initialize failed (${initialize.code ?? 'unknown'})`);
+      if (context.signal?.aborted) {
+        return {
+          status: 'cancelled',
+          reason: 'cancelled_by_operator',
+          tests: 'not_run',
+          activeProcesses: 0,
+        };
+      }
       const runtime = await this.#preflight(server, context.workspacePath);
       if (
         runtime.commandExec.status !== 'completed'
@@ -86,6 +94,14 @@ export class CodexAppServerAgent implements AgentAdapter {
         || !runtime.commandExec.fileWritten
       ) {
         throw new Error('Codex workspace runtime preflight failed');
+      }
+      if (context.signal?.aborted) {
+        return {
+          status: 'cancelled',
+          reason: 'cancelled_by_operator',
+          tests: 'not_run',
+          activeProcesses: 0,
+        };
       }
 
       const started = await server.call('thread/start', {
@@ -98,6 +114,14 @@ export class CodexAppServerAgent implements AgentAdapter {
       });
       const threadId = started.value?.thread?.id;
       if (!threadId) throw new Error(`Codex thread creation failed (${started.code ?? 'missing thread'})`);
+      if (context.signal?.aborted) {
+        return {
+          status: 'cancelled',
+          reason: 'cancelled_by_operator',
+          tests: 'not_run',
+          activeProcesses: 0,
+        };
+      }
 
       const turn = await server.call('turn/start', {
         threadId,
@@ -113,11 +137,40 @@ export class CodexAppServerAgent implements AgentAdapter {
       const turnId = turn.value?.turn?.id;
       if (!turnId) throw new Error(`Codex turn start failed (${turn.code ?? 'missing turn'})`);
 
-      const completed = await server.notification(
-        'turn/completed',
-        (event) => event.turn?.id === turnId,
-        120_000,
-      );
+      let removeAbortListener = () => {};
+      const interrupted = new Promise<null>((resolve) => {
+        const onAbort = () => {
+          void server.call('turn/interrupt', { threadId, turnId }, 10_000).catch(() => {});
+          resolve(null);
+        };
+        if (context.signal?.aborted) {
+          onAbort();
+          return;
+        }
+        context.signal?.addEventListener('abort', onAbort, { once: true });
+        removeAbortListener = () => context.signal?.removeEventListener('abort', onAbort);
+      });
+      let completed: { turn?: { id?: string; status?: string } } | null;
+      try {
+        completed = await Promise.race([
+          server.notification(
+            'turn/completed',
+            (event) => event.turn?.id === turnId,
+            120_000,
+          ),
+          interrupted,
+        ]);
+      } finally {
+        removeAbortListener();
+      }
+      if (context.signal?.aborted) {
+        return {
+          status: 'cancelled',
+          reason: 'cancelled_by_operator',
+          tests: 'not_run',
+          activeProcesses: 0,
+        };
+      }
       if (!completed) {
         await server.call('turn/interrupt', { threadId, turnId }, 10_000);
         throw new Error('Timed out waiting for the Codex turn');

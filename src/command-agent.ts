@@ -2,7 +2,14 @@ import type { AgentAdapter } from './agent';
 import type { LaneConfig } from './domain';
 import { launchSupervised, type SupervisorOutcome } from './supervisor';
 
-function resultFrom(outcome: SupervisorOutcome | null, exitCode: number | null) {
+function resultFrom(outcome: SupervisorOutcome | null, exitCode: number | null, cancelled: boolean) {
+  if (cancelled) {
+    return {
+      status: 'cancelled' as const,
+      reason: 'cancelled_by_operator',
+      tests: 'not_run' as const,
+    };
+  }
   if (outcome?.kind === 'quota') {
     return {
       status: 'waiting_quota' as const,
@@ -31,8 +38,10 @@ export function supervisedCommandAgent(lane: LaneConfig): AgentAdapter {
   return {
     id: `command:${lane.id}`,
     async run(context) {
-      const { stop, outcome } = await launchSupervised(command, context.workspacePath, context.attemptDir);
-      const result = resultFrom(outcome, stop.exitCode);
+      const { stop, outcome } = await launchSupervised(command, context.workspacePath, context.attemptDir, {
+        signal: context.signal,
+      });
+      const result = resultFrom(outcome, stop.exitCode, Boolean(context.signal?.aborted));
       return {
         ...result,
         activeProcesses: stop.activeProcesses,

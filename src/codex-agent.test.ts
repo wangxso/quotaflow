@@ -117,3 +117,37 @@ test('does not send a turn when the zero-inference preflight fails', async () =>
   expect(calls.some((call) => call.method === 'thread/start')).toBe(false);
   expect(calls.some((call) => call.method === 'turn/start')).toBe(false);
 });
+
+test('cancellation interrupts the active turn and closes the server', async () => {
+  const calls: Array<{ method: string; params: unknown }> = [];
+  const server = fakeServer(calls);
+  server.notification = async () => new Promise(() => {});
+  let closed = false;
+  server.close = async () => {
+    closed = true;
+  };
+  const agent = new CodexAppServerAgent(
+    lane,
+    () => server,
+    async () => ({
+      inferenceCalls: 0,
+      commandExec: { status: 'completed', exitCode: 0, fileWritten: true },
+    }),
+  );
+  const controller = new AbortController();
+  const running = agent.run({ ...context, signal: controller.signal });
+  const deadline = Date.now() + 1_000;
+  while (!calls.some((call) => call.method === 'turn/start') && Date.now() < deadline) {
+    await Bun.sleep(1);
+  }
+  controller.abort();
+  const result = await running;
+  expect(result).toMatchObject({
+    status: 'cancelled',
+    reason: 'cancelled_by_operator',
+    tests: 'not_run',
+    activeProcesses: 0,
+  });
+  expect(calls.some((call) => call.method === 'turn/interrupt')).toBe(true);
+  expect(closed).toBe(true);
+});

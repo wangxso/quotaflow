@@ -4,6 +4,7 @@ export type AgentKind = 'codex' | 'opencode';
 export const TASK_STATUSES = [
   'queued',
   'running',
+  'cancelling',
   'waiting_quota',
   'waiting_dependency',
   'waiting_human',

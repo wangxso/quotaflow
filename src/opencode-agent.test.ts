@@ -235,6 +235,34 @@ test('keeps a completed task when Magpie usage reconciliation fails', async () =
   }
 });
 
+test('returns cancelled when its supervisor signal is aborted', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'quotaflow-opencode-'));
+  try {
+    const controller = new AbortController();
+    let receivedSignal: AbortSignal | undefined;
+    const agent = new OpenCodeAgent(lane, async (_command, _cwd, statusDir, options) => {
+      receivedSignal = options?.signal;
+      controller.abort();
+      mkdirSync(statusDir, { recursive: true });
+      writeFileSync(join(statusDir, 'worker.log'), '');
+      return {
+        stop: { supervisorPid: 1, workerPid: 2, exitCode: null, activeProcesses: 0, reason: 'controller_closed' },
+        outcome: null,
+      };
+    });
+    const result = await agent.run({ ...context(root), signal: controller.signal });
+    expect(receivedSignal).toBe(controller.signal);
+    expect(result).toMatchObject({
+      status: 'cancelled',
+      reason: 'cancelled_by_operator',
+      tests: 'not_run',
+      activeProcesses: 0,
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('classifies OpenCode quota failures for retry', async () => {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-opencode-'));
   try {

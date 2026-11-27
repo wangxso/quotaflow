@@ -1,0 +1,47 @@
+{
+  "date": "2026-11-27",
+  "kind": "phase1-active-cancellation",
+  "result": "passed",
+  "method": "Cross-process CLI integration test plus adapter-level cancellation tests",
+  "scenario": {
+    "adapter": "supervised command fixture",
+    "cancelInitiator": "second CLI process",
+    "requestedStatus": "cancelling",
+    "signal": "cancel_requested event polled by the active worker",
+    "processStop": {
+      "mechanism": "Windows Job Object abort via supervisor stdin",
+      "activeProcesses": 0
+    },
+    "workspace": {
+      "partialResult": "app.txt=partial",
+      "checkpointSaved": true
+    },
+    "finalStatus": "cancelled",
+    "restartPath": "a pending cancellation is honored after verified worker restart"
+  },
+  "adapterCoverage": {
+    "supervisedCommand": "AbortSignal stops the Job Object before the adapter returns",
+    "openCode": "AbortSignal is passed to the supervisor and returns cancelled",
+    "codex": "turn/interrupt is called and the App Server is closed"
+  },
+  "assertions": {
+    "secondProcessCanRequestCancellation": true,
+    "activeWorkerObservesRequest": true,
+    "processSetBecomesEmpty": true,
+    "checkpointPreserved": true,
+    "finalTaskStatusCancelled": true,
+    "cancelEventAuditable": true,
+    "restartHonorsPendingCancellation": true
+  },
+  "limitations": [
+    "Cancellation depends on a running Worker polling the cancellation event.",
+    "A hung Worker requires a future timeout and forced-reclaim path.",
+    "Unknown usage keeps its budget hold pending.",
+    "The Codex adapter has cooperative turn interruption, not a Windows Job Object stop receipt."
+  ],
+  "reproduction": [
+    "bun test src/cli.test.ts --test-name-pattern \"cancels an active supervised\"",
+    "bun test src/worker.test.ts --test-name-pattern \"cooperatively cancels\"",
+    "bun test src/codex-agent.test.ts src/opencode-agent.test.ts src/supervisor.test.ts"
+  ]
+}

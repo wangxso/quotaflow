@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -222,6 +222,89 @@ test('retries a failed task through the CLI', async () => {
     rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   }
 });
+
+test('cancels an active supervised task from a second CLI process', async () => {
+  if (process.platform !== 'win32') return;
+  const root = mkdtempSync(join(tmpdir(), 'quotaflow-cli-cancel-'));
+  try {
+    const repo = join(root, 'repo');
+    worktreeGit(root, ['init', '--initial-branch=main', repo]);
+    writeFileSync(join(repo, 'app.txt'), 'base\n');
+    worktreeGit(repo, ['add', '.']);
+    worktreeGit(repo, ['commit', '-m', 'base']);
+    const config = join(root, 'quotaflow.config.json');
+    writeFileSync(config, JSON.stringify({
+      version: 1,
+      database: '.quotaflow/state.sqlite',
+      worktreeRoot: '.quotaflow/worktrees',
+      defaultRepo: repo,
+      routing: { allowedProviders: ['local'] },
+      lanes: [{
+        id: 'fixture',
+        agent: 'codex',
+        model: 'fixture',
+        provider: 'local',
+        account: 'fixture',
+        priority: 1,
+        slots: 1,
+        windows: [{
+          key: 'day',
+          remaining: 10,
+          reserve: 0,
+          observedAt: Date.now() - 1000,
+          resetAt: Date.now() + 60_000,
+        }],
+        command: [
+          process.execPath,
+          fileURLToPath(new URL('./fixture-agent.ts', import.meta.url)),
+          'hold',
+        ],
+      }],
+    }));
+    const added = JSON.parse((await cli(root, ['task', 'add', 'cancel task', '--repo', repo])).stdout);
+    const worker = Bun.spawn([
+      globalThis.process.execPath,
+      fileURLToPath(new URL('./cli.ts', import.meta.url)),
+      'worker',
+      'once',
+      '--config',
+      config,
+    ], {
+      cwd: root,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      stdin: 'ignore',
+      windowsHide: true,
+    });
+    const ready = join(root, '.quotaflow', 'worktrees', '.attempts', added.id, '1', 'ready.json');
+    const deadline = Date.now() + 15_000;
+    while (!existsSync(ready) && Date.now() < deadline) {
+      await Bun.sleep(30);
+    }
+    expect(existsSync(ready)).toBe(true);
+
+    const requested = JSON.parse((await cli(root, ['task', 'cancel', added.id])).stdout);
+    expect(requested.status).toBe('cancelling');
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(worker.stdout).text(),
+      new Response(worker.stderr).text(),
+      worker.exited,
+    ]);
+    if (exitCode !== 0) throw new Error(`Worker exited ${exitCode}: ${stderr || stdout}`);
+    const result = JSON.parse(stdout);
+    expect(result).toMatchObject({
+      agentStatus: 'cancelled',
+      task: { status: 'cancelled' },
+    });
+    const shown = JSON.parse((await cli(root, ['task', 'show', added.id])).stdout);
+    const events = JSON.parse((await cli(root, ['task', 'events', added.id])).stdout);
+    expect(shown.task).toMatchObject({ status: 'cancelled' });
+    expect(events.find((event: { kind: string }) => event.kind === 'cancel_requested')).toBeTruthy();
+    expect(readFileSync(join(root, '.quotaflow', 'worktrees', added.id, 'app.txt'), 'utf8')).toBe('partial\n');
+  } finally {
+    rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+  }
+}, 30_000);
 
 test('runs one supervised fixture through the CLI worker', async () => {
   if (process.platform !== 'win32') return;

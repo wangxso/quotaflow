@@ -104,6 +104,7 @@ export function recoverInterruptedAttempts(
 
   for (const attempt of store.activeAttempts()) {
     const task = store.getTask(attempt.taskId);
+    const cancellationRequested = store.cancelRequested(task.id, attempt.id);
     const statusDir = attemptDirectory(config, task.id, attempt.id);
     const owner = readAttemptOwner(statusDir);
     const ownerPid = owner?.pid ?? null;
@@ -165,6 +166,36 @@ export function recoverInterruptedAttempts(
     }
 
     if (!supervisorStop && ownerAlive === null) {
+      if (cancellationRequested) {
+        try {
+          store.recoverAttempt(attempt.id, {
+            status: 'blocked',
+            reason: 'cancellation_writer_unverified',
+            detail: { ownerPid, verificationError },
+            now,
+          });
+          items.push({
+            taskId: task.id,
+            attemptId: attempt.id,
+            agent: attempt.agent,
+            outcome: 'blocked',
+            reason: 'cancellation_writer_unverified',
+            ownerPid,
+            error: verificationError ?? undefined,
+          });
+        } catch (error) {
+          items.push({
+            taskId: task.id,
+            attemptId: attempt.id,
+            agent: attempt.agent,
+            outcome: 'error',
+            reason: 'recovery_write_failed',
+            ownerPid,
+            error: message(error),
+          });
+        }
+        continue;
+      }
       items.push({
         taskId: task.id,
         attemptId: attempt.id,
@@ -250,10 +281,12 @@ export function recoverInterruptedAttempts(
       continue;
     }
 
-    const reason = supervisorStop ? 'worker_restart_verified' : 'worker_restart_unlaunched';
+    const reason = cancellationRequested
+      ? 'cancellation_completed'
+      : supervisorStop ? 'worker_restart_verified' : 'worker_restart_unlaunched';
     try {
       store.recoverAttempt(attempt.id, {
-        status: 'queued',
+        status: cancellationRequested ? 'cancelled' : 'queued',
         checkpoint: checkpointSha,
         reason,
         detail: {

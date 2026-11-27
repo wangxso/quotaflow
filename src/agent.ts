@@ -6,6 +6,7 @@ export interface AgentContext {
   lane: LaneConfig;
   workspacePath: string;
   attemptDir: string;
+  signal?: AbortSignal;
 }
 
 export interface AgentResult {

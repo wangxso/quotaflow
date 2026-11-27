@@ -203,6 +203,61 @@ test('worker persists request-level usage and the served model', async () => {
   }
 });
 
+test('worker cooperatively cancels an active adapter and saves a checkpoint', async () => {
+  const { root, repo, db, store, config } = setup();
+  try {
+    let started!: () => void;
+    const startedPromise = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const agent: AgentAdapter = {
+      id: 'cancel-fixture',
+      async run(context) {
+        writeFileSync(join(context.workspacePath, 'app.txt'), 'partial\n');
+        started();
+        await new Promise<void>((resolve) => {
+          if (context.signal?.aborted) {
+            resolve();
+            return;
+          }
+          context.signal?.addEventListener('abort', () => resolve(), { once: true });
+        });
+        return {
+          status: 'cancelled',
+          reason: 'agent_cancelled',
+          tests: 'not_run',
+          activeProcesses: 0,
+        };
+      },
+    };
+    store.createTask({
+      id: 'cancel-active',
+      title: 'cancel active',
+      repoPath: repo,
+      workspacePath: join(root, 'cancel-active'),
+    });
+    const running = runOnce(store, config, () => agent);
+    await startedPromise;
+    expect(store.cancel('cancel-active')).toMatchObject({ status: 'cancelling' });
+    const result = await running;
+    expect(result).toMatchObject({
+      agentStatus: 'cancelled',
+      task: { status: 'cancelled' },
+    });
+    expect(result?.checkpoint).toBeTruthy();
+    expect(store.getAttempt(result!.attempt.id).stage).toBe('done');
+    expect(store.events('cancel-active').find((event) => event.kind === 'cancel_requested')).toBeTruthy();
+    expect(store.events('cancel-active').at(-1)?.detail).toMatchObject({
+      status: 'cancelled',
+      reason: 'cancelled_by_operator',
+    });
+    expect(readFileSync(join(root, 'cancel-active', 'app.txt'), 'utf8')).toBe('partial\n');
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('worker checkpoints and parks a quota-held supervised task', async () => {
   if (process.platform !== 'win32') return;
   const { root, repo, db, store, config } = setup();

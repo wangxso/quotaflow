@@ -199,8 +199,17 @@ export class OpenCodeAgent implements AgentAdapter {
     const { stop } = await this.#runner(command, context.workspacePath, context.attemptDir, {
       env,
       timeoutMs: this.#lane.timeoutMs ?? 300_000,
+      signal: context.signal,
     });
     if (stop.activeProcesses !== 0) throw new Error('OpenCode supervisor did not confirm an empty process set');
+    if (context.signal?.aborted) {
+      return {
+        status: 'cancelled',
+        reason: 'cancelled_by_operator',
+        tests: 'not_run',
+        activeProcesses: stop.activeProcesses,
+      };
+    }
 
     const log = readFileSync(join(context.attemptDir, 'worker.log'), 'utf8');
     const { events, diagnostics } = parseEvents(log);

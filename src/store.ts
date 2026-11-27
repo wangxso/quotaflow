@@ -556,7 +556,7 @@ export class TaskStore {
   recoverAttempt(
     attemptId: number,
     input: {
-      status: 'queued' | 'blocked';
+      status: 'queued' | 'blocked' | 'cancelled';
       checkpoint?: string | null;
       reason: string;
       detail?: Record<string, unknown>;
@@ -603,6 +603,15 @@ export class TaskStore {
     }).immediate();
   }
 
+  cancelRequested(taskId: string, attemptId: number): boolean {
+    return Boolean(this.db.query<{ present: number }, [string, number]>(`
+      SELECT 1 AS present
+      FROM events
+      WHERE task_id = ? AND attempt_id = ? AND kind = 'cancel_requested'
+      LIMIT 1
+    `).get(taskId, attemptId));
+  }
+
   block(taskId: string, reason: string, now = Date.now()): Task {
     return this.db.transaction(() => {
       const task = this.getTask(taskId);
@@ -642,7 +651,12 @@ export class TaskStore {
       const task = this.getTask(taskId);
       if (task.status === 'completed' || task.status === 'cancelled') return task;
       const active = this.activeAttempt(taskId);
-      if (active) throw new Error(`Task ${taskId} has an active attempt ${active.id}; stop it before cancelling`);
+      if (active) {
+        if (task.status === 'cancelling' && this.cancelRequested(taskId, active.id)) return task;
+        this.#updateStatus(taskId, 'cancelling', null, now);
+        this.#event(taskId, active.id, 'cancel_requested', { reason: 'operator', now });
+        return this.getTask(taskId);
+      }
       this.#updateStatus(taskId, 'cancelled', null, now);
       this.#event(taskId, null, 'cancelled', { now });
       return this.getTask(taskId);

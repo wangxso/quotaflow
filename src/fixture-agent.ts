@@ -24,6 +24,9 @@ if (mode === 'complete') {
   writeFileSync('app.txt', 'partial\n');
   outcome({ kind: 'quota', reason: 'fixture_quota', tests: 'not_run' });
   setInterval(() => {}, 1_000);
+} else if (mode === 'hold') {
+  writeFileSync('app.txt', 'partial\n');
+  setInterval(() => {}, 1_000);
 } else {
-  throw new Error('Expected fixture mode complete, fail or quota');
+  throw new Error('Expected fixture mode complete, fail, hold or quota');
 }

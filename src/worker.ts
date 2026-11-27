@@ -96,6 +96,15 @@ export async function runOnce(
     };
   }
 
+  const cancellation = new AbortController();
+  const observeCancellation = () => {
+    if (!cancellation.signal.aborted && store.cancelRequested(task.id, attempt.id)) {
+      cancellation.abort();
+    }
+  };
+  observeCancellation();
+  const cancellationWatcher = setInterval(observeCancellation, 100);
+
   try {
     ensureWorktree(task.repoPath, task.workspacePath, task.checkpoint ?? 'HEAD');
     const result = await agent.run({
@@ -104,16 +113,20 @@ export async function runOnce(
       lane,
       workspacePath: task.workspacePath,
       attemptDir: statusDir,
+      signal: cancellation.signal,
     });
     if ((result.activeProcesses ?? 0) !== 0) throw new Error('Agent left active processes after returning');
+    const cancelled = cancellation.signal.aborted || store.cancelRequested(task.id, attempt.id);
     const checkpointSha = checkpoint(task.workspacePath, config.worktreeRoot, task.id, attempt.id);
     const settledAt = finishedAt();
-    store.beginCheckpoint(attempt.id, result.reason, result.activeProcesses ?? 0, settledAt);
+    const reason = cancelled ? 'cancelled_by_operator' : result.reason;
+    const agentStatus: AgentResult['status'] = cancelled ? 'cancelled' : result.status;
+    store.beginCheckpoint(attempt.id, reason, result.activeProcesses ?? 0, settledAt);
     const settled = store.settle(
       attempt.id,
       checkpointSha,
-      targetStatus(result),
-      result.reason,
+      cancelled ? 'cancelled' : targetStatus(result),
+      reason,
       result.retryAfterMs ?? 1000,
       settledAt,
       result.actualModel,
@@ -124,7 +137,7 @@ export async function runOnce(
       task: settled,
       attempt: settledAttempt,
       agent: agent.id,
-      agentStatus: result.status,
+      agentStatus,
       actualModel: settledAttempt.actualModel,
       usageStatus: result.usage?.status ?? null,
       usage: store.usage(attempt.id),
@@ -140,22 +153,33 @@ export async function runOnce(
       checkpointSha = task.checkpoint ?? '';
     }
     const settledAt = finishedAt();
+    const cancelled = cancellation.signal.aborted || store.cancelRequested(task.id, attempt.id);
+    const reason = cancelled ? 'cancelled_by_operator' : 'worker_error';
     try {
-      store.beginCheckpoint(attempt.id, 'worker_error', 0, settledAt);
+      store.beginCheckpoint(attempt.id, reason, 0, settledAt);
     } catch {
       // The settlement below is still authoritative if the attempt already moved on.
     }
-    const settled = store.settle(attempt.id, checkpointSha, 'failed', 'worker_error', 1000, settledAt);
+    const settled = store.settle(
+      attempt.id,
+      checkpointSha,
+      cancelled ? 'cancelled' : 'failed',
+      reason,
+      1000,
+      settledAt,
+    );
     return {
       task: settled,
       attempt: store.getAttempt(attempt.id),
       agent: agent.id,
-      agentStatus: 'failed',
+      agentStatus: cancelled ? 'cancelled' : 'failed',
       actualModel: null,
       usageStatus: null,
       usage: [],
       checkpoint: checkpointSha || null,
       error: errorMessage(error),
     };
+  } finally {
+    clearInterval(cancellationWatcher);
   }
 }

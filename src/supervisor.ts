@@ -22,6 +22,7 @@ export interface SupervisorOutcome {
 export interface SupervisorOptions {
   timeoutMs?: number;
   env?: NodeJS.ProcessEnv;
+  signal?: AbortSignal;
 }
 
 const guardScript = fileURLToPath(new URL('../poc/guard-win.ps1', import.meta.url));
@@ -125,6 +126,11 @@ export async function launchSupervised(
 
   const deadline = Date.now() + timeoutMs;
   let completed = false;
+  const cancel = () => {
+    if (!guard.stdin.writableEnded) guard.stdin.end();
+  };
+  if (options.signal?.aborted) cancel();
+  else options.signal?.addEventListener('abort', cancel, { once: true });
   try {
     while (Date.now() <= deadline) {
       const outcome = readJson<SupervisorOutcome>(join(statusDir, 'outcome.json'));
@@ -142,6 +148,7 @@ export async function launchSupervised(
     }
     throw new Error('Timed out waiting for supervised process stop');
   } finally {
+    options.signal?.removeEventListener('abort', cancel);
     guard.stdin.end();
     if (!completed && guard.exitCode === null) guard.kill();
   }

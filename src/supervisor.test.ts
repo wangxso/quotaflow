@@ -54,6 +54,31 @@ test('supervised fixture stops a quota-held worker after its outcome', async () 
   }
 });
 
+test('an abort signal stops the supervised job before returning', async () => {
+  if (process.platform !== 'win32') return;
+  const root = mkdtempSync(join(tmpdir(), 'quotaflow-supervisor-cancel-'));
+  try {
+    const status = join(root, 'attempt');
+    const controller = new AbortController();
+    const running = launchSupervised(
+      [process.execPath, fixture, 'hold'],
+      root,
+      status,
+      { signal: controller.signal },
+    );
+    const deadline = Date.now() + 10_000;
+    while (!existsSync(join(status, 'ready.json')) && Date.now() < deadline) {
+      await Bun.sleep(30);
+    }
+    controller.abort();
+    const result = await running;
+    expect(result.stop.activeProcesses).toBe(0);
+    expect(result.stop.reason).toBe('controller_closed');
+  } finally {
+    await removeEventually(root);
+  }
+});
+
 test('verification reconstructs a missing stop receipt only after the job is empty', async () => {
   if (process.platform !== 'win32') return;
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-supervisor-verify-'));

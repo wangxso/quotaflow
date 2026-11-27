@@ -327,14 +327,20 @@ test('unknown and stale quota observations are not reserved', () => {
   }
 });
 
-test('cancel refuses an active writer and succeeds for queued work', () => {
+test('cancel requests active cancellation and succeeds for queued work', () => {
   const now = Date.now();
   const { root, db, store } = setup();
   try {
     store.createTask({ id: 'one', title: 'one', repoPath: root, workspacePath: join(root, 'one'), now });
     store.createTask({ id: 'two', title: 'two', repoPath: root, workspacePath: join(root, 'two'), now });
-    store.reserve('one', [lane(now)], now);
-    expect(() => store.cancel('one', now)).toThrow('active attempt');
+    const reservation = store.reserve('one', [lane(now)], now)!;
+    expect(store.cancel('one', now)).toMatchObject({ status: 'cancelling' });
+    expect(store.cancelRequested('one', reservation.attempt.id)).toBe(true);
+    expect(store.cancel('one', now)).toMatchObject({ status: 'cancelling' });
+    expect(store.events('one').filter((event) => event.kind === 'cancel_requested')).toHaveLength(1);
+    store.beginCheckpoint(reservation.attempt.id, 'cancelled_by_operator', 0, now);
+    store.settle(reservation.attempt.id, '', 'cancelled', 'cancelled_by_operator', 1000, now);
+    expect(store.getTask('one').status).toBe('cancelled');
     expect(store.cancel('two', now).status).toBe('cancelled');
   } finally {
     close(root, db);
