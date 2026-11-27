@@ -34,7 +34,7 @@ try {
   result.inferenceTurnsRequested = 1;
   const prompt = structured
     ? 'Return a JSON object with an integer value for 40 plus 1. Do not use tools or modify files.'
-    : 'In this temporary test worktree, run one PowerShell command: Set-Content -LiteralPath app.txt -Value 41 -Encoding ascii. No other files and no network. Stop after running it.';
+    : 'In this temporary test worktree, use the terminal to run exactly one PowerShell command that writes the text 41 to app.txt, then read app.txt to verify it. Do not use apply_patch or a file editor. Do not touch any other file or use the network. Stop after verification.';
   const turn = await server.call('turn/start', {
     threadId,
     sandboxPolicy: structured ? { type: 'readOnly', networkAccess: false } : { type: 'workspaceWrite', writableRoots: [lab.workspace], networkAccess: false,
@@ -44,7 +44,7 @@ try {
   });
   const turnId = turn.value?.turn?.id;
   if (!turnId) throw new Error(`Turn request failed (${turn.code ?? 'unknown status'})`);
-  const done = await server.notification('turn/completed', (event) => event.turn?.id === turnId, 35_000);
+  const done = await server.notification('turn/completed', (event) => event.turn?.id === turnId, 60_000);
   if (!done) {
     const interrupt = await server.call('turn/interrupt', { threadId, turnId });
     result.interruptAccepted = interrupt.code === undefined;

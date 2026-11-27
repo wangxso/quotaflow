@@ -33,6 +33,7 @@ bun run poc/gateway-probe.ts $quotaMagpie $quotaOpenCode $quotaLlamaServer $quot
 ```
 
 - Codex 脚本每次最多发送一个推理回合。它先验证原生 Plus 订阅、两个额度窗口及关闭信用余额，并在只读 Agent 回合结束后校验结构化响应，由控制器写入合成仓库。`agent-write` 模式复验 Agent 的受限写入。
+- `agent-write` 必须由 Codex App Server 可用的本地工作区运行时执行 shell；若运行时不可用，回合即使完成也不能算作写入成功，控制器不会代写补成通过。
 - Magpie 探测在临时目录启动便携实例，只配置环回地址的上游。一个上游固定返回 503，另一个是使用实际 GGUF 权重的 llama.cpp。OpenCode 使用独立配置和本地资源池。可把 Codex 合成 Worktree 的绝对路径作为最后一个参数，以该工作区的 `app.txt` 作为真实交接输入。
 - Archon 对照用一条真实工作流验证创建 Worktree、节点失败持久化及同一 Worktree 续跑。`resume --json` 记录预览结果，随后由明确的执行命令恢复。
 
