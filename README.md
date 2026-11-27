@@ -4,7 +4,7 @@
 
 QuotaFlow 是一个额度感知的 AI 软件研发调度工具。它按账户额度、并发和预算安排 Codex 或 OpenCode 执行任务，将改动保存在独立的 Git 工作树和检查点中，供中断后恢复。
 
-**当前状态（2026-11-28）**　Phase 0 技术门禁有条件通过。Phase 1 单机 CLI 已具备三平台监督、检查点恢复、预算审计和可选交接笔记。Phase 2 已接入同 HEAD CI、独立审查、Draft 状态和人工合并门禁，并完成本地签名 Webhook、双层幂等、受限任务物化与只读审查执行。真实 Draft PR [#141](https://github.com/wangxso/mcarplay/pull/141) 的 CI 已通过，QuotaFlow 内部独立审查未发现阻断问题；GitHub 官方 Review 仍为 0，门禁继续阻断。GUI 计划在 Phase 3 交付。 [Phase 1](docs/PHASE-1.md) · [Phase 2](docs/PHASE-2.md) · [mcarplay 试点证据](docs/evidence/phase1-mcarplay-issue-82-2026-11-27.json)
+**当前状态（2026-11-28）**　Phase 0 技术门禁有条件通过。Phase 1 单机 CLI 已具备三平台监督、检查点恢复、预算审计和可选交接笔记。Phase 2 已接入同 HEAD CI、独立审查、Draft 状态和人工合并门禁，并完成本地签名 Webhook、双层幂等、受限任务物化与只读审查执行。真实 PR [#141](https://github.com/wangxso/mcarplay/pull/141) 已转为 Ready，CI 和 mergeable 检查通过，QuotaFlow 内部独立审查未发现阻断问题；GitHub 官方 Review 仍为 0，因此门禁只等待正式独立批准。GUI 计划在 Phase 3 交付。 [Phase 1](docs/PHASE-1.md) · [Phase 2](docs/PHASE-2.md) · [mcarplay 试点证据](docs/evidence/phase1-mcarplay-issue-82-2026-11-27.json)
 
 ## 当前功能
 

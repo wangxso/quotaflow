@@ -1,0 +1,52 @@
+{
+  "recordedOn": "2026-11-28",
+  "baseRevision": "7f3b247ca632f482c69465c3e4fc13a5f1ea2cc6",
+  "pullRequest": {
+    "repository": "wangxso/mcarplay",
+    "number": 141,
+    "state": "open",
+    "draft": false,
+    "mergeable": "mergeable",
+    "baseSha": "daf67e87a72aa9033a4d62f88e9a9d05ce047d9e",
+    "headSha": "abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48"
+  },
+  "gate": {
+    "status": "blocked",
+    "humanMergeRequired": true,
+    "independentApprovals": 0,
+    "reasons": [
+      "independent_review_missing"
+    ],
+    "requiredChecks": [
+      {
+        "name": "Check and build debug APK",
+        "conclusion": "success",
+        "headSha": "abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48"
+      },
+      {
+        "name": "GitGuardian Security Checks",
+        "conclusion": "success",
+        "headSha": "abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48"
+      }
+    ],
+    "action": "independent_review"
+  },
+  "internalReview": {
+    "status": "completed",
+    "actualModel": "opencode-go/hy4-flash-free",
+    "severity": {
+      "P1": 0,
+      "P2": 0,
+      "P3": 0
+    },
+    "sourceModified": false,
+    "reviewWorktreeClean": true
+  },
+  "externalBoundary": {
+    "githubReviewCount": 0,
+    "readyTransitionPerformedBy": "authorized operator",
+    "autoApproval": false,
+    "autoMerge": false,
+    "nextGate": "A formal independent GitHub approval on abc4c5b is required before human merge."
+  }
+}

@@ -65,7 +65,7 @@ bun run src/cli.ts github gate pr.json \
 
 SQLite v8 新增 `github_deliveries` 和 `github_gate_results`，v9 为任务增加 `access_mode`。同一 GitHub delivery 重放只返回原结果，不会重复处理。相同事件内容即使换用另一个 delivery ID，也通过逻辑事件键去重。同一 delivery ID 携带不同内容会被拒绝。Gate 结果按仓库、PR、HEAD SHA 和策略哈希保存，变更 HEAD 会生成独立记录。
 
-实时快照验证中，PR #141 的三项当前 HEAD 检查均成功，但门禁因 `draft` 和 `independent_review_missing` 保持阻断。重复投递保持相同 `updatedAt`，已验证 delivery 与逻辑事件两层幂等。2026-11-28 使用 `opencode-go/hy4-flash-free` 对同一 HEAD 完成 QuotaFlow 内部只读审查，报告为 `P1×0, P2×0, P3×0`；源仓库与审查 worktree 均保持干净。该结果尚未作为 GitHub 正式 Review 发布，官方批准数仍为 0。 [门禁证据](evidence/phase2-github-gate-2026-11-27.json)
+实时快照验证中，PR #141 的三项当前 HEAD 检查均成功。2026-11-28 使用 `opencode-go/hy4-flash-free` 对同一 HEAD 完成 QuotaFlow 内部只读审查，报告为 `P1×0, P2×0, P3×0`；源仓库与审查 worktree 均保持干净。该结果尚未作为 GitHub 正式 Review 发布。PR 随后转为 Ready，HEAD／base 未变，`mergeable=mergeable`，门禁只剩 `independent_review_missing`，官方批准数仍为 0。 [Ready 门禁证据](evidence/phase2-github-ready-2026-11-28.json)
 
 ## Signed Webhook 入口
 
@@ -94,7 +94,7 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
 
 - GitHub App 或最小权限凭据、公网 TLS 回调部署和反向代理。
 - 在物化前自动抓取 PR HEAD／base 到本地 Git 仓库并校验提交可用性。
-- 获取并核验 GitHub 上的正式独立批准；内部审查不能替代该批准。
+- 获取并核验 GitHub 上的正式独立批准，正式批准后才能进入人工合并。
 - Check-run 日志抓取、失败分类细节和同 SHA 复跑绑定。
 - 写入应答丢失、重复 Webhook、越权请求和凭据轮换演练。
 - Draft 转 Ready、人工批准与合并操作。当前所有合并保持人工执行。
@@ -102,6 +102,6 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
 ## 下一里程碑
 
 1. 接入 GitHub App 凭据，并将本地监听器部署到受控公网反向代理。
-2. 在 PR #141 获得正式独立 GitHub Review 后重新评估门禁，保持人工合并。
+2. 在 PR #141 获得正式独立 GitHub Review 后重新评估门禁，由有权限的人员完成人工合并。
 3. 对后续 Review–Fix／CI 修复任务重复执行、复跑和门禁闭环。
 4. Phase 2 核心验收完成后进入 Phase 3 Dashboard 与部署。

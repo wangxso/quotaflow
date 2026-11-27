@@ -20,6 +20,8 @@
 
 同日增加 `github snapshot`，通过 GitHub REST 读取 Pull Request、当前 HEAD 的 check-runs 和正式 Reviews，并处理 `mergeable=null` 的计算延迟。公开 PR 可使用无认证读取，私有仓库或更高限流可通过 `--token-env` 注入凭据。PR #141 的自动快照得到当前 HEAD、3 条成功检查、`mergeable=mergeable` 和 0 条正式 Review，门禁结果与手工快照一致。详见 [REST 快照证据](evidence/phase2-github-api-snapshot-2026-11-28.json)。
 
+PR #141 随后由有权限的操作者转为 Ready。重新拉取快照后，Draft 与 mergeable 阻断均消失，当前 HEAD 和 base 未变，3 条检查继续成功，门禁只剩 `independent_review_missing`。内部只读审查报告仍为 P1/P2/P3 全零，但 GitHub 正式 Review 数仍为 0，因此不满足人工合并门禁。详见 [Ready 门禁证据](evidence/phase2-github-ready-2026-11-28.json)。
+
 ## Phase 0 · 调研与可行性验证
 
 | 顺序 | 工作 | 通过证据 |
