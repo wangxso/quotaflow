@@ -71,15 +71,22 @@ export interface BudgetStatus extends BudgetPolicy {
 
 export interface BudgetLease {
   attemptId: number;
+  taskId: string | null;
   account: string;
   unit: string;
   amount: number;
-  state: 'held' | 'pending' | 'settled' | 'released';
+  state: 'held' | 'pending' | 'settled' | 'released' | 'expired';
   priced: boolean | null;
   windowMs: number;
   createdAt: number;
   updatedAt: number;
   expiresAt: number;
+  expiredAt: number | null;
+}
+
+export interface BudgetAudit {
+  policies: BudgetStatus[];
+  expired: BudgetLease[];
 }
 
 export interface QuotaFlowConfig {

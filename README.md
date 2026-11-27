@@ -8,7 +8,7 @@ QuotaFlow 是一个额度感知的 AI 软件研发调度工具。它按账户额
 
 ## 当前功能
 
-- **任务调度**　SQLite 持久化任务、尝试和事件。调度器以事务方式预留账户并发槽位、额度和已配置的预算。
+- **任务调度**　SQLite v7 持久化任务、尝试、事件和预算租约。调度器以事务方式预留账户并发槽位、额度和已配置预算。`budget audit` 可审计到期租约，恢复产生的 unknown hold 会联动账户冷却。
 - **执行与恢复**　CLI 支持提交、查看、取消和重试任务。Windows 使用 Job Object。macOS 原生监督器跟踪根进程、子进程和进程组。Linux 以 subreaper 收养 detached 后代并扫描 `/proc`。保存检查点和恢复任务均要求独立验证的停止凭证。已启动的受监督尝试在缺少凭证时进入 `blocked`，并保留写入权。`--handoff` 可在中断后把与检查点匹配的简短笔记交给下一个 Agent。
 - **模型接入与用量**　默认 Codex App Server 与 OpenCode Adapter 支持 Windows、macOS 和 Linux 受监督执行。Magpie 路由需要配置中的显式授权，网关估算用于预算租约，服务商账单归属仍为 `UNKNOWN`。 [配置与适配器说明](docs/PHASE-1.md)
 
@@ -34,6 +34,7 @@ macOS 需要 Xcode 或 Command Line Tools 提供的 `/usr/bin/cc`。Linux 需要
 bun run src/cli.ts task show TASK_ID
 bun run src/cli.ts task events TASK_ID
 bun run src/cli.ts budget status
+bun run src/cli.ts budget audit --limit 100
 ```
 
 在受支持的平台上可运行 `bun run poc/demo.ts`，在临时 Git 仓库中复现额度中断和检查点接续，无需模型凭据。macOS 还需要 Xcode 或 Command Line Tools 提供的 C 编译器，Linux 需要 gcc 和 libc 开发头文件。开发时使用 `bun test` 跑测试，使用 `bun run build` 将 CLI 打包到 `dist/`。 [PoC 复跑说明](poc/README.md) · [本地命令与平台监督](docs/PHASE-1.md#本地命令与平台监督)

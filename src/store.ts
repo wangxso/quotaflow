@@ -3,6 +3,7 @@ import type { Database } from 'bun:sqlite';
 import type {
   Attempt,
   AttemptUsageRecord,
+  BudgetAudit,
   BudgetLease,
   BudgetPolicy,
   BudgetStatus,
@@ -88,6 +89,7 @@ type UsageRow = {
 type BudgetRow = {
   id: number;
   attempt_id: number;
+  task_id?: string;
   account: string;
   unit: string;
   amount: number;
@@ -97,6 +99,7 @@ type BudgetRow = {
   created_at: number;
   updated_at: number;
   expires_at: number;
+  expired_at: number | null;
 };
 
 function taskFrom(row: TaskRow): Task {
@@ -175,6 +178,7 @@ function usageFrom(row: UsageRow): AttemptUsageRecord {
 function budgetFrom(row: BudgetRow): BudgetLease {
   return {
     attemptId: row.attempt_id,
+    taskId: row.task_id ?? null,
     account: row.account,
     unit: row.unit,
     amount: row.amount,
@@ -184,6 +188,7 @@ function budgetFrom(row: BudgetRow): BudgetLease {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     expiresAt: row.expires_at,
+    expiredAt: row.expired_at,
   };
 }
 
@@ -270,12 +275,12 @@ export class TaskStore {
   }
 
   listRunnable(now = Date.now()): Task[] {
-    const rows = this.db.query<TaskRow, [number]>(`
+    const rows = this.db.query<TaskRow, [number, number]>(`
       SELECT * FROM tasks
-      WHERE status = 'queued'
+      WHERE (status = 'queued' AND (next_wake_at IS NULL OR next_wake_at <= ?))
          OR (status = 'waiting_quota' AND (next_wake_at IS NULL OR next_wake_at <= ?))
       ORDER BY critical DESC, priority DESC, created_at, id
-    `).all(now);
+    `).all(now, now);
     return rows.map(taskFrom);
   }
 
@@ -341,20 +346,48 @@ export class TaskStore {
   }
 
   budgetStatus(policies: BudgetPolicy[], now = Date.now()): BudgetStatus[] {
-    return policies.map((policy) => this.#budgetStatus(policy, now));
+    return this.db.transaction(() => {
+      this.#expireBudgetLeases(now);
+      return policies.map((policy) => this.#budgetStatus(policy, now));
+    }).immediate();
+  }
+
+  expireBudgetLeases(now = Date.now()): BudgetLease[] {
+    return this.db.transaction(() => this.#expireBudgetLeases(now)).immediate();
+  }
+
+  budgetAudit(policies: BudgetPolicy[], now = Date.now(), limit = 100): BudgetAudit {
+    if (!Number.isInteger(limit) || limit <= 0) throw new Error('Budget audit limit must be a positive integer');
+    return this.db.transaction(() => {
+      this.#expireBudgetLeases(now);
+      return {
+        policies: policies.map((policy) => this.#budgetStatus(policy, now)),
+        expired: this.db.query<BudgetRow, [number]>(`
+          SELECT budget_leases.*, attempts.task_id
+          FROM budget_leases
+          JOIN attempts ON attempts.id = budget_leases.attempt_id
+          WHERE budget_leases.state = 'expired'
+          ORDER BY budget_leases.updated_at DESC, budget_leases.id DESC
+          LIMIT ?
+        `).all(limit).map(budgetFrom),
+      };
+    }).immediate();
   }
 
   budgetLease(attemptId: number): BudgetLease | null {
-    const row = this.db
-      .query<BudgetRow, [number]>('SELECT * FROM budget_leases WHERE attempt_id = ?')
-      .get(attemptId);
+    const row = this.db.query<BudgetRow, [number]>(`
+      SELECT budget_leases.*, attempts.task_id
+      FROM budget_leases
+      JOIN attempts ON attempts.id = budget_leases.attempt_id
+      WHERE budget_leases.attempt_id = ?
+    `).get(attemptId);
     return row ? budgetFrom(row) : null;
   }
 
   budgetLeasesForTask(taskId: string): BudgetLease[] {
     return this.db
       .query<BudgetRow, [string]>(`
-        SELECT budget_leases.*
+        SELECT budget_leases.*, attempts.task_id
         FROM budget_leases
         JOIN attempts ON attempts.id = budget_leases.attempt_id
         WHERE attempts.task_id = ?
@@ -369,7 +402,7 @@ export class TaskStore {
       const attempt = this.db.query<AttemptRow, [number]>('SELECT * FROM attempts WHERE id = ?').get(attemptId);
       if (!attempt) throw new Error(`Unknown attempt ${attemptId}`);
       const updated = this.db.run(
-        "UPDATE budget_leases SET amount = 0, state = 'released', priced = NULL, updated_at = ?, expires_at = ? WHERE attempt_id = ? AND state <> 'released'",
+        "UPDATE budget_leases SET amount = 0, state = 'released', priced = NULL, updated_at = ?, expires_at = ? WHERE attempt_id = ? AND state NOT IN ('released', 'expired')",
         [now, now, attemptId],
       );
       if (updated.changes) {
@@ -386,8 +419,9 @@ export class TaskStore {
     budgets: BudgetPolicy[] = [],
   ): Reservation | null {
     return this.db.transaction(() => {
+      this.#expireBudgetLeases(now);
       const task = this.getTask(taskId);
-      const due = task.status === 'queued'
+      const due = (task.status === 'queued' && (task.nextWakeAt === null || task.nextWakeAt <= now))
         || (task.status === 'waiting_quota' && (task.nextWakeAt === null || task.nextWakeAt <= now));
       if (!due) return null;
 
@@ -402,7 +436,7 @@ export class TaskStore {
 
       const filters: LaneFilter[] = [];
       const budgetByAccount = new Map(budgets.map((budget) => [budget.account, budget]));
-      const budgetRetryTimes: number[] = [];
+      const retryTimes: number[] = [];
       const sorted = [...lanes].sort((a, b) => b.priority - a.priority || a.id.localeCompare(b.id));
       for (const lane of sorted) {
         let reason = '';
@@ -411,7 +445,10 @@ export class TaskStore {
         const cooldown = this.db.query<{ until_ms: number }, [string]>(
           'SELECT until_ms FROM cooldowns WHERE account = ?',
         ).get(lane.account);
-        if (cooldown && cooldown.until_ms > now) reason = 'cooldown';
+        if (cooldown && cooldown.until_ms > now) {
+          reason = 'cooldown';
+          retryTimes.push(cooldown.until_ms);
+        }
 
         const active = this.db.query<{ n: number }, [string]>(
           "SELECT count(*) AS n FROM attempts WHERE account = ? AND stage <> 'done'",
@@ -423,7 +460,7 @@ export class TaskStore {
           budgetStatus = this.#budgetStatus(budget, now);
           if (budgetStatus.used + budget.holdPerAttempt > budget.limit - budget.reserve) {
             reason = 'budget';
-            if (budgetStatus.nextExpiryAt !== null) budgetRetryTimes.push(budgetStatus.nextExpiryAt);
+            if (budgetStatus.nextExpiryAt !== null) retryTimes.push(budgetStatus.nextExpiryAt);
           }
         }
 
@@ -494,9 +531,10 @@ export class TaskStore {
         return { attempt: this.activeAttempt(taskId)!, filters };
       }
 
-      const allBudgetBlocked = filters.length > 0 && filters.every((filter) => filter.reason === 'budget');
-      const retryAt = allBudgetBlocked && budgetRetryTimes.length > 0
-        ? Math.max(now + 1000, Math.min(...budgetRetryTimes))
+      const allWaitingForCooldown = filters.length > 0 && filters.every((filter) =>
+        filter.reason === 'budget' || filter.reason === 'cooldown');
+      const retryAt = allWaitingForCooldown && retryTimes.length > 0
+        ? Math.max(now + 1000, Math.min(...retryTimes))
         : now + 1000;
       this.#updateStatus(taskId, 'waiting_quota', retryAt, now);
       this.#event(taskId, null, 'waiting_quota', { filters, retryAt, now });
@@ -620,7 +658,11 @@ export class TaskStore {
       if (!updated.changes) return this.getTask(attempt.task_id);
 
       const budgetLease = this.#settleBudgetLease(attemptId, undefined, now);
-      this.#updateStatus(attempt.task_id, input.status, null, now);
+      const recoveryCooldownUntil = budgetLease?.state === 'pending' && budgetLease.expiresAt > now
+        ? budgetLease.expiresAt
+        : null;
+      const nextWakeAt = input.status === 'queued' ? recoveryCooldownUntil : null;
+      this.#updateStatus(attempt.task_id, input.status, nextWakeAt, now);
       if (checkpoint) {
         this.db.run('UPDATE tasks SET checkpoint = ? WHERE id = ?', [checkpoint, attempt.task_id]);
       }
@@ -634,11 +676,25 @@ export class TaskStore {
           expiresAt: budgetLease.expiresAt,
         });
       }
+      if (recoveryCooldownUntil !== null) {
+        this.db.run(
+          `INSERT INTO cooldowns (account, until_ms) VALUES (?, ?)
+           ON CONFLICT(account) DO UPDATE SET until_ms = max(until_ms, excluded.until_ms)`,
+          [attempt.account, recoveryCooldownUntil],
+        );
+        this.#event(attempt.task_id, attemptId, 'recovery_cooldown', {
+          account: attempt.account,
+          until: recoveryCooldownUntil,
+          reason: 'pending_budget_lease',
+          now,
+        }, now);
+      }
       const detail = {
         status: input.status,
         reason: input.reason,
         checkpoint: checkpoint ?? attempt.checkpoint,
         recovered: true,
+        ...(recoveryCooldownUntil === null ? {} : { recoveryCooldownUntil }),
         ...input.detail,
         now,
       };
@@ -762,7 +818,10 @@ export class TaskStore {
         count(*) AS active,
         min(expires_at) AS next_expiry
       FROM budget_leases
-      WHERE account = ? AND state <> 'released' AND expires_at > ?
+      JOIN attempts ON attempts.id = budget_leases.attempt_id
+      WHERE budget_leases.account = ?
+        AND budget_leases.state <> 'released'
+        AND (budget_leases.expires_at > ? OR attempts.stage <> 'done')
     `).get(policy.account, now)!;
     return {
       ...policy,
@@ -773,11 +832,54 @@ export class TaskStore {
     };
   }
 
+  #expireBudgetLeases(now: number): BudgetLease[] {
+    const rows = this.db.query<BudgetRow, [number]>(`
+      SELECT budget_leases.*, attempts.task_id
+      FROM budget_leases
+      JOIN attempts ON attempts.id = budget_leases.attempt_id
+      WHERE budget_leases.state NOT IN ('released', 'expired')
+        AND budget_leases.expires_at <= ?
+        AND attempts.stage = 'done'
+      ORDER BY budget_leases.expires_at, budget_leases.id
+    `).all(now);
+    const expired: BudgetLease[] = [];
+    for (const row of rows) {
+      const previousState = row.state;
+      this.db.run(
+        "UPDATE budget_leases SET state = 'expired', priced = coalesce(priced, ?), updated_at = ?, expired_at = ? WHERE attempt_id = ? AND state <> 'expired'",
+        [Number(previousState === 'settled'), now, now, row.attempt_id],
+      );
+      const lease = budgetFrom({
+        ...row,
+        state: 'expired',
+        priced: row.priced ?? Number(previousState === 'settled'),
+        updated_at: now,
+        expired_at: now,
+      });
+      expired.push(lease);
+      this.#event(row.task_id!, row.attempt_id, 'budget_lease_expired', {
+        account: lease.account,
+        unit: lease.unit,
+        amount: lease.amount,
+        previousState,
+        priced: lease.priced,
+        expiresAt: lease.expiresAt,
+        expiredAt: lease.expiredAt,
+      }, now);
+    }
+    return expired;
+  }
+
   #settleBudgetLease(attemptId: number, usage: UsageReport | undefined, now: number): BudgetLease | null {
     const row = this.db
-      .query<BudgetRow, [number]>('SELECT * FROM budget_leases WHERE attempt_id = ?')
+      .query<BudgetRow, [number]>(`
+        SELECT budget_leases.*, attempts.task_id
+        FROM budget_leases
+        JOIN attempts ON attempts.id = budget_leases.attempt_id
+        WHERE budget_leases.attempt_id = ?
+      `)
       .get(attemptId);
-    if (!row || row.state === 'released') return null;
+    if (!row || row.state === 'released' || row.state === 'expired') return null;
     const priced = usage?.status === 'recorded'
       && usage.priced === true
       && usage.rows.length > 0

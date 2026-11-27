@@ -178,7 +178,7 @@ test('budget leases block a second attempt and cool down until expiry', () => {
       windows: [{ key: 'day', remaining: 10, reserve: 0, observedAt: now - 1000, resetAt: now + 3_600_000 }],
     });
 
-    expect(store.reserve('one', [budgetLane], now, [budget])).not.toBeNull();
+    const first = store.reserve('one', [budgetLane], now, [budget])!;
     expect(store.budgetLease(1)).toMatchObject({
       amount: 0.6,
       state: 'held',
@@ -197,7 +197,78 @@ test('budget leases block a second attempt and cool down until expiry', () => {
       filters: [{ reason: 'budget' }],
     });
 
+    store.beginCheckpoint(first.attempt.id, 'finished', 0, now);
+    store.settle(first.attempt.id, 'checkpoint-one', 'completed', 'done', 0, now);
     expect(store.reserve('two', [budgetLane], now + budget.windowMs, [budget])).not.toBeNull();
+  } finally {
+    close(root, db);
+  }
+});
+
+test('an active attempt keeps its budget hold after the nominal lease expiry', () => {
+  const now = Date.now();
+  const { root, db, store } = setup();
+  try {
+    store.createTask({ id: 'long-run', title: 'long run', repoPath: root, workspacePath: join(root, 'long-run'), now });
+    const budgetLane = lane(now, {
+      windows: [{ key: 'day', remaining: 10, reserve: 0, observedAt: now - 1000, resetAt: now + 3_600_000 }],
+    });
+    const reservation = store.reserve('long-run', [budgetLane], now, [{ ...budget, windowMs: 10 }])!;
+
+    expect(store.budgetStatus([{ ...budget, windowMs: 10 }], now + 100)[0]).toMatchObject({
+      used: 0.6,
+      activeLeases: 1,
+    });
+    expect(store.budgetLease(reservation.attempt.id)).toMatchObject({
+      state: 'held',
+      expiresAt: now + 10,
+      expiredAt: null,
+    });
+    expect(store.events('long-run').some((event) => event.kind === 'budget_lease_expired')).toBe(false);
+
+    store.beginCheckpoint(reservation.attempt.id, 'finished', 0, now + 100);
+    store.settle(reservation.attempt.id, 'checkpoint', 'completed', 'done', 0, now + 100, undefined, usageReport([]));
+    expect(store.budgetLease(reservation.attempt.id)).toMatchObject({
+      state: 'pending',
+      expiresAt: now + 110,
+    });
+  } finally {
+    close(root, db);
+  }
+});
+
+test('expired budget leases are audited once and stop consuming the window', () => {
+  const now = Date.now();
+  const { root, db, store } = setup();
+  try {
+    store.createTask({ id: 'expire', title: 'expire', repoPath: root, workspacePath: join(root, 'expire'), now });
+    const shortBudget = { ...budget, windowMs: 10 };
+    const budgetLane = lane(now, {
+      windows: [{ key: 'day', remaining: 10, reserve: 0, observedAt: now - 1000, resetAt: now + 3_600_000 }],
+    });
+    const reservation = store.reserve('expire', [budgetLane], now, [shortBudget])!;
+    store.beginCheckpoint(reservation.attempt.id, 'finished', 0, now);
+    store.settle(reservation.attempt.id, 'checkpoint', 'completed', 'done', 0, now, undefined, usageReport([]));
+
+    expect(store.budgetStatus([shortBudget], now + 9)[0]).toMatchObject({ used: 0.6, activeLeases: 1 });
+    expect(store.budgetStatus([shortBudget], now + 10)[0]).toMatchObject({ used: 0, activeLeases: 0, nextExpiryAt: null });
+    expect(store.budgetLease(reservation.attempt.id)).toMatchObject({
+      amount: 0.6,
+      state: 'expired',
+      priced: false,
+      expiredAt: now + 10,
+    });
+    expect(store.events('expire').filter((event) => event.kind === 'budget_lease_expired')).toHaveLength(1);
+    expect(store.budgetAudit([shortBudget], now + 11).expired).toMatchObject([{
+      attemptId: reservation.attempt.id,
+      taskId: 'expire',
+      state: 'expired',
+      expiredAt: now + 10,
+    }]);
+    expect(store.expireBudgetLeases(now + 12)).toEqual([]);
+    expect(store.releaseBudgetLease(reservation.attempt.id, 'late_release', now + 12)).toBe(false);
+    expect(store.budgetLease(reservation.attempt.id)?.state).toBe('expired');
+    expect(store.events('expire').filter((event) => event.kind === 'budget_lease_expired')).toHaveLength(1);
   } finally {
     close(root, db);
   }
@@ -412,7 +483,7 @@ test('recovery closes an interrupted attempt, preserves its checkpoint and reque
       id: 'recover',
       status: 'queued',
       checkpoint: 'checkpoint-recovered',
-      nextWakeAt: null,
+      nextWakeAt: now + 10 + budget.windowMs,
     });
     expect(store.activeAttempt('recover')).toBeNull();
     expect(store.getAttempt(reservation.attempt.id)).toMatchObject({
@@ -426,6 +497,20 @@ test('recovery closes an interrupted attempt, preserves its checkpoint and reque
       priced: false,
     });
     expect(store.events('recover').filter((event) => event.kind === 'attempt_recovered')).toHaveLength(1);
+    expect(store.events('recover').find((event) => event.kind === 'recovery_cooldown')?.detail).toMatchObject({
+      account: budget.account,
+      until: now + 10 + budget.windowMs,
+      reason: 'pending_budget_lease',
+    });
+
+    store.createTask({ id: 'cooldown-peer', title: 'peer', repoPath: root,
+      workspacePath: join(root, 'cooldown-peer'), now });
+    expect(store.reserve('cooldown-peer', [budgetLane], now + 11, [budget])).toBeNull();
+    expect(store.getTask('cooldown-peer').nextWakeAt).toBe(now + 10 + budget.windowMs);
+    expect(store.events('cooldown-peer').at(-1)?.detail).toMatchObject({
+      filters: [{ laneId: budgetLane.id, reason: 'cooldown' }],
+      retryAt: now + 10 + budget.windowMs,
+    });
 
     store.recoverAttempt(reservation.attempt.id, {
       status: 'blocked',
@@ -434,6 +519,9 @@ test('recovery closes an interrupted attempt, preserves its checkpoint and reque
     });
     expect(store.getTask('recover').status).toBe('queued');
     expect(store.events('recover').filter((event) => event.kind === 'attempt_recovered')).toHaveLength(1);
+
+    const resumed = store.reserve('recover', [budgetLane], now + 10 + budget.windowMs, [budget]);
+    expect(resumed?.attempt).toMatchObject({ taskId: 'recover', account: budget.account });
   } finally {
     close(root, db);
   }

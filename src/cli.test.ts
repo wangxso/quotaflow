@@ -127,6 +127,15 @@ test('shows configured budget status', async () => {
       activeLeases: 0,
       nextExpiryAt: null,
     }]);
+    const audit = await cli(root, ['budget', 'audit', '--limit', '5']);
+    expect(JSON.parse(audit.stdout)).toEqual({
+      policies: [{ account: 'fixture', unit: 'gateway-estimate', limit: 5, reserve: 0.5,
+        windowMs: 60_000, holdPerAttempt: 0.25, used: 0, available: 5, activeLeases: 0, nextExpiryAt: null }],
+      expired: [],
+    });
+    const invalid = await cliResult(root, ['budget', 'audit', '--limit', '0']);
+    expect(invalid.exitCode).toBe(1);
+    expect(invalid.stderr).toContain('--limit must be a positive integer');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

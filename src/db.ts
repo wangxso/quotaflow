@@ -44,7 +44,8 @@ const budgetSchema = `
     window_ms INTEGER NOT NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    expires_at INTEGER NOT NULL
+    expires_at INTEGER NOT NULL,
+    expired_at INTEGER
   );
   CREATE INDEX IF NOT EXISTS budget_leases_account
     ON budget_leases(account, state, expires_at);
@@ -133,12 +134,12 @@ export function openDatabase(file: string): Database {
   `);
   const version = db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version ?? 0;
   try {
-    if (version > 6) throw new Error(`Unsupported QuotaFlow database version ${version}`);
-    if (version < 6) {
+    if (version > 7) throw new Error(`Unsupported QuotaFlow database version ${version}`);
+    if (version < 7) {
       migrate(db, () => {
         const current = db.query<{ user_version: number }, []>('PRAGMA user_version').get()!.user_version;
-        if (current > 6) throw new Error(`Unsupported QuotaFlow database version ${current}`);
-        if (current === 6) return;
+        if (current > 7) throw new Error(`Unsupported QuotaFlow database version ${current}`);
+        if (current === 7) return;
         if (current < 1) {
           db.exec(schema);
         } else {
@@ -146,10 +147,13 @@ export function openDatabase(file: string): Database {
           if (current < 3) db.run('ALTER TABLE attempts ADD COLUMN actual_model TEXT');
           if (current < 4) db.exec(usageSchema);
           if (current < 5) db.exec(budgetSchema);
-          db.run('ALTER TABLE tasks ADD COLUMN handoff_config TEXT');
-          db.run('ALTER TABLE attempts ADD COLUMN handoff_note TEXT');
+          if (current < 6) {
+            db.run('ALTER TABLE tasks ADD COLUMN handoff_config TEXT');
+            db.run('ALTER TABLE attempts ADD COLUMN handoff_note TEXT');
+          }
+          if (current >= 5) db.run('ALTER TABLE budget_leases ADD COLUMN expired_at INTEGER');
         }
-        db.run('PRAGMA user_version = 6');
+        db.run('PRAGMA user_version = 7');
       });
     }
     return db;

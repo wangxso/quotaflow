@@ -1,0 +1,57 @@
+{
+  "recordedOn": "2026-11-27",
+  "baseRevision": "c47e92615029d7a94b7b33dd9fbf10d0cfec027a",
+  "schemaVersion": 7,
+  "verification": {
+    "macOS": { "passed": 98, "failed": 0, "windowsOnlySkipped": 1 },
+    "linux": { "passed": 98, "failed": 0, "windowsOnlySkipped": 1 },
+    "migrations": "Deterministic schema v1 through v6 migration tests passed",
+    "build": "bun run build",
+    "configurationValidation": "bun dist/cli.js config validate --config quotaflow.config.example.json"
+  },
+  "leaseLifecycle": {
+    "activeAttempt": "A held lease remains charged after its nominal expiry time while its attempt stage is not done.",
+    "settledAttempt": "Settlement replaces the hold with either a priced settled amount or the unknown-usage pending hold and starts a new window from settlement.",
+    "expiryAudit": "Once the attempt is done and the settlement window ends, the lease transitions to expired exactly once. Amount, priced, expiry, and expiredAt are retained.",
+    "activeBudgetQuery": "Released leases and expired completed leases stop consuming budget. Active leases continue consuming budget.",
+    "idempotency": "Repeated budget queries and explicit expiration passes do not duplicate budget_lease_expired events."
+  },
+  "scenario": {
+    "activeLease": {
+      "initialExpiryMs": 10,
+      "checkedAfterExpiryWithoutSettlement": true,
+      "state": "held",
+      "used": 0.6,
+      "expiredEvents": 0
+    },
+    "expiredLease": {
+      "unknownUsage": true,
+      "amount": 0.6,
+      "finalState": "expired",
+      "priced": false,
+      "usedAfterExpiry": 0,
+      "expirationEvents": 1,
+      "repeatedExpirationEvents": 1,
+      "taskAuditJoin": true
+    },
+    "recoveryCooldown": {
+      "leaseState": "pending",
+      "taskStatusAfterRecovery": "queued",
+      "taskNextWakeAt": "pending lease expiry",
+      "accountCooldownUntil": "pending lease expiry",
+      "competingTaskRetryAt": "pending lease expiry",
+      "reservationAfterExpiry": "succeeded",
+      "eventKind": "recovery_cooldown"
+    }
+  },
+  "cli": {
+    "status": "budget status performs the idempotent expiration audit before reporting policy usage",
+    "audit": "budget audit --limit <n> returns current policy status and recent expired leases with taskId, attemptId, amount, priced, expiresAt, and expiredAt",
+    "invalidLimit": "Rejected when it is not a positive integer"
+  },
+  "scope": {
+    "providerInvoice": "UNKNOWN",
+    "costSource": "Magpie gateway estimate only",
+    "externalReconciliation": "Provider invoice attribution remains outside the current evidence."
+  }
+}

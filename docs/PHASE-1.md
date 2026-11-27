@@ -13,7 +13,7 @@
 首个可运行切片覆盖单机任务底座：
 
 - `quotaflow.config.example.json` 提供显式路由审批、Lane、额度窗口和 Worktree 根目录示例。
-- SQLite v6 持久化任务、尝试、交接笔记、额度冷却、事件、用量和预算租约，开启 WAL 和完整同步。v1 至 v5 可迁移到 v6。
+- SQLite v7 持久化任务、尝试、交接笔记、额度冷却、事件、用量和预算租约，开启 WAL 和完整同步。v1 至 v6 可迁移到 v7。
 - 原子预留同时检查账户并发槽位、冷却时间、额度窗口剩余量、保留额度、观测新鲜度、显式预算租约和尝试上限。
 - 未知或过期额度不会被猜测为可用；关键任务可绕过普通任务保留额度，但不能绕过并发槽位。
 - Git Worktree 可显式准备，私有检查点保存已暂存、未暂存、删除和未跟踪内容，并支持从检查点恢复。
@@ -24,8 +24,8 @@
 - Codex 停止证明与 Server 返回值分离。默认 verifier 读取 `stopped.json`；自定义 `CodexServerFactory` 必须显式注入独立 `CodexStopVerifier`。缺少证明、PID 非法、`activeProcesses` 非零或停止对象结构无效时，Adapter 均拒绝报告成功。
 - OpenCode Adapter 要求 Magpie Lane 显式配置 `baseUrl`，并使用隔离的 `OPENCODE_CONFIG`、`OPENCODE_DB` 和 `XDG_*`。`external_directory` 权限只为已启用交接的尝试草稿目录开例外，网络、task 和 skill 工具保持禁用。完成检查要求 `activeProcesses=0` 的停止凭证以及 NDJSON 中至少一个 `step_finish`。
 - Magpie 请求级对账已接入：OpenCode 完成后按精确会话 ID 查询请求行，在本地按尝试时窗复核，写入 `attempt_usage` 并从一致的服务模型回填 `attempts.actual_model`。对账失败只记录 `usage_reconciled` 事件，不阻断任务完成；服务商账单始终保留为 `UNKNOWN`。
-- 预算租约已接入：仅对显式配置 `budgets` 的账户记账；预留时先占用 `holdPerAttempt`，已定价用量结算后收缩到网关估算成本，用量未知或不完整时保留 hold 并标记 `pending`。预算不足会使任务进入 `waiting_quota`、`reason=budget`，并等待最早租约过期。`task show` 与 `budget status` 可审计租约。
-- Worker 每次预留后写入 `owner.json`，`worker once` 启动时检查遗留活动尝试。已启动的受监督尝试须等旧 owner 退出并取得 `activeProcesses=0` 凭证，才能保存检查点并重新入队。凭证缺失时任务进入 `blocked` 并保留活动尝试。之后取得凭证，可再次执行 `worker recover`。
+- 预算租约已接入：仅对显式配置 `budgets` 的账户记账；预留时先占用 `holdPerAttempt`，已定价用量结算后收缩到网关估算成本，用量未知或不完整时保留 hold 并标记 `pending`。活跃尝试持有的租约即使超过名义时间也继续占用预算，直到尝试结束并重新结算。已结束租约到期后以 `expired` 状态保留金额、`expiredAt` 和一次 `budget_lease_expired` 事件。预算不足会使任务进入 `waiting_quota`、`reason=budget` 或 `cooldown`，并等待最早到期时间。`budget status` 自动执行过期审计，`budget audit` 返回当前策略和最近过期租约。 [到期审计证据](evidence/phase1-budget-expiry-audit-2026-11-27.json)
+- Worker 每次预留后写入 `owner.json`，`worker once` 启动时检查遗留活动尝试。已启动的受监督尝试须等旧 owner 退出并取得 `activeProcesses=0` 凭证，才能保存检查点并重新入队。凭证缺失时任务进入 `blocked` 并保留活动尝试。恢复结束时，unknown usage 形成的 `pending` lease 会把到期时间写入账户冷却和重新入队任务的 `nextWakeAt`，避免恢复后立即争抢同一预算窗口。之后取得凭证，可再次执行 `worker recover`。
 - `task retry` 可将没有活动尝试的 `failed`、`blocked` 或等待任务重新入队，保留既有检查点和尝试历史。总尝试次数限制为 3。
 - `task add --handoff` 为新任务启用交接笔记。`--handoff-protect` 可重复指定要在后续尝试保留的仓库路径。 [交接笔记](#跨-agent-交接笔记)
 - 活动取消已接入：第二个 CLI 进程对运行中任务写入 `cancel_requested` 事件并把状态置为 `cancelling`；Worker 轮询后向 Adapter 发送 `AbortSignal`。受监督命令由 Job Object、macOS 进程树或 Linux subreaper 停止。Codex 先调用 `turn/interrupt`，再关闭受监督 App Server 并要求 `activeProcesses=0` 的停止凭证，随后保存检查点并结算为 `cancelled`。重启时发现未完成取消请求也会在停止凭证满足后完成取消。
@@ -47,6 +47,7 @@ bun run src/cli.ts task cancel <task-id> --force --wait 10000
 bun run src/cli.ts task retry <task-id>
 bun run src/cli.ts task prepare <task-id>
 bun run src/cli.ts budget status
+bun run src/cli.ts budget audit --limit 100
 bun run src/cli.ts worker recover
 bun run src/cli.ts worker once
 ```
@@ -65,7 +66,7 @@ bun run src/cli.ts worker once
 
 第一次 smoke 的 `attempts.actual_model` 保持 `null`，准确反映了当时 OpenCode 1.19.6 `step_finish` 不含模型字段、且尚无请求级回写的状态。第二次 smoke 没有用请求模型冒充实际模型，而是只从 Magpie 服务模型回填。网关估算成本 0 不等于服务商发票，Provider 账单仍记 `UNKNOWN`；Magpie 行也没有 QuotaFlow `task_id`，但 QuotaFlow 现已持久化任务到请求行的关联。
 
-上述用量回写证据产生于 schema v4。v5 引入预算租约，v6 迁移保留已有的请求和租约数据。 [预算租约证据](evidence/phase1-budget-lease-2026-11-27.json)
+上述用量回写证据产生于 schema v4。v5 引入预算租约，v6 引入交接数据，v7 增加租约过期时间并保留已有请求、预算和交接数据。 [既有预算租约证据](evidence/phase1-budget-lease-2026-11-27.json)
 
 重启恢复通过一次真实控制器进程终止演练验证：受监督任务写入部分结果后，控制器被强制结束；下一轮 `worker once` 依据 `stopped.json` 的 `activeProcesses=0` 凭证保存首个检查点、把任务重新入队，并由第二次尝试完成。结果见[重启恢复证据](evidence/phase1-restart-recovery-2026-11-27.json)。恢复不会释放未知用量的预算 hold，而是保留 `pending` 直到租约过期或后续核销。
 
@@ -130,6 +131,6 @@ macOS 已用受监督 fixture 验证额度中断后的跨 Lane 接手，并实�
 
 ## 下一里程碑
 
-1. 完善预算租约的过期审计、恢复后冷却联动和重试策略，继续保留服务商账单为 `UNKNOWN`。
-2. 在 mcarplay 或等价真实仓库完成端到端任务，并补并发、额度等待和失败恢复测试。
-3. 自动化 Worktree 生命周期、清理和备份恢复。
+1. 在 mcarplay 或等价真实仓库完成端到端任务，并补并发、额度等待和失败恢复测试。
+2. 自动化 Worktree 生命周期、清理和备份恢复。
+3. 接入实际 Provider 账单证据，继续把无法核对的归属保留为 `UNKNOWN`。

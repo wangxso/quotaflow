@@ -57,6 +57,8 @@
 
 Linux 采用 child subreaper 与 `/proc` 进程树枚举，补齐全套停止、取消、stdio 和 detached 后代测试。Bun 官方 Linux 容器中完整测试为 95 通过、1 个 Windows 专用用例跳过；Codex CLI 0.171.0 的零推理 `command/exec` 与后台子进程回收通过。自定义 Codex Server 也必须由独立 verifier 提供停止证明，关闭接口自身不能自证成功；默认 verifier 另经 macOS 真实 Magpie 任务复验。 [Linux 与停止契约证据](evidence/phase1-linux-supervision-2026-11-27.json)
 
+预算租约随后升级为 schema v7。活跃尝试持有预算直到结束，已知或未知的已结束租约到期后只审计一次并保留金额与过期时间。恢复产生的 pending lease 会把到期点写入账户冷却和任务下一次唤醒，预算与冷却等待按各自最早到期时间重新调度。服务商账单归属仍为 `UNKNOWN`。 [预算到期审计证据](evidence/phase1-budget-expiry-audit-2026-11-27.json)
+
 ## mcarplay 试点
 
 1. 以[源码初筛的 CI 基线](RESEARCH.md#mcarplay-首个试点)作为起点。开跑前重新核对基线 SHA、默认分支、实际目标分支、受保护分支规则及必需检查。

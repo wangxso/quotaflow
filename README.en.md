@@ -8,7 +8,7 @@ QuotaFlow schedules AI software development tasks using account quotas, concurre
 
 ## Current capabilities
 
-- **Scheduling.** SQLite stores tasks, attempts, and events. The scheduler reserves account concurrency slots, quota, and any configured budget in one transaction.
+- **Scheduling.** SQLite v7 stores tasks, attempts, events, and budget leases. The scheduler reserves account concurrency slots, quota, and any configured budget in one transaction. `budget audit` reports expired leases, and an unknown hold created during recovery propagates to account cooldowns.
 - **Execution and recovery.** The CLI can submit, inspect, cancel, and retry tasks. Windows uses Job Objects. The native macOS supervisor tracks roots, children, and process groups. Linux enables child-subreaper mode to adopt detached descendants and scans `/proc`. Checkpointing and recovery require an independently verified stop receipt. A launched supervised attempt with a missing receipt stays `blocked` and retains write ownership. `--handoff` can pass a checkpoint-bound note to the next agent after an interruption.
 - **Adapters and usage.** The default Codex App Server and OpenCode adapters support supervised execution on Windows, macOS, and Linux. Magpie routing requires explicit configuration approval. Gateway estimates back budget leases, and provider invoice attribution remains `UNKNOWN`. [Configuration and adapter details](docs/PHASE-1.md)
 
@@ -34,6 +34,7 @@ Replace `TASK_ID` below with the ID returned by `task add`. The example uses pla
 bun run src/cli.ts task show TASK_ID
 bun run src/cli.ts task events TASK_ID
 bun run src/cli.ts budget status
+bun run src/cli.ts budget audit --limit 100
 ```
 
 On supported platforms, run `bun run poc/demo.ts` to see a simulated quota interruption and checkpoint handoff in a temporary Git repository. The demo uses fixture agents and requires no model credentials. macOS also requires the C compiler from Xcode or Command Line Tools, while Linux requires gcc and libc development headers. Use `bun test` for the test suite and `bun run build` to bundle the CLI into `dist/`. [PoC instructions](poc/README.md) · [Local execution and supervision](docs/PHASE-1.md#本地命令与平台监督)

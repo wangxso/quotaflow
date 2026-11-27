@@ -26,6 +26,7 @@ quotaflow queue next [--config <file>]
 quotaflow worker once [--config <file>]
 quotaflow worker recover [--config <file>]
 quotaflow budget status [--config <file>]
+quotaflow budget audit [--limit <n>] [--config <file>]
 `.trim();
 
 function option(args: string[], name: string): string | undefined {
@@ -189,6 +190,14 @@ async function main() {
 
     if (scope === 'budget' && action === 'status') {
       console.log(JSON.stringify(store.budgetStatus(config.budgets ?? []), null, 2));
+      return;
+    }
+
+    if (scope === 'budget' && action === 'audit') {
+      const limitText = option(rest, '--limit') ?? '100';
+      const limit = Number(limitText);
+      if (!Number.isInteger(limit) || limit <= 0) throw new Error('--limit must be a positive integer');
+      console.log(JSON.stringify(store.budgetAudit(config.budgets ?? [], Date.now(), limit), null, 2));
       return;
     }
 
