@@ -11,7 +11,7 @@ QuotaFlow 是一个额度感知的 AI 软件研发调度工具。它按账户额
 - **任务调度**　SQLite v9 持久化任务、尝试、事件、预算租约和 GitHub 门禁记录。调度器以事务方式预留账户并发槽位、额度和已配置预算。`budget audit` 可审计到期租约，恢复产生的 unknown hold 会联动账户冷却。
 - **执行与恢复**　CLI 支持提交、查看、取消和重试任务。Windows 使用 Job Object。macOS 原生监督器跟踪根进程、子进程和进程组。Linux 以 subreaper 收养 detached 后代并扫描 `/proc`。保存检查点和恢复任务均要求独立验证的停止凭证。已启动的受监督尝试在缺少凭证时进入 `blocked`，并保留写入权。只读任务使用 Agent 原生只读策略，并在完成后校验工作树未变化。`--handoff` 可在中断后把与检查点匹配的简短笔记交给下一个 Agent。
 - **模型接入与用量**　默认 Codex App Server 与 OpenCode Adapter 支持 Windows、macOS 和 Linux 受监督执行。Magpie 路由需要配置中的显式授权，网关估算用于预算租约，服务商账单归属仍为 `UNKNOWN`。 [配置与适配器说明](docs/PHASE-1.md)
-- **GitHub 门禁**　`github gate` 校验 PR 当前 HEAD 的检查、独立审查、Draft／mergeable 状态和人工合并要求，输出 Review–Fix／CI 分流计划，并可按稳定动作键物化受尝试次数和预算约束的 Agent 任务。`github serve-webhook` 在解析前验证 HMAC-SHA256，并提供健康检查、GitHub ping 和双层幂等。 [Phase 2 说明](docs/PHASE-2.md)
+- **GitHub 门禁**　`github snapshot` 通过 GitHub REST 自动读取 PR、当前 HEAD 检查和正式 Review，`github gate` 校验 Draft／mergeable 状态和人工合并要求，输出 Review–Fix／CI 分流计划，并可按稳定动作键物化受尝试次数和预算约束的 Agent 任务。`github serve-webhook` 在解析前验证 HMAC-SHA256，并提供健康检查、GitHub ping 和双层幂等。 [Phase 2 说明](docs/PHASE-2.md)
 
 ## 快速开始
 

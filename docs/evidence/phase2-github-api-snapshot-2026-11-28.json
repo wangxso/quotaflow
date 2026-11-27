@@ -1,0 +1,59 @@
+{
+  "recordedOn": "2026-11-28",
+  "baseRevision": "c3bbe1e3bb4b1ef1b73a714b8efef3abf842f4e6",
+  "command": "bun run src/cli.ts github snapshot --repo <owner/repo> --pull-number <n>",
+  "api": {
+    "baseUrl": "https://api.github.com",
+    "version": "2022-11-28",
+    "token": "Optional environment variable selected by --token-env, default GITHUB_TOKEN",
+    "redirects": "Rejected",
+    "timeoutMs": 15000,
+    "checkRunLimit": 100,
+    "reviewLimit": 100,
+    "mergeableRetries": 3,
+    "mergeableRetryDelay": "500 ms then 1000 ms"
+  },
+  "normalization": {
+    "pull": "state, Draft, mergeability, author, base/head refs and SHAs",
+    "checks": "Latest check-runs for the current PR head",
+    "reviews": "Submitted reviews with a commit ID, preserving official approval state",
+    "output": "The same repository/update envelope accepted by github gate",
+    "credentials": "Tokens are sent only in the Authorization header and are never printed"
+  },
+  "livePilot": {
+    "repository": "wangxso/mcarplay",
+    "pullRequest": 141,
+    "authentication": "unauthenticated public read",
+    "headSha": "abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48",
+    "baseSha": "daf67e87a72aa9033a4d62f88e9a9d05ce047d9e",
+    "draft": true,
+    "mergeable": "mergeable",
+    "currentHeadChecks": 3,
+    "officialReviews": 0,
+    "gateReasons": [
+      "draft",
+      "independent_review_missing"
+    ],
+    "gateAction": "independent_review",
+    "falseConflictObservedBeforeBooleanMapping": true,
+    "finalFalseConflicts": 0
+  },
+  "verification": {
+    "apiNormalizationTests": 4,
+    "cliIntegrationTests": 1,
+    "fullSuite": {
+      "macOS": 136,
+      "linux": 136,
+      "windowsOnlySkipped": 1,
+      "failed": 0
+    },
+    "buildAndConfig": "passed on macOS and Linux",
+    "jsonAndDiffChecks": "passed"
+  },
+  "scope": {
+    "automaticWebhookDelivery": "not deployed",
+    "automaticFetchIntoTaskRepository": "not implemented",
+    "automaticReviewSubmission": false,
+    "automaticReadyOrMerge": false
+  }
+}

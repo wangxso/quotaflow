@@ -21,6 +21,7 @@ import {
   planGitHubActions,
   verifyGitHubWebhookSignature,
 } from './github';
+import { fetchGitHubPullSnapshot } from './github-api';
 import { startGitHubWebhookServer } from './github-webhook-server';
 import { materializeGitHubActions } from './github-materialize';
 
@@ -38,6 +39,7 @@ quotaflow worker once [--config <file>]
 quotaflow worker recover [--config <file>]
 quotaflow budget status [--config <file>]
 quotaflow budget audit [--limit <n>] [--config <file>]
+quotaflow github snapshot --repo <owner/repo> --pull-number <n> [--token-env <name>] [--api-url <url>] [--config <file>]
 quotaflow github gate <snapshot.json> [--delivery-id <id>] [--event-type <type>] [--expected-head <sha>] [--expected-base <sha>] [--require-check <name>]... [--required-approvals <n>] [--allow-author-self-approval] [--materialize <repo>] [--config <file>]
 quotaflow github webhook <payload.json> --event <type> --delivery-id <id> --signature <sha256=...> [--secret-env GITHUB_WEBHOOK_SECRET] [--config <file>]
 quotaflow github serve-webhook [--host <host>] [--port <n>] [--path <path>] [--secret-env <name>] [--config <file>]
@@ -270,6 +272,27 @@ async function main() {
         plan,
         ...(materialization ? { materialization } : {}),
       }, null, 2));
+      return;
+    }
+
+    if (scope === 'github' && action === 'snapshot') {
+      const repository = option(rest, '--repo');
+      const pullText = option(rest, '--pull-number');
+      const tokenName = option(rest, '--token-env') ?? 'GITHUB_TOKEN';
+      const apiUrl = option(rest, '--api-url') ?? process.env.GITHUB_API_URL;
+      if (!repository || !pullText) throw new Error('github snapshot requires --repo and --pull-number');
+      if (rest.length > 0) throw new Error(`Unexpected github snapshot arguments: ${rest.join(' ')}`);
+      const pullNumber = Number(pullText);
+      if (!Number.isInteger(pullNumber) || pullNumber <= 0) {
+        throw new Error('--pull-number must be a positive integer');
+      }
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(tokenName)) throw new Error('--token-env must name an environment variable');
+      const snapshot = await fetchGitHubPullSnapshot(repository, pullNumber, {
+        token: process.env[tokenName],
+        ...(apiUrl ? { apiUrl } : {}),
+      });
+      const { repository: normalizedRepository, ...update } = snapshot;
+      console.log(JSON.stringify({ repository: normalizedRepository, update }, null, 2));
       return;
     }
 

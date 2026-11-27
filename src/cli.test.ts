@@ -152,6 +152,74 @@ test('shows configured budget status', async () => {
   }
 });
 
+test('fetches a GitHub pull snapshot through the CLI API entry point', async () => {
+  const { root } = setup();
+  const headSha = 'abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48';
+  const baseSha = 'daf67e87a72aa9033a4d62f88e9a9d05ce047d9e';
+  const testToken = ['cli', 'test', 'token'].join('-');
+  let authorized = false;
+  const server = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch(request) {
+      authorized ||= request.headers.get('authorization') === `Bearer ${testToken}`;
+      const url = new URL(request.url);
+      if (url.pathname === '/repos/wangxso/mcarplay/pulls/141') {
+        return Response.json({
+          number: 141,
+          state: 'open',
+          draft: true,
+          mergeable: 'mergeable',
+          user: { login: 'wangxso' },
+          base: { ref: 'main', sha: baseSha },
+          head: { ref: 'feature', sha: headSha },
+        });
+      }
+      if (url.pathname === `/repos/wangxso/mcarplay/commits/${headSha}/check-runs`) {
+        return Response.json({
+          check_runs: [{
+            name: 'test',
+            status: 'completed',
+            conclusion: 'success',
+            head_sha: headSha,
+            started_at: '2026-11-27T13:57:30Z',
+            completed_at: '2026-11-27T14:03:00Z',
+          }],
+        });
+      }
+      if (url.pathname === '/repos/wangxso/mcarplay/pulls/141/reviews') {
+        return Response.json([]);
+      }
+      return Response.json({ message: 'Not Found' }, { status: 404 });
+    },
+  });
+  try {
+    const result = await cli(root, [
+      'github', 'snapshot',
+      '--repo', 'wangxso/mcarplay',
+      '--pull-number', '141',
+      '--token-env', 'QUOTAFLOW_TEST_GITHUB_TOKEN',
+      '--api-url', `http://127.0.0.1:${server.port}`,
+    ], { QUOTAFLOW_TEST_GITHUB_TOKEN: testToken });
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      repository: 'wangxso/mcarplay',
+      update: {
+        number: 141,
+        draft: true,
+        mergeable: 'mergeable',
+        headSha,
+        checks: [{ name: 'test', conclusion: 'success' }],
+        reviews: [],
+      },
+    });
+    expect(result.stdout).not.toContain(testToken);
+    expect(authorized).toBe(true);
+  } finally {
+    server.stop(true);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('evaluates and idempotently stores a GitHub pull gate snapshot', async () => {
   const { root } = setup();
   const headSha = 'abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48';

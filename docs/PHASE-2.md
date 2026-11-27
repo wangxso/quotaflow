@@ -24,6 +24,10 @@ QuotaFlow 已在 `wangxso/mcarplay` Issue #82 上创建独立 Worktree，由 Cod
 检查快照时使用：
 
 ```sh
+bun run src/cli.ts github snapshot \
+  --repo wangxso/mcarplay \
+  --pull-number 141 > pr.json
+
 bun run src/cli.ts github gate pr.json \
   --delivery-id delivery-141 \
   --expected-head abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48 \
@@ -33,6 +37,8 @@ bun run src/cli.ts github gate pr.json \
   --required-approvals 1 \
   --materialize /path/to/repository
 ```
+
+`github snapshot` 从 GitHub REST 读取 PR 元数据、当前 HEAD 的 check-runs 和正式 Reviews。默认不要求凭据，适合公开仓库；私有仓库或更高 API 限流可通过 `--token-env` 指定环境变量，默认名称为 `GITHUB_TOKEN`。企业 API 可用 `--api-url` 指向 HTTPS 端点或本机回环测试服务。GitHub 首次返回 `mergeable=null` 时会在有界等待后重试，不会立即把计算延迟误判为冲突。 [REST 快照证据](evidence/phase2-github-api-snapshot-2026-11-28.json)
 
 快照文件格式为：
 
@@ -86,8 +92,8 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
 
 ## 尚未完成
 
-- GitHub App 或最小权限凭据、公网 TLS 回调部署、反向代理和自动拉取 PR 快照。
-- 自动抓取 PR HEAD／base 并在物化前校验本地提交可用性。
+- GitHub App 或最小权限凭据、公网 TLS 回调部署和反向代理。
+- 在物化前自动抓取 PR HEAD／base 到本地 Git 仓库并校验提交可用性。
 - 获取并核验 GitHub 上的正式独立批准；内部审查不能替代该批准。
 - Check-run 日志抓取、失败分类细节和同 SHA 复跑绑定。
 - 写入应答丢失、重复 Webhook、越权请求和凭据轮换演练。

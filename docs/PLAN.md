@@ -18,6 +18,8 @@
 
 2026-11-28 将 GitHub 动作计划接入 QuotaFlow 任务创建。只有独立审查、Review–Fix 和 CI 修复可物化为 Agent 任务；任务绑定 PR HEAD，按稳定动作键幂等，沿用每任务最多 3 次尝试和配置预算。独立审查使用 SQLite v9 的任务级只读模式，禁止不能保证只读的 Adapter，并在结束后拒绝任何工作树变化。人工 Ready、冲突处理、证据刷新与合并仍不派发给 Agent。PR #141 的内部只读审查已由免费 Magpie 路由完成，未发现阻断问题，源仓库和审查 worktree 均无改动；GitHub 官方 Review 仍为 0。详见 [Phase 2 证据](evidence/phase2-github-materialization-2026-11-28.json)。
 
+同日增加 `github snapshot`，通过 GitHub REST 读取 Pull Request、当前 HEAD 的 check-runs 和正式 Reviews，并处理 `mergeable=null` 的计算延迟。公开 PR 可使用无认证读取，私有仓库或更高限流可通过 `--token-env` 注入凭据。PR #141 的自动快照得到当前 HEAD、3 条成功检查、`mergeable=mergeable` 和 0 条正式 Review，门禁结果与手工快照一致。详见 [REST 快照证据](evidence/phase2-github-api-snapshot-2026-11-28.json)。
+
 ## Phase 0 · 调研与可行性验证
 
 | 顺序 | 工作 | 通过证据 |

@@ -68,11 +68,12 @@
     "githubPersistenceTests": 2,
     "schemaMigrationTests": "v1 through v8 migrate to v9",
     "cliTests": "snapshot parsing, live gate shape, same-delivery retry and logical-event redelivery",
-    "fullSuite": { "macOS": 131, "linux": 131, "windowsOnlySkipped": 1, "failed": 0 }
+    "fullSuite": { "macOS": 136, "linux": 136, "windowsOnlySkipped": 1, "failed": 0 }
   },
   "scope": {
     "automaticMerge": false,
     "webhookReceiver": "implemented for local Bun HTTP use",
+    "automaticSnapshotFetch": "implemented through github snapshot",
     "reviewFixWorkflow": "action planning and bounded task materialization implemented",
     "ciFailureTriage": "minimal fix planning and task materialization implemented; log analysis and automatic rerun not implemented",
     "nextGate": "PR #141 requires an independent approval and leaving Draft before it can become ready_for_human_merge."
