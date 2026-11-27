@@ -9,14 +9,22 @@ class AppServer {
   #pending = new Map();
   #notifications = [];
   #closed = false;
+  #stderr = '';
 
   constructor(executable, args = [], options = {}) {
-    this.#child = spawn(executable, ['app-server', '--listen', 'stdio://', ...args], {
-      ...options,
+    const { transport = 'stdio', ...spawnOptions } = options;
+    if (!['stdio', 'daemon'].includes(transport)) throw new Error('Unsupported App Server transport');
+    const command = transport === 'daemon'
+      ? ['app-server', 'proxy']
+      : ['app-server', '--listen', 'stdio://', ...args];
+    this.#child = spawn(executable, command, {
+      ...spawnOptions,
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     });
-    this.#child.stderr.resume();
+    this.#child.stderr.on('data', (chunk) => {
+      this.#stderr = (this.#stderr + String(chunk)).slice(-4_000);
+    });
     this.#child.stdin.on('error', () => {});
     this.#child.on('error', () => this.#failPending('spawn_failed'));
     this.#child.on('close', () => {
@@ -60,9 +68,10 @@ class AppServer {
     });
   }
 
-  async initialize() {
+  async initialize(capabilities) {
     const result = await this.call('initialize', {
       clientInfo: { name: 'quotaflow_phase0', title: 'QuotaFlow Phase 0', version: '0.1.0' },
+      ...(capabilities ? { capabilities } : {}),
     });
     if (result.value) this.#write({ method: 'initialized' });
     return result;
@@ -86,6 +95,10 @@ class AppServer {
     const timer = setTimeout(() => this.#child.kill(), 2500);
     await closed;
     clearTimeout(timer);
+  }
+
+  get stderr() {
+    return this.#stderr;
   }
 }
 

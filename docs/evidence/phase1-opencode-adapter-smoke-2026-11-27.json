@@ -1,0 +1,242 @@
+{
+  "date": "2026-11-27",
+  "kind": "phase1-opencode-adapter-smoke",
+  "result": "passed",
+  "task": {
+    "id": "opencode-smoke",
+    "title": "OpenCode adapter smoke",
+    "status": "completed",
+    "prompt": "In this temporary test worktree, use the terminal to write exactly the text 41 to app.txt, then read app.txt to verify it. Do not touch any other file or use the network. Stop after verification.",
+    "reservedAt": "2026-11-27T15:48:03.849+08:00",
+    "attemptStartedAt": "2026-11-27T15:48:04.034+08:00",
+    "attemptEndedAt": "2026-11-27T15:48:20.481+08:00",
+    "completionEventAt": "2026-11-27T15:48:20.481+08:00"
+  },
+  "attempt": {
+    "id": 1,
+    "lane": "opencode-free",
+    "agent": "opencode",
+    "requestedModel": "opencode-go/hy4-flash-free",
+    "provider": "magpie",
+    "stage": "done",
+    "actualModel": null,
+    "actualModelNote": "OpenCode 1.19.6 step_finish events do not contain a model field. The requested model was not copied into attempts.actual_model; the served model is available only from the Magpie request rows until request-level writeback is implemented.",
+    "checkpoint": "e75eb8e83093cb2cc487c5b073d82123d544596a"
+  },
+  "routingApproval": {
+    "allowedProviders": [
+      "magpie"
+    ],
+    "allowed": true,
+    "approvedBy": "project-owner",
+    "approvedAt": "2026-11-27",
+    "note": "Phase 1 OpenCode adapter smoke"
+  },
+  "runtime": {
+    "os": "Windows",
+    "opencodeVersion": "1.19.6",
+    "commandShape": "opencode run --pure --format json --model magpie/opencode-go/hy4-flash-free --dir <workspace> <prompt>",
+    "supervisor": {
+      "readySession": 1,
+      "stopped": {
+        "exitCode": 0,
+        "activeProcesses": 0,
+        "reason": "worker_exit"
+      }
+    },
+    "isolation": {
+      "attemptLocalOpenCodeProfile": true,
+      "projectConfigDisabled": true,
+      "shareDisabled": true,
+      "autoupdateDisabled": true,
+      "modelFetchDisabled": true,
+      "directProviderApiEnvironmentRemoved": true,
+      "permissions": {
+        "allowed": [
+          "read",
+          "edit",
+          "glob",
+          "grep",
+          "list",
+          "bash"
+        ],
+        "denied": [
+          "task",
+          "external_directory",
+          "webfetch",
+          "websearch",
+          "codesearch",
+          "skill"
+        ]
+      }
+    }
+  },
+  "openCode": {
+    "sessionId": "ses_de40632d4ffeyg5XdzKi3E0zS8",
+    "sessionTitle": "Writing 41 to app.txt and verifying",
+    "stepFinishCount": 4,
+    "stepReasons": [
+      "tool-calls",
+      "tool-calls",
+      "tool-calls",
+      "stop"
+    ],
+    "tools": [
+      {
+        "tool": "bash",
+        "title": "Test-Path -LiteralPath \".\"",
+        "status": "completed",
+        "exitCode": 0
+      },
+      {
+        "tool": "bash",
+        "title": "Set-Content -LiteralPath \"app.txt\" -Value \"41\" -NoNewline",
+        "status": "completed",
+        "exitCode": 0
+      },
+      {
+        "tool": "read",
+        "title": "app.txt",
+        "status": "completed"
+      }
+    ],
+    "finalText": "Verified: `app.txt` contains exactly `41`.",
+    "stepCost": 0,
+    "modelFieldInStepFinish": false
+  },
+  "workspace": {
+    "syntheticRepository": true,
+    "appTxtBytes": [
+      52,
+      49
+    ],
+    "appTxtText": "41",
+    "gitStatus": [
+      "M app.txt"
+    ],
+    "checkpointRef": "refs/quotaflow/attempts/opencode-smoke/1"
+  },
+  "magpie": {
+    "query": "GET /v1/magpie/usage/requests?period=today&limit=400",
+    "observationWindow": {
+      "start": "2026-11-27T15:47:30+08:00",
+      "end": "2026-11-27T15:49:00+08:00"
+    },
+    "matchingRows": [
+      {
+        "classification": "auxiliary",
+        "observedAt": "2026-11-27T15:48:06.076948+08:00",
+        "responseId": "04bf1bd0-bf7b-4214-b560-524723656921",
+        "agent": "opencode",
+        "requestModel": "opencode-go/hy4-flash-free",
+        "servedModel": "hy4-flash-free",
+        "httpStatus": 200,
+        "stop": "stop",
+        "inputTokens": 66,
+        "outputTokens": 291,
+        "cacheReadTokens": 512,
+        "reasoningTokens": 281,
+        "priced": true,
+        "costEstimate": 0
+      },
+      {
+        "classification": "step_call",
+        "observedAt": "2026-11-27T15:48:07.1466485+08:00",
+        "responseId": "a0b5c335-f606-40b0-90f2-d2a44c708e3e",
+        "agent": "opencode",
+        "requestModel": "opencode-go/hy4-flash-free",
+        "servedModel": "hy4-flash-free",
+        "httpStatus": 200,
+        "stop": "tool_calls",
+        "inputTokens": 5322,
+        "outputTokens": 236,
+        "cacheReadTokens": 0,
+        "reasoningTokens": 140,
+        "priced": true,
+        "costEstimate": 0
+      },
+      {
+        "classification": "step_call",
+        "observedAt": "2026-11-27T15:48:10.7572186+08:00",
+        "responseId": "56914c68-81d7-4d62-8c2c-b4df06509630",
+        "agent": "opencode",
+        "requestModel": "opencode-go/hy4-flash-free",
+        "servedModel": "hy4-flash-free",
+        "httpStatus": 200,
+        "stop": "tool_calls",
+        "inputTokens": 450,
+        "outputTokens": 89,
+        "cacheReadTokens": 5120,
+        "reasoningTokens": 0,
+        "priced": true,
+        "costEstimate": 0
+      },
+      {
+        "classification": "step_call",
+        "observedAt": "2026-11-27T15:48:15.2746321+08:00",
+        "responseId": "f54dba2b-ae30-4abc-a5b6-39a0778d2548",
+        "agent": "opencode",
+        "requestModel": "opencode-go/hy4-flash-free",
+        "servedModel": "hy4-flash-free",
+        "httpStatus": 200,
+        "stop": "tool_calls",
+        "inputTokens": 297,
+        "outputTokens": 68,
+        "cacheReadTokens": 5376,
+        "reasoningTokens": 0,
+        "priced": true,
+        "costEstimate": 0
+      },
+      {
+        "classification": "step_call",
+        "observedAt": "2026-11-27T15:48:17.5558482+08:00",
+        "responseId": "24e7a803-1e58-4d1a-9e95-9473c25dcd78",
+        "agent": "opencode",
+        "requestModel": "opencode-go/hy4-flash-free",
+        "servedModel": "hy4-flash-free",
+        "httpStatus": 200,
+        "stop": "stop",
+        "inputTokens": 208,
+        "outputTokens": 13,
+        "cacheReadTokens": 5632,
+        "reasoningTokens": 0,
+        "priced": true,
+        "costEstimate": 0
+      }
+    ],
+    "aggregate": {
+      "rows": 5,
+      "stepCallRows": 4,
+      "auxiliaryRows": 1,
+      "sessions": 1,
+      "allHttp200": true,
+      "allPriced": true,
+      "requestModel": "opencode-go/hy4-flash-free",
+      "servedModel": "hy4-flash-free",
+      "stepCallTokens": {
+        "input": 6277,
+        "output": 406,
+        "cacheRead": 16128,
+        "reasoning": 140
+      },
+      "allRowTokens": {
+        "input": 6343,
+        "output": 697,
+        "cacheRead": 16640,
+        "reasoning": 421
+      },
+      "costEstimate": 0
+    },
+    "auxiliaryRowNote": "The 15:48:06 row is observed before the first step-start at 15:48:09.243 and has no corresponding OpenCode step_finish. It is counted as auxiliary OpenCode traffic, not as one of the four adapter step calls.",
+    "requestAttribution": "The gateway rows carry agent=opencode and the exact OpenCode session ID, providing a session-level join. They still carry no QuotaFlow task_id, so task-level attribution is not enforced by the gateway.",
+    "costEstimateMeaning": "Magpie gateway price calculation, not a provider invoice.",
+    "providerInvoice": "UNKNOWN",
+    "requiresSeparateReconciliation": true
+  },
+  "limitations": [
+    "The run used the free hy4-flash-free route through Magpie and does not exercise paid-provider billing.",
+    "The OpenCode adapter currently depends on the Windows Job Object supervisor.",
+    "attempts.actual_model remains null until Magpie request-level usage writeback is implemented.",
+    "The run is a synthetic repository smoke, not a task-level end-to-end run in mcarplay or an equivalent production repository."
+  ]
+}

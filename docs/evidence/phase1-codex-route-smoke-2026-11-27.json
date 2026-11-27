@@ -1,0 +1,85 @@
+{
+  "date": "2026-11-27",
+  "kind": "phase1-codex-route-smoke",
+  "task": {
+    "id": "route-smoke",
+    "status": "completed",
+    "reservedAt": "2026-11-27T15:28:30.266+08:00",
+    "completionEventAt": "2026-11-27T15:28:59.642+08:00",
+    "prompt": "In this temporary test worktree, use the terminal to write exactly the text 41 to app.txt, then read app.txt to verify it. Do not use apply_patch or a file editor. Do not touch any other file or use the network. Stop after verification."
+  },
+  "attempt": {
+    "id": 1,
+    "stage": "done",
+    "startedAt": "2026-11-27T15:28:30.266+08:00",
+    "recordedEndedAt": "2026-11-27T15:28:30.266+08:00",
+    "timingNote": "The smoke ran before the worker clock fix, so attempts.ended_at reused the reservation time. Completion time in this evidence comes from the checkpoint_intent and attempt_finished event timestamps (15:28:59.642). The worker now records the actual settlement time."
+  },
+  "codex": {
+    "version": "0.172.0",
+    "agent": "codex",
+    "requestedModel": "opencode-go/deepseek-v4.1-flash",
+    "actualModel": "opencode-go/deepseek-v4.1-flash",
+    "provider": "magpie",
+    "turnStatus": "completed",
+    "appTxtBytes": [52, 49],
+    "onlyExpectedWorkspaceEntry": "M app.txt",
+    "appServerClosed": true,
+    "adapterReportedActiveProcesses": 0,
+    "processSupervisorReceipt": null,
+    "processSupervisorNote": "The Codex App Server adapter does not use the Windows Job Object supervisor. No stopped.json exists, and adapterReportedActiveProcesses is not a supervisor receipt.",
+    "checkpoint": "905ad3e357c6bcf3cb3a4d8628e6a109a46b2ca4"
+  },
+  "magpie": {
+    "query": "GET /v1/magpie/usage/requests?period=today&limit=400",
+    "clientIdentityObserved": "quotaflow_phase0",
+    "observationWindow": {
+      "start": "2026-11-27T15:28:30.266+08:00",
+      "end": "2026-11-27T15:28:59.642+08:00"
+    },
+    "matchingRows": [
+      {
+        "observedAt": "2026-11-27T15:28:37.5786317+08:00",
+        "requestModel": "opencode-go/deepseek-v4.1-flash",
+        "servedModel": "deepseek-v4.1-flash",
+        "httpStatus": 200,
+        "priced": true,
+        "costEstimate": 0.003992448
+      },
+      {
+        "observedAt": "2026-11-27T15:28:48.2771619+08:00",
+        "requestModel": "opencode-go/deepseek-v4.1-flash",
+        "servedModel": "deepseek-v4.1-flash",
+        "httpStatus": 200,
+        "priced": true,
+        "costEstimate": 0.001047948
+      },
+      {
+        "observedAt": "2026-11-27T15:28:55.9431734+08:00",
+        "requestModel": "opencode-go/deepseek-v4.1-flash",
+        "servedModel": "deepseek-v4.1-flash",
+        "httpStatus": 200,
+        "priced": true,
+        "costEstimate": 0.000443424
+      }
+    ],
+    "aggregate": {
+      "rows": 3,
+      "sessions": 1,
+      "requestModel": "opencode-go/deepseek-v4.1-flash",
+      "servedModel": "deepseek-v4.1-flash",
+      "allHttp200": true,
+      "allPriced": true,
+      "costEstimate": 0.00548382
+    },
+    "requestAttribution": "Temporal and client-identity correlation only. The rows contain no QuotaFlow task_id, so this is not a provider-side task-level join.",
+    "costEstimateMeaning": "Magpie gateway price calculation, not a provider invoice.",
+    "providerInvoice": "UNKNOWN",
+    "requiresSeparateReconciliation": true
+  },
+  "workspace": {
+    "syntheticRepository": true,
+    "status": ["M app.txt"],
+    "checkpointRef": "refs/quotaflow/attempts/route-smoke/1"
+  }
+}

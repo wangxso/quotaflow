@@ -1,0 +1,180 @@
+import { expect, test } from 'bun:test';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { QuotaFlowConfig } from './domain';
+import { openDatabase } from './db';
+import {
+  attemptDirectory,
+  recoverInterruptedAttempts,
+  writeAttemptOwner,
+} from './recovery';
+import { TaskStore } from './store';
+import { ensureWorktree, worktreeGit } from './worktree';
+
+function setup() {
+  const root = mkdtempSync(join(tmpdir(), 'quotaflow-recovery-'));
+  const repo = join(root, 'repo');
+  worktreeGit(root, ['init', '--initial-branch=main', repo]);
+  writeFileSync(join(repo, 'app.txt'), 'base\n');
+  worktreeGit(repo, ['add', '.']);
+  worktreeGit(repo, ['commit', '-m', 'base']);
+  const now = Date.now();
+  const config: QuotaFlowConfig = {
+    version: 1,
+    database: ':memory:',
+    worktreeRoot: join(root, 'worktrees'),
+    routing: { allowedProviders: ['local'] },
+    lanes: [{
+      id: 'fixture',
+      agent: 'codex',
+      model: 'fixture-model',
+      provider: 'local',
+      account: 'fixture-account',
+      priority: 1,
+      slots: 1,
+      windows: [{ key: 'day', remaining: 10, reserve: 0, observedAt: now - 1000, resetAt: now + 60_000 }],
+    }],
+  };
+  const db = openDatabase(':memory:');
+  const store = new TaskStore(db);
+  return { root, repo, now, config, db, store };
+}
+
+test('verified supervisor stop checkpoints the interrupted workspace and requeues the task', () => {
+  const { root, repo, now, config, db, store } = setup();
+  try {
+    store.createTask({
+      id: 'recover',
+      title: 'recover',
+      repoPath: repo,
+      workspacePath: join(root, 'recover'),
+      now,
+    });
+    const reservation = store.reserve('recover', config.lanes, now)!;
+    const workspace = ensureWorktree(repo, join(root, 'recover'));
+    writeFileSync(join(workspace, 'app.txt'), 'partial\n');
+    const statusDir = attemptDirectory(config, 'recover', reservation.attempt.id);
+    writeAttemptOwner(statusDir, 999_999, now);
+    writeFileSync(join(statusDir, 'ready.json'), '{}');
+
+    const report = recoverInterruptedAttempts(store, config, {
+      now: now + 10,
+      isProcessAlive: () => false,
+      verifyStop: () => ({
+        supervisorPid: 1,
+        workerPid: 2,
+        exitCode: null,
+        activeProcesses: 0,
+        reason: 'controller_closed',
+      }),
+    });
+
+    expect(report).toMatchObject({ recovered: 1, blocked: 0, skipped: 0, errors: 0 });
+    expect(store.getTask('recover')).toMatchObject({ status: 'queued' });
+    expect(store.activeAttempt('recover')).toBeNull();
+    const recovered = store.getAttempt(reservation.attempt.id);
+    expect(recovered.stage).toBe('done');
+    expect(recovered.checkpoint).toBeTruthy();
+    expect(worktreeGit(workspace, ['show', `${recovered.checkpoint}:app.txt`])).toBe('partial');
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('an unverified Codex writer blocks recovery instead of transferring write access', () => {
+  const { root, repo, now, config, db, store } = setup();
+  try {
+    store.createTask({
+      id: 'unverified',
+      title: 'unverified',
+      repoPath: repo,
+      workspacePath: join(root, 'unverified'),
+      now,
+    });
+    const reservation = store.reserve('unverified', config.lanes, now)!;
+    writeAttemptOwner(
+      attemptDirectory(config, 'unverified', reservation.attempt.id),
+      999_999,
+      now,
+    );
+
+    const report = recoverInterruptedAttempts(store, config, {
+      now: now + 10,
+      isProcessAlive: () => false,
+    });
+
+    expect(report).toMatchObject({ recovered: 0, blocked: 1, skipped: 0, errors: 0 });
+    expect(store.getTask('unverified')).toMatchObject({
+      status: 'blocked',
+      checkpoint: null,
+    });
+    expect(store.activeAttempt('unverified')).toBeNull();
+    expect(store.events('unverified').at(-1)?.detail).toMatchObject({
+      reason: 'writer_unverified',
+      recovered: true,
+    });
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a live worker owner is not preempted', () => {
+  const { root, repo, now, config, db, store } = setup();
+  try {
+    store.createTask({
+      id: 'live',
+      title: 'live',
+      repoPath: repo,
+      workspacePath: join(root, 'live'),
+      now,
+    });
+    const reservation = store.reserve('live', config.lanes, now)!;
+    writeAttemptOwner(
+      attemptDirectory(config, 'live', reservation.attempt.id),
+      process.pid,
+      now,
+    );
+
+    const report = recoverInterruptedAttempts(store, config, {
+      now: now + 10,
+      isProcessAlive: () => true,
+    });
+
+    expect(report).toMatchObject({ recovered: 0, blocked: 0, skipped: 1, errors: 0 });
+    expect(store.getTask('live').status).toBe('running');
+    expect(store.activeAttempt('live')?.id).toBe(reservation.attempt.id);
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a low-level reservation without owner evidence is left untouched', () => {
+  const { root, repo, now, config, db, store } = setup();
+  try {
+    store.createTask({
+      id: 'unowned',
+      title: 'unowned',
+      repoPath: repo,
+      workspacePath: join(root, 'unowned'),
+      now,
+    });
+    const reservation = store.reserve('unowned', config.lanes, now)!;
+
+    const report = recoverInterruptedAttempts(store, config, {
+      now: now + 10,
+      isProcessAlive: () => false,
+    });
+
+    expect(report).toMatchObject({ recovered: 0, blocked: 0, skipped: 1, errors: 0 });
+    expect(report.items[0]).toMatchObject({ reason: 'missing_owner_evidence' });
+    expect(store.getTask('unowned').status).toBe('running');
+    expect(store.activeAttempt('unowned')?.id).toBe(reservation.attempt.id);
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

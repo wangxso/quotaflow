@@ -14,7 +14,7 @@
 
 ### 本轮执行状态
 
-方案获审后已执行 Phase 0 并提交 [验证报告](PHASE-0.md)、[PoC](../poc/README.md) 和[许可证审查](LICENSING-REVIEW.md)。确定性故障恢复用例最终通过；本次获准的真实 Codex Agent 写入因执行运行时不可用而失败，商业服务账单未与网关计价区分验证。Phase 1 暂不启动。修复本机 Codex 执行运行时并复核报告后，再更新本计划与 ADR。
+方案获审后已执行 Phase 0 并提交 [验证报告](PHASE-0.md)、[PoC](../poc/README.md) 和[许可证审查](LICENSING-REVIEW.md)。确定性故障恢复用例通过。2026-11-27 已完成真实 Codex Agent 写入、检查点恢复和 OpenCode 接续，技术门禁有条件通过；Codex 实际经 Magpie 路由到第三方模型，原生 ChatGPT 路径、商用路由组和服务商账单仍未验证。负责人已允许 Phase 1 使用 Magpie 路由模型，首个任务状态、原子预留和 CLI 切片已启动；详见[Phase 1 说明](PHASE-1.md)与[门禁收口记录](PHASE-0-GATE-CLOSURE.md)。
 
 ## Phase 0 · 调研与可行性验证
 

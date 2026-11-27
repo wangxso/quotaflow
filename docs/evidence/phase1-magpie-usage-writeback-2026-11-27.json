@@ -1,0 +1,203 @@
+{
+  "date": "2026-11-27",
+  "kind": "phase1-magpie-usage-writeback",
+  "result": "passed",
+  "task": {
+    "id": "usage-smoke",
+    "title": "Magpie usage writeback smoke",
+    "status": "completed",
+    "prompt": "In this temporary test worktree, use the terminal to write exactly the text 41 to app.txt, then read app.txt to verify it. Do not touch any other file or use the network. Stop after verification.",
+    "createdAt": "2026-11-27T16:13:23.938+08:00",
+    "reservedAt": "2026-11-27T16:13:24.029+08:00",
+    "attemptStartedAt": "2026-11-27T16:13:24.029+08:00",
+    "completedAt": "2026-11-27T16:13:36.200+08:00"
+  },
+  "attempt": {
+    "id": 1,
+    "lane": "opencode-free",
+    "agent": "opencode",
+    "requestedModel": "opencode-go/hy4-flash-free",
+    "actualModel": "hy4-flash-free",
+    "provider": "magpie",
+    "providerInvoice": "UNKNOWN",
+    "stage": "done",
+    "checkpoint": "0f1516e5b25f28cab2045fb3bcc0a66fad83d2b2"
+  },
+  "routingApproval": {
+    "allowedProviders": [
+      "magpie"
+    ],
+    "allowed": true,
+    "approvedBy": "project-owner",
+    "approvedAt": "2026-11-27",
+    "note": "Phase 1 Magpie usage writeback smoke"
+  },
+  "runtime": {
+    "os": "Windows",
+    "opencodeVersion": "1.19.6",
+    "supervisor": {
+      "exitCode": 0,
+      "activeProcesses": 0,
+      "reason": "worker_exit"
+    }
+  },
+  "openCode": {
+    "sessionId": "ses_de3ef00aeffep6QN3smvAV5eDW",
+    "stepFinishCount": 3,
+    "stepReasons": [
+      "tool-calls",
+      "tool-calls",
+      "stop"
+    ],
+    "tools": [
+      {
+        "tool": "bash",
+        "title": "Test-Path -LiteralPath \".\" && Set-Content -LiteralPath \"app.txt\" -Value \"41\" -NoNewline",
+        "status": "completed",
+        "exitCode": 0
+      },
+      {
+        "tool": "read",
+        "title": "app.txt",
+        "status": "completed"
+      }
+    ],
+    "finalText": "Verified: `app.txt` contains exactly `41`.",
+    "stepCost": 0
+  },
+  "workspace": {
+    "syntheticRepository": true,
+    "appTxtBytes": [
+      52,
+      49
+    ],
+    "appTxtText": "41",
+    "gitStatus": [
+      "M app.txt"
+    ],
+    "checkpointRef": "refs/quotaflow/attempts/usage-smoke/1"
+  },
+  "database": {
+    "schemaVersion": 4,
+    "usageTable": "attempt_usage",
+    "persistedUsageRows": 4,
+    "usageStatus": "recorded",
+    "eventSummary": {
+      "usageReconciled": {
+        "source": "magpie",
+        "status": "recorded",
+        "sessionId": "ses_de3ef00aeffep6QN3smvAV5eDW",
+        "rows": 4,
+        "actualModel": "hy4-flash-free",
+        "costEstimate": 0,
+        "priced": true,
+        "providerInvoice": "UNKNOWN",
+        "totalRows": 4
+      },
+      "attemptFinishedActualModel": "hy4-flash-free"
+    }
+  },
+  "magpie": {
+    "queryShape": "GET /v1/magpie/usage/requests?period=30d&limit=1000&agent=opencode&q=<session>",
+    "correlation": "Exact OpenCode session ID plus local attempt time window. The gateway row still has no QuotaFlow task_id; QuotaFlow now persists the task-to-request join in attempt_usage.",
+    "matchingRows": [
+      {
+        "classification": "auxiliary",
+        "observedAt": "2026-11-27T16:13:26.249048+08:00",
+        "responseId": "ee67379b-c39f-446c-af84-7462e816a028",
+        "agent": "opencode",
+        "requestModel": "opencode-go/hy4-flash-free",
+        "servedModel": "hy4-flash-free",
+        "httpStatus": 200,
+        "stop": "stop",
+        "inputTokens": 66,
+        "outputTokens": 406,
+        "cacheReadTokens": 512,
+        "reasoningTokens": 396,
+        "priced": true,
+        "costEstimate": 0
+      },
+      {
+        "classification": "step_call",
+        "observedAt": "2026-11-27T16:13:27.1413806+08:00",
+        "responseId": "67dd7fab-18ec-40b4-af3d-ae5e0c19f515",
+        "agent": "opencode",
+        "requestModel": "opencode-go/hy4-flash-free",
+        "servedModel": "hy4-flash-free",
+        "httpStatus": 200,
+        "stop": "tool_calls",
+        "inputTokens": 5314,
+        "outputTokens": 237,
+        "cacheReadTokens": 0,
+        "reasoningTokens": 122,
+        "priced": true,
+        "costEstimate": 0
+      },
+      {
+        "classification": "step_call",
+        "observedAt": "2026-11-27T16:13:30.2007712+08:00",
+        "responseId": "676c0e9f-e7e8-4b70-bd00-befb2d76c459",
+        "agent": "opencode",
+        "requestModel": "opencode-go/hy4-flash-free",
+        "servedModel": "hy4-flash-free",
+        "httpStatus": 200,
+        "stop": "tool_calls",
+        "inputTokens": 444,
+        "outputTokens": 71,
+        "cacheReadTokens": 5120,
+        "reasoningTokens": 0,
+        "priced": true,
+        "costEstimate": 0
+      },
+      {
+        "classification": "step_call",
+        "observedAt": "2026-11-27T16:13:32.7140822+08:00",
+        "responseId": "496451fa-ae51-4f0e-bd81-4d6a51afd99b",
+        "agent": "opencode",
+        "requestModel": "opencode-go/hy4-flash-free",
+        "servedModel": "hy4-flash-free",
+        "httpStatus": 200,
+        "stop": "stop",
+        "inputTokens": 354,
+        "outputTokens": 13,
+        "cacheReadTokens": 5376,
+        "reasoningTokens": 0,
+        "priced": true,
+        "costEstimate": 0
+      }
+    ],
+    "aggregate": {
+      "rows": 4,
+      "stepCallRows": 3,
+      "auxiliaryRows": 1,
+      "sessions": 1,
+      "allHttp200": true,
+      "allPriced": true,
+      "requestModel": "opencode-go/hy4-flash-free",
+      "servedModel": "hy4-flash-free",
+      "stepCallTokens": {
+        "input": 6112,
+        "output": 321,
+        "cacheRead": 10496,
+        "reasoning": 122
+      },
+      "allRowTokens": {
+        "input": 6178,
+        "output": 727,
+        "cacheRead": 11008,
+        "reasoning": 518
+      },
+      "costEstimate": 0
+    },
+    "auxiliaryRowNote": "The first row is observed before the first step_start at 16:13:28.895 and has no corresponding step_finish. It is persisted as part of the exact session usage but excluded from the three step-call rows.",
+    "costEstimateMeaning": "Magpie gateway price calculation, not a provider invoice.",
+    "providerInvoice": "UNKNOWN",
+    "requiresSeparateReconciliation": true
+  },
+  "limitations": [
+    "The run used the free hy4-flash-free route through Magpie and does not exercise paid-provider billing.",
+    "The OpenCode adapter currently depends on the Windows Job Object supervisor.",
+    "QuotaFlow persists the task-to-request join, but the Magpie gateway row still has no QuotaFlow task_id.",
+    "The run is a synthetic repository smoke, not a task-level end-to-end run in mcarplay or an equivalent production repository."
+  ]
+}

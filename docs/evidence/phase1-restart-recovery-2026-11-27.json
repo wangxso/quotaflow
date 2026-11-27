@@ -1,0 +1,48 @@
+{
+  "date": "2026-11-27",
+  "kind": "phase1-restart-recovery",
+  "result": "passed",
+  "method": "Windows integration test: supervised fixture, forced controller termination, automatic worker recovery, second attempt",
+  "scenario": {
+    "adapter": "supervised command fixture",
+    "firstAttempt": {
+      "status": "running",
+      "workspaceChange": "app.txt=partial",
+      "termination": "taskkill /F against the controller process"
+    },
+    "supervisorEvidence": {
+      "receipt": "stopped.json",
+      "activeProcesses": 0
+    },
+    "recovery": {
+      "trigger": "worker once startup",
+      "ownerLiveness": "dead",
+      "checkpoint": "verified partial workspace",
+      "taskTransition": "running -> queued",
+      "budgetUnknownUsage": "pending hold retained"
+    },
+    "secondAttempt": {
+      "status": "completed",
+      "workspaceChange": "app.txt=agent"
+    }
+  },
+  "assertions": {
+    "controllerExitedAbnormally": true,
+    "oldProcessSetEmpty": true,
+    "firstAttemptClosedExactlyOnce": true,
+    "partialCheckpointReadable": true,
+    "recoveryEventRecorded": true,
+    "secondAttemptCompleted": true,
+    "attemptHistoryPreserved": true
+  },
+  "safetyBoundary": {
+    "rule": "No write transfer without verified process stop evidence.",
+    "codexWithoutStopReceipt": "blocked",
+    "lowLevelReservationWithoutOwner": "skipped",
+    "providerInvoice": "UNKNOWN"
+  },
+  "reproduction": [
+    "bun test src/recovery.test.ts",
+    "bun test src/worker.test.ts --test-name-pattern \"worker recovers\""
+  ]
+}

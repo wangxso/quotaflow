@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-27",
+  "codexVersion": "0.172.0",
+  "transport": "stdio",
+  "inferenceCalls": 0,
+  "runs": [
+    {
+      "count": 10,
+      "passed": 10,
+      "initialize": "ok",
+      "windowsSandbox": "notConfigured",
+      "commandExec": "completed",
+      "fileWritten": true
+    },
+    {
+      "count": 5,
+      "passed": 5,
+      "initialize": "ok",
+      "windowsSandbox": "ready",
+      "commandExec": "completed",
+      "fileWritten": true
+    }
+  ],
+  "doctor": {
+    "ok": 21,
+    "warn": 4,
+    "fail": 0
+  },
+  "managedDaemonProxy": {
+    "status": "not_validated",
+    "reason": "initialize timeout"
+  }
+}

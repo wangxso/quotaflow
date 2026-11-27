@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.quotaflow/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+quotaflow.config.json

@@ -1,0 +1,118 @@
+{
+  "date": "2026-11-27",
+  "kind": "phase1-budget-lease",
+  "result": "passed",
+  "method": "Deterministic store integration scenario using a fixed clock and in-memory SQLite",
+  "database": {
+    "schemaVersion": 5,
+    "tables": [
+      "tasks",
+      "attempts",
+      "events",
+      "budget_leases"
+    ]
+  },
+  "policy": {
+    "account": "fixture-budget",
+    "unit": "gateway-estimate",
+    "limit": 1,
+    "reserve": 0,
+    "windowMs": 60000,
+    "holdPerAttempt": 0.6
+  },
+  "contention": {
+    "firstReservation": {
+      "taskId": "lease-a",
+      "attemptId": 1,
+      "lease": {
+        "amount": 0.6,
+        "state": "held",
+        "priced": null,
+        "expiresAt": "2026-11-27T17:01:00.000+08:00"
+      },
+      "budgetStatus": {
+        "used": 0.6,
+        "available": 0.4,
+        "activeLeases": 1,
+        "nextExpiryAt": "2026-11-27T17:01:00.000+08:00"
+      }
+    },
+    "secondReservation": {
+      "taskId": "lease-c",
+      "reserved": false,
+      "taskStatus": "waiting_quota",
+      "reason": "budget",
+      "nextWakeAt": "2026-11-27T17:01:00.000+08:00"
+    }
+  },
+  "settlement": {
+    "pricedUsage": {
+      "attemptId": 1,
+      "lease": {
+        "amount": 0.2,
+        "state": "settled",
+        "priced": true,
+        "expiresAt": "2026-11-27T17:01:01.000+08:00"
+      },
+      "budgetStatus": {
+        "used": 0.2,
+        "available": 0.8,
+        "activeLeases": 1,
+        "nextExpiryAt": "2026-11-27T17:01:01.000+08:00"
+      }
+    },
+    "unknownUsage": {
+      "attemptId": 2,
+      "lease": {
+        "amount": 0.6,
+        "state": "pending",
+        "priced": false,
+        "expiresAt": "2026-11-27T17:02:00.002+08:00"
+      },
+      "budgetStatus": {
+        "used": 0.8,
+        "available": 0.2,
+        "activeLeases": 2,
+        "nextExpiryAt": "2026-11-27T17:01:01.000+08:00"
+      }
+    }
+  },
+  "release": {
+    "attemptId": 2,
+    "changed": true,
+    "lease": {
+      "amount": 0,
+      "state": "released",
+      "priced": null
+    },
+    "budgetStatus": {
+      "used": 0.2,
+      "available": 0.8,
+      "activeLeases": 1,
+      "nextExpiryAt": "2026-11-27T17:01:01.000+08:00"
+    }
+  },
+  "shrinkRecovery": {
+    "reservationTime": "2026-11-27T17:01:00.001+08:00",
+    "attemptId": 2,
+    "retainedHold": 0.6,
+    "leaseState": "held"
+  },
+  "assertions": {
+    "budgetBlockedSecondAttempt": true,
+    "retryUsesEarliestLeaseExpiry": true,
+    "pricedUsageShrinksHold": true,
+    "unknownUsageKeepsHold": true,
+    "releasedLeaseStopsConsumingBudget": true,
+    "providerInvoice": "UNKNOWN"
+  },
+  "providerBoundary": {
+    "unitMeaning": "Magpie gateway cost estimate, not a provider invoice currency",
+    "providerInvoice": "UNKNOWN",
+    "note": "The lease can gate scheduling from gateway estimates but cannot be used as provider billing attribution."
+  },
+  "reproduction": [
+    "bun test src/store.test.ts",
+    "bun test src/worker.test.ts src/cli.test.ts"
+  ]
+}

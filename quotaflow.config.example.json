@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "database": ".quotaflow/state.sqlite",
+  "worktreeRoot": ".quotaflow/worktrees",
+  "defaultRepo": ".",
+  "routing": {
+    "allowedProviders": ["native", "local", "magpie"],
+    "routedModelApproval": {
+      "allowed": true,
+      "approvedBy": "project-owner",
+      "approvedAt": "2026-11-27",
+      "note": "Phase 1 permits Magpie-routed models. Provider invoice remains UNKNOWN."
+    }
+  },
+  "budgets": [
+    {
+      "account": "magpie-default",
+      "unit": "magpie-cost-estimate",
+      "limit": 10,
+      "reserve": 0.25,
+      "windowMs": 86400000,
+      "holdPerAttempt": 0.05
+    }
+  ],
+  "lanes": [
+    {
+      "id": "codex-magpie",
+      "agent": "codex",
+      "model": "opencode-go/deepseek-v4.1-flash",
+      "provider": "magpie",
+      "account": "magpie-default",
+      "priority": 100,
+      "slots": 1,
+      "windows": [
+        {
+          "key": "five-hour",
+          "remaining": null,
+          "reserve": 1,
+          "observedAt": 0,
+          "resetAt": 0
+        },
+        {
+          "key": "seven-day",
+          "remaining": null,
+          "reserve": 1,
+          "observedAt": 0,
+          "resetAt": 0
+        }
+      ]
+    }
+  ]
+}

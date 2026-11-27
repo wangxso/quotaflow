@@ -2,7 +2,7 @@
 
 源码基线 · 2026-11-27。下表固定初筛时读取的公开源码提交与根许可证。发布版本、实测对照和复用结论见 [Phase 0 报告](PHASE-0.md)。
 
-运行实验已验证 Archon 失败节点恢复、Magpie 隔离路由与本地回退、OpenCode 免费目录模型任务，以及独立恢复 PoC。候选固定树的许可证、NOTICE 与依赖锁文件面已初查；拟议方案不复制或分发上游代码／二进制。网关成本字段是 Magpie 价格计算，不能代表服务商账单。真实 Codex Agent 写入受本机执行运行时不可用影响而失败，阶段结论见 [Phase 0 报告](PHASE-0.md)，许可证范围见[审查清单](LICENSING-REVIEW.md)。
+运行实验已验证 Archon 失败节点恢复、Magpie 隔离路由与本地回退、OpenCode 免费目录模型任务、真实 Codex Agent 写入、检查点恢复及跨 Agent 接续。候选固定树的许可证、NOTICE 与依赖锁文件面已初查；拟议方案不复制或分发上游代码／二进制。网关成本字段是 Magpie 价格计算，不能代表服务商账单；Codex 实际经 Magpie 路由到第三方模型，原生 ChatGPT 路径仍待验证。阶段结论见 [Phase 0 报告](PHASE-0.md)，许可证范围见[审查清单](LICENSING-REVIEW.md)。
 
 ## 候选基线
 

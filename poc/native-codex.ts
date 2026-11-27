@@ -1,22 +1,50 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { AppServer } from './live-probe.mjs';
+import { probeAppServerRuntime } from './app-server-runtime.mjs';
 import { checkpoint, createLab, git } from './git.ts';
 
-const [executable = 'codex', mode = 'agent-write'] = process.argv.slice(2);
+const [executable = 'codex', mode = 'agent-write', requestedTransport = 'stdio'] = process.argv.slice(2);
 if (!['agent-write', 'structured'].includes(mode)) throw new Error('Expected agent-write or structured mode');
+if (!['stdio', 'daemon'].includes(requestedTransport)) throw new Error('Expected stdio or daemon transport');
+const transport = requestedTransport as 'stdio' | 'daemon';
 const structured = mode === 'structured';
 const lab = createLab();
 const env = { ...process.env };
 for (const key of ['OPENAI_API_KEY', 'CODEX_API_KEY', 'OPENAI_BASE_URL', 'OPENAI_ORG_ID', 'OPENAI_PROJECT_ID']) delete env[key];
 const args = ['-c', 'model_provider="openai"', '-c', 'chatgpt_base_url="https://chatgpt.com/backend-api/"'];
-const session = { cwd: lab.workspace, sandbox: structured ? 'read-only' : 'workspace-write', approvalPolicy: 'never', modelProvider: 'openai' };
-let server = new AppServer(executable, args, { cwd: lab.workspace, env });
-const result: Record<string, unknown> = { authorizedChannel: 'native ChatGPT subscription', inferenceTurnsRequested: 0, mode };
+const requestedModel = process.env.QUOTAFLOW_CODEX_MODEL;
+const requestedBaseUrl = process.env.QUOTAFLOW_CODEX_OPENAI_BASE_URL;
+if (requestedModel) args.push('-c', `model=${JSON.stringify(requestedModel)}`);
+if (requestedBaseUrl) args.push('-c', `openai_base_url=${JSON.stringify(requestedBaseUrl)}`);
+const session = {
+  cwd: lab.workspace,
+  sandbox: structured ? 'read-only' : 'workspace-write',
+  approvalPolicy: 'never',
+  modelProvider: 'openai',
+  ...(requestedModel ? { model: requestedModel } : {}),
+};
+let server = new AppServer(executable, args, { cwd: lab.workspace, env, transport });
+const result: Record<string, unknown> = {
+  inferenceTurnsRequested: 0,
+  mode,
+  transport,
+  requestedModel: requestedModel ?? 'configured default',
+  requestedBaseUrl: requestedBaseUrl ?? 'configured default',
+  billingAttribution: process.env.QUOTAFLOW_BILLING_ATTRIBUTION ?? 'UNKNOWN',
+};
 
 try {
-  if (!(await server.initialize()).value) throw new Error('App Server initialize failed');
+  if (!(await server.initialize({ experimentalApi: true })).value) throw new Error('App Server initialize failed');
+  const runtime = await probeAppServerRuntime(server, lab.workspace);
+  result.runtimePreflight = runtime;
+  if (runtime.commandExec.status !== 'completed' || runtime.commandExec.exitCode !== 0 || !runtime.commandExec.fileWritten ||
+      git(lab.workspace, ['status', '--short'])) {
+    throw new Error('Workspace runtime preflight failed before any model turn');
+  }
   const account = (await server.call('account/read', { refreshToken: false })).value?.account;
+  result.accountType = account?.type ?? 'UNKNOWN';
+  result.accountPlan = account?.planType ?? 'UNKNOWN';
   const usage = (await server.call('account/rateLimits/read')).value;
   const limits = usage?.rateLimits;
   if (account?.type !== 'chatgpt' || account.planType !== 'plus' || usage?.ordinaryUsageAllowed !== true ||
@@ -67,7 +95,7 @@ try {
   result.expectedFile = readFileSync(join(lab.workspace, 'app.txt'), 'utf8').trim() === '41';
   result.onlyExpectedFile = git(lab.workspace, ['status', '--short']) === 'M app.txt';
   await server.close();
-  server = new AppServer(executable, args, { cwd: lab.workspace, env });
+  server = new AppServer(executable, args, { cwd: lab.workspace, env, transport });
   if (!(await server.initialize()).value) throw new Error('App Server restart initialize failed');
   const resume = await server.call('thread/resume', { ...session, threadId });
   result.resumedAfterRestart = resume.value?.thread?.id === threadId;
