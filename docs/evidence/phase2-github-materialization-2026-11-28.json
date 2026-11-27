@@ -1,0 +1,68 @@
+{
+  "recordedOn": "2026-11-28",
+  "baseRevision": "7b3136cb65e41e60548a7b5ebd80b8f1e3efa806",
+  "command": "bun run src/cli.ts github gate <snapshot.json> --materialize <repo> --config <file>",
+  "policy": {
+    "agentActionKinds": [
+      "independent_review",
+      "review_fix",
+      "ci_fix"
+    ],
+    "humanActions": [
+      "human_merge",
+      "mark_ready",
+      "resolve_conflict",
+      "refresh_evidence"
+    ],
+    "taskId": "Stable gh- prefix plus the first 32 hexadecimal characters of actionKey",
+    "initialCheckpoint": "Exact pull request head SHA",
+    "headAndBaseEvidence": "Both commits must exist locally before a task is written",
+    "attemptLimit": 3,
+    "budgetEnforcement": "Configured QuotaFlow account budgets remain enforced by the scheduler; configurations without a budget report quota_only",
+    "agentPermissions": "Prompts forbid push, comments, approvals, merges, and repository settings changes"
+  },
+  "idempotency": {
+    "sameActionKey": "Returns task_exists without inserting another task or task_created event",
+    "sameTaskIdWithDifferentRepositoryOrWorkspace": "Rejected",
+    "workspaceWithoutMatchingTask": "Rejected before task creation",
+    "workspaceHeadDrift": "Rejected before returning an existing task",
+    "parallelAgentActions": "Rejected because one plan may create at most one Agent task"
+  },
+  "livePilotMaterialization": {
+    "repository": "wangxso/mcarplay",
+    "pullRequest": 141,
+    "headSha": "abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48",
+    "baseSha": "daf67e87a72aa9033a4d62f88e9a9d05ce047d9e",
+    "gateStatus": "blocked",
+    "plannedAction": "independent_review",
+    "taskId": "gh-00750a889869474904c16542fda57c50",
+    "firstOutcome": "task_created",
+    "repeatedOutcome": "task_exists",
+    "taskStatus": "queued",
+    "taskCheckpoint": "abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48",
+    "attemptLimit": 3,
+    "budgetEnforcement": "configured in an isolated temporary database",
+    "taskCountAfterRetry": 1,
+    "sourceHeadAfterRun": "daf67e87a72aa9033a4d62f88e9a9d05ce047d9e",
+    "agentInvoked": false,
+    "sourceFilesModified": false
+  },
+  "verification": {
+    "materializationTests": 3,
+    "cliIntegrationTests": 1,
+    "fullSuite": {
+      "macOS": 124,
+      "linux": 124,
+      "windowsOnlySkipped": 1,
+      "failed": 0
+    },
+    "buildAndConfig": "passed on macOS and Linux",
+    "jsonAndDiffChecks": "passed"
+  },
+  "scope": {
+    "automaticSnapshotFetch": "not implemented",
+    "liveAgentExecution": "not run; the live pilot stopped after idempotent task materialization",
+    "automaticPushOrComment": false,
+    "automaticReadyOrMerge": false
+  }
+}

@@ -189,6 +189,73 @@ test('evaluates and idempotently stores a GitHub pull gate snapshot', async () =
   }
 });
 
+test('materializes a GitHub review action once at the exact pull head', async () => {
+  const { root } = setup();
+  const repo = join(root, 'repo');
+  try {
+    worktreeGit(root, ['init', '--initial-branch=main', repo]);
+    writeFileSync(join(repo, 'app.txt'), 'base\n');
+    worktreeGit(repo, ['add', '.']);
+    worktreeGit(repo, ['commit', '-m', 'base']);
+    const headSha = worktreeGit(repo, ['rev-parse', 'HEAD']);
+    const snapshotFile = join(root, 'materialize-pr.json');
+    writeFileSync(snapshotFile, JSON.stringify({
+      repository: 'wangxso/quotaflow',
+      update: {
+        number: 141,
+        state: 'OPEN',
+        draft: true,
+        mergeable: 'MERGEABLE',
+        authorLogin: 'wangxso',
+        baseRef: 'main',
+        headRef: 'feature',
+        baseSha: headSha,
+        headSha,
+        checks: [{
+          name: 'test',
+          status: 'completed',
+          conclusion: 'success',
+          headSha,
+          startedAt: '2026-11-27T13:57:30Z',
+          completedAt: '2026-11-27T14:03:00Z',
+        }],
+        reviews: [],
+      },
+    }));
+    const args = ['github', 'gate', snapshotFile, '--delivery-id', 'materialize-141',
+      '--require-check', 'test', '--materialize', repo];
+
+    const first = JSON.parse((await cli(root, args)).stdout);
+    expect(first).toMatchObject({
+      plan: { actions: [{ kind: 'independent_review' }] },
+      materialization: {
+        status: 'task_created',
+        headSha,
+        actions: [{
+          kind: 'independent_review',
+          outcome: 'task_created',
+          task: { status: 'queued', checkpoint: headSha },
+          attempts: { used: 0, limit: 3 },
+        }],
+      },
+    });
+    const taskId = first.materialization.actions[0].taskId as string;
+    const repeated = JSON.parse((await cli(root, args)).stdout);
+    expect(repeated).toMatchObject({
+      duplicate: true,
+      materialization: {
+        status: 'task_exists',
+        actions: [{ outcome: 'task_exists', taskId }],
+      },
+    });
+    const listed = (await cli(root, ['task', 'list'])).stdout.trim().split('\n');
+    expect(listed).toHaveLength(1);
+    expect(listed[0]).toContain(taskId);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('verifies signed GitHub webhooks before idempotent storage', async () => {
   const { root } = setup();
   const secret = 'quotaflow-webhook-test';

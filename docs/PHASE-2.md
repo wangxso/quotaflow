@@ -1,6 +1,6 @@
 # QuotaFlow Phase 2 · GitHub 开发闭环
 
-**状态** 已启动 · 2026-11-27
+**状态** 已启动 · 2026-11-28
 
 ## 首个真实试点
 
@@ -19,6 +19,8 @@ QuotaFlow 已在 `wangxso/mcarplay` Issue #82 上创建独立 Worktree，由 Cod
 
 `github gate` 还会输出下一步动作计划。动作按当前阻断阶段排序，避免同时派出多个写任务。CI 失败和 `CHANGES_REQUESTED` 会合并成一个 Review–Fix 任务提示，修复完成后再次运行门禁才会生成独立审查动作。Draft、冲突、HEAD／base 变化和最终合并保留为人工动作。计划包含稳定的 `actionKey`、优先级、原因和可直接交给 Agent 的任务提示。
 
+`--materialize <repo>` 只会为 `independent_review`、`review_fix` 或 `ci_fix` 创建任务。任务 ID 由 `actionKey` 稳定派生，因此 Webhook 重放或重复执行门禁不会创建重复任务。任务初始检查点固定为 PR HEAD，仓库中必须已经存在当前 base／head 提交，否则命令会在写库前失败。执行沿用 QuotaFlow 的每任务最多 3 次尝试和配置预算，任务提示禁止 Agent push、评论、批准、合并或修改仓库权限。Draft、冲突、刷新证据和人工合并只作为 `human_required` 返回，不会派发。PR #141 已在隔离数据库中完成只物化不执行的试点，重复事件仍只有一个排队任务。 [物化证据](evidence/phase2-github-materialization-2026-11-28.json)
+
 检查快照时使用：
 
 ```sh
@@ -28,7 +30,8 @@ bun run src/cli.ts github gate pr.json \
   --expected-base daf67e87a72aa9033a4d62f88e9a9d05ce047d9e \
   --require-check "Check and build debug APK" \
   --require-check "GitGuardian Security Checks" \
-  --required-approvals 1
+  --required-approvals 1 \
+  --materialize /path/to/repository
 ```
 
 快照文件格式为：
@@ -84,7 +87,8 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
 ## 尚未完成
 
 - GitHub App 或最小权限凭据、公网 TLS 回调部署、反向代理和自动拉取 PR 快照。
-- 将动作计划物化为受预算和轮次限制的 QuotaFlow 任务。
+- 自动抓取 PR HEAD／base 并在物化前校验本地提交可用性。
+- 执行物化后的独立审查或修复任务，并用新 HEAD 重新运行门禁。
 - Check-run 日志抓取、失败分类细节和同 SHA 复跑绑定。
 - 写入应答丢失、重复 Webhook、越权请求和凭据轮换演练。
 - Draft 转 Ready、人工批准与合并操作。当前所有合并保持人工执行。
@@ -92,6 +96,6 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
 ## 下一里程碑
 
 1. 接入 GitHub App 凭据，并将本地监听器部署到受控公网反向代理。
-2. 将 Review–Fix 动作计划物化为任务，并限制轮次与预算。
+2. 运行物化后的独立审查或修复任务，以新 HEAD 重新评估门禁。
 3. 在 PR #141 获得独立审查后重新评估门禁，保持人工合并。
 4. Phase 2 核心验收完成后进入 Phase 3 Dashboard 与部署。

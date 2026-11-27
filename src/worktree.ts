@@ -37,6 +37,14 @@ function gitOrNull(cwd: string, args: string[]): string | null {
   }
 }
 
+export function commitExists(repoPath: string, revision: string): boolean {
+  return gitOrNull(resolve(repoPath), ['cat-file', '-e', `${revision}^{commit}`]) !== null;
+}
+
+export function currentCommit(repoPath: string): string | null {
+  return gitOrNull(resolve(repoPath), ['rev-parse', 'HEAD']);
+}
+
 export function ensureWorktree(repoPath: string, workspacePath: string, base = 'HEAD'): string {
   const repo = resolve(repoPath);
   const workspace = resolve(workspacePath);

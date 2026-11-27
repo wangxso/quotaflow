@@ -30,7 +30,40 @@ import {
 } from './github';
 import { usageActualModel } from './magpie-usage';
 
-const maxAttemptsPerTask = 3;
+export const MAX_ATTEMPTS_PER_TASK = 3;
+
+export interface CreateTaskInput {
+  id?: string;
+  title: string;
+  prompt?: string;
+  repoPath: string;
+  workspacePath: string;
+  priority?: number;
+  critical?: boolean;
+  handoff?: HandoffOptions;
+  initialCheckpoint?: string | null;
+  eventDetail?: Record<string, unknown>;
+  now?: number;
+}
+
+export interface CreateTaskOnceResult {
+  task: Task;
+  created: boolean;
+}
+
+interface PreparedTaskInput {
+  id: string;
+  title: string;
+  prompt: string;
+  repoPath: string;
+  workspacePath: string;
+  priority: number;
+  critical: number;
+  handoff: HandoffOptions | null;
+  initialCheckpoint: string | null;
+  eventDetail?: Record<string, unknown>;
+  now: number;
+}
 
 type TaskRow = {
   id: string;
@@ -287,17 +320,11 @@ function noteForCheckpoint(checkpoint: string | null, handoff?: HandoffDraft): s
 export class TaskStore {
   constructor(readonly db: Database) {}
 
-  createTask(input: {
-    id?: string;
-    title: string;
-    prompt?: string;
-    repoPath: string;
-    workspacePath: string;
-    priority?: number;
-    critical?: boolean;
-    handoff?: HandoffOptions;
-    now?: number;
-  }): Task {
+  createTask(input: CreateTaskInput): Task {
+    return this.createTaskOnce(input).task;
+  }
+
+  createTaskOnce(input: CreateTaskInput): CreateTaskOnceResult {
     const now = input.now ?? Date.now();
     const id = input.id ?? `qf-${randomUUID().slice(0, 8)}`;
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(id)) {
@@ -308,23 +335,57 @@ export class TaskStore {
     const priority = input.priority ?? 0;
     if (!Number.isFinite(priority)) throw new Error('Task priority must be finite');
     const handoff = input.handoff ? parseHandoffOptions(input.handoff) : null;
-    this.db.transaction(() => {
+    const prepared: PreparedTaskInput = {
+      id,
+      title: input.title,
+      prompt,
+      repoPath: input.repoPath,
+      workspacePath: input.workspacePath,
+      priority,
+      critical: Number(input.critical ?? false),
+      handoff,
+      initialCheckpoint: input.initialCheckpoint?.trim() || null,
+      ...(input.eventDetail ? { eventDetail: input.eventDetail } : {}),
+      now,
+    };
+    return this.db.transaction(() => {
+      const existing = this.findTask(id);
+      if (existing) {
+        if (existing.repoPath !== input.repoPath || existing.workspacePath !== input.workspacePath) {
+          throw new Error(`Task ${id} already exists with a different repository or workspace`);
+        }
+        return { task: existing, created: false };
+      }
       this.db.run(
         `INSERT INTO tasks
-          (id, title, prompt, repo_path, workspace_path, status, priority, critical, handoff_config, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?)`,
-        [id, input.title, prompt, input.repoPath, input.workspacePath, priority, Number(input.critical ?? false),
-          handoff ? JSON.stringify(handoff) : null, now, now],
+          (id, title, prompt, repo_path, workspace_path, status, priority, critical, handoff_config,
+            checkpoint, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?)`,
+        [prepared.id, prepared.title, prepared.prompt, prepared.repoPath, prepared.workspacePath,
+          prepared.priority, prepared.critical, prepared.handoff ? JSON.stringify(prepared.handoff) : null,
+          prepared.initialCheckpoint, prepared.now, prepared.now],
       );
-      this.#event(id, null, 'task_created', { priority, critical: Boolean(input.critical), ...(handoff ? { handoff } : {}), now });
+      this.#event(prepared.id, null, 'task_created', {
+        ...prepared.eventDetail,
+        priority,
+        critical: Boolean(prepared.critical),
+        ...(prepared.handoff ? { handoff: prepared.handoff } : {}),
+        ...(prepared.initialCheckpoint ? { initialCheckpoint: prepared.initialCheckpoint } : {}),
+        now,
+      });
+      return { task: this.getTask(prepared.id), created: true };
     }).immediate();
-    return this.getTask(id);
+  }
+
+  findTask(id: string): Task | null {
+    const row = this.db.query<TaskRow, [string]>('SELECT * FROM tasks WHERE id = ?').get(id);
+    return row ? taskFrom(row) : null;
   }
 
   getTask(id: string): Task {
-    const row = this.db.query<TaskRow, [string]>('SELECT * FROM tasks WHERE id = ?').get(id);
-    if (!row) throw new Error(`Unknown task ${id}`);
-    return taskFrom(row);
+    const task = this.findTask(id);
+    if (!task) throw new Error(`Unknown task ${id}`);
+    return task;
   }
 
   getAttempt(id: number): Attempt {
@@ -589,7 +650,7 @@ export class TaskStore {
       const attemptCount = this.db.query<{ n: number }, [string]>(
         'SELECT count(*) AS n FROM attempts WHERE task_id = ?',
       ).get(taskId)!.n;
-      if (attemptCount >= maxAttemptsPerTask) {
+      if (attemptCount >= MAX_ATTEMPTS_PER_TASK) {
         this.#updateStatus(taskId, 'blocked', null, now);
         this.#event(taskId, null, 'blocked', { reason: 'attempt_limit', now });
         return null;
@@ -931,8 +992,8 @@ export class TaskStore {
       const attemptCount = this.db.query<{ n: number }, [string]>(
         'SELECT count(*) AS n FROM attempts WHERE task_id = ?',
       ).get(taskId)!.n;
-      if (attemptCount >= maxAttemptsPerTask) {
-        throw new Error(`Task ${taskId} reached the attempt limit of ${maxAttemptsPerTask}`);
+      if (attemptCount >= MAX_ATTEMPTS_PER_TASK) {
+        throw new Error(`Task ${taskId} reached the attempt limit of ${MAX_ATTEMPTS_PER_TASK}`);
       }
       this.#updateStatus(taskId, 'queued', null, now);
       this.#event(taskId, null, 'retry_requested', {

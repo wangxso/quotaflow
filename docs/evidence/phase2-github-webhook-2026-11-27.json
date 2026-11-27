@@ -49,15 +49,15 @@
     "schemaMigrationTests": "v1 through v7 migrate to v8",
     "webhookServerTests": 3,
     "webhookConfigTests": 1,
-    "fullSuite": { "macOS": 120, "linux": 120, "windowsOnlySkipped": 1, "failed": 0 },
+    "fullSuite": { "macOS": 124, "linux": 124, "windowsOnlySkipped": 1, "failed": 0 },
     "buildAndConfig": "passed on macOS and Linux"
   },
   "scope": {
     "httpReceiver": "implemented for local Bun HTTP use",
     "publicDeployment": "not configured",
     "automaticSnapshotFetch": "not implemented",
-    "reviewFixTaskCreation": "not implemented",
-    "ciFailureTriage": "not implemented",
+    "reviewFixTaskCreation": "implemented through github gate --materialize",
+    "ciFailureTriage": "minimal task materialization implemented; log analysis and automatic rerun not implemented",
     "actualGitHubDelivery": "Signature behavior is verified with deterministic signed payloads. A deployed webhook secret and public callback endpoint have not been configured."
   }
 }

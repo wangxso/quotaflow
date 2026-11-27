@@ -22,6 +22,7 @@ import {
   verifyGitHubWebhookSignature,
 } from './github';
 import { startGitHubWebhookServer } from './github-webhook-server';
+import { materializeGitHubActions } from './github-materialize';
 
 const usage = `
 quotaflow config validate [--config <file>]
@@ -37,7 +38,7 @@ quotaflow worker once [--config <file>]
 quotaflow worker recover [--config <file>]
 quotaflow budget status [--config <file>]
 quotaflow budget audit [--limit <n>] [--config <file>]
-quotaflow github gate <snapshot.json> [--delivery-id <id>] [--event-type <type>] [--expected-head <sha>] [--expected-base <sha>] [--require-check <name>]... [--required-approvals <n>] [--allow-author-self-approval] [--config <file>]
+quotaflow github gate <snapshot.json> [--delivery-id <id>] [--event-type <type>] [--expected-head <sha>] [--expected-base <sha>] [--require-check <name>]... [--required-approvals <n>] [--allow-author-self-approval] [--materialize <repo>] [--config <file>]
 quotaflow github webhook <payload.json> --event <type> --delivery-id <id> --signature <sha256=...> [--secret-env GITHUB_WEBHOOK_SECRET] [--config <file>]
 quotaflow github serve-webhook [--host <host>] [--port <n>] [--path <path>] [--secret-env <name>] [--config <file>]
 `.trim();
@@ -236,6 +237,7 @@ async function main() {
         throw new Error('--required-approvals must be a non-negative integer');
       }
       const allowAuthorSelfApproval = flag(rest, '--allow-author-self-approval');
+      const materializeRepo = option(rest, '--materialize');
       const deliveryId = option(rest, '--delivery-id') ?? `local:${hashGitHubPayload(snapshot).slice(0, 24)}`;
       if (rest.length > 0) throw new Error(`Unexpected github gate arguments: ${rest.join(' ')}`);
       if (!deliveryId.trim()) throw new Error('--delivery-id must not be empty');
@@ -251,7 +253,21 @@ async function main() {
         deliveryId,
         eventType,
       });
-      console.log(JSON.stringify({ ...result, plan: planGitHubActions(result.gate.evaluation) }, null, 2));
+      const plan = planGitHubActions(result.gate.evaluation);
+      const materialization = materializeRepo
+        ? materializeGitHubActions(store, plan, {
+          repository: result.gate.repository,
+          repoPath: materializeRepo,
+          worktreeRoot: config.worktreeRoot,
+          baseSha: snapshot.baseSha,
+          budgets: config.budgets,
+        })
+        : undefined;
+      console.log(JSON.stringify({
+        ...result,
+        plan,
+        ...(materialization ? { materialization } : {}),
+      }, null, 2));
       return;
     }
 
