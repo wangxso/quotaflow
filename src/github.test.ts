@@ -7,6 +7,7 @@ import {
   hashGitHubPayload,
   normalizeGitHubWebhook,
   parseGitHubPullSnapshot,
+  planGitHubActions,
   type GitHubPullSnapshot,
   verifyGitHubWebhookSignature,
 } from './github';
@@ -51,6 +52,11 @@ test('keeps the real pilot blocked by Draft and missing independent review', () 
     'draft',
     'independent_review_missing',
   ]);
+  expect(planGitHubActions(result)).toMatchObject({
+    status: 'remediation_required',
+    humanApprovalRequired: true,
+    actions: [{ kind: 'independent_review', requiresHuman: false, reasonCodes: ['independent_review_missing'] }],
+  });
 });
 
 test('allows human merge only when current-head CI and independent review pass', () => {
@@ -58,15 +64,20 @@ test('allows human merge only when current-head CI and independent review pass',
   value.draft = false;
   value.reviews = [{ authorLogin: 'reviewer', state: 'APPROVED', commitSha: headSha,
     submittedAt: '2026-11-27T14:04:00Z' }];
-  expect(evaluateGitHubPull(value, {
+  const gate = evaluateGitHubPull(value, {
     expectedHeadSha: headSha,
     requiredChecks: ['Check and build debug APK', 'GitGuardian Security Checks'],
     requiredApprovals: 1,
-  })).toMatchObject({
+  });
+  expect(gate).toMatchObject({
     status: 'ready_for_human_merge',
     independentApprovals: 1,
     reasons: [],
     humanMergeRequired: true,
+  });
+  expect(planGitHubActions(gate)).toMatchObject({
+    status: 'human_merge_ready',
+    actions: [{ kind: 'human_merge', requiresHuman: true, taskPrompt: null }],
   });
 });
 
@@ -133,6 +144,39 @@ test('a newer pending rerun supersedes an older success', () => {
   expect(result.status).toBe('blocked');
   expect(result.checks[0]).toMatchObject({ status: 'in_progress', conclusion: null, passed: false });
   expect(result.reasons.map((reason) => reason.code)).toContain('ci_not_success');
+});
+
+test('combines review feedback and CI failures into one fix task', () => {
+  const value = snapshot();
+  value.draft = false;
+  value.checks = [{ ...value.checks[0]!, conclusion: 'failure', startedAt: '2026-11-27T14:10:00Z',
+    completedAt: '2026-11-27T14:11:00Z' }];
+  value.reviews = [{ authorLogin: 'reviewer', state: 'CHANGES_REQUESTED', commitSha: headSha,
+    submittedAt: '2026-11-27T14:05:00Z' }];
+  const gate = evaluateGitHubPull(value, {
+    expectedHeadSha: headSha,
+    requiredChecks: ['Check and build debug APK'],
+  });
+  const plan = planGitHubActions(gate);
+  expect(plan.status).toBe('remediation_required');
+  expect(plan.actions).toHaveLength(1);
+  expect(plan.actions[0]).toMatchObject({
+    kind: 'review_fix',
+    requiresHuman: false,
+    reasonCodes: ['ci_not_success', 'changes_requested'],
+  });
+  expect(plan.actions[0]!.taskPrompt).toContain('Check and build debug APK: completed/failure');
+});
+
+test('plans a human Ready action when Draft is the only gate', () => {
+  const value = snapshot();
+  value.reviews = [{ authorLogin: 'reviewer', state: 'APPROVED', commitSha: headSha,
+    submittedAt: '2026-11-27T14:05:00Z' }];
+  const plan = planGitHubActions(evaluateGitHubPull(value, {
+    expectedHeadSha: headSha,
+    requiredApprovals: 1,
+  }));
+  expect(plan.actions).toMatchObject([{ kind: 'mark_ready', requiresHuman: true, reasonCodes: ['draft'] }]);
 });
 
 test('blocks when the expected base SHA moves', () => {

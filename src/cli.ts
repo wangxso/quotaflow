@@ -18,6 +18,7 @@ import {
   hashGitHubPayload,
   normalizeGitHubWebhook,
   parseGitHubPullSnapshot,
+  planGitHubActions,
   verifyGitHubWebhookSignature,
 } from './github';
 import { startGitHubWebhookServer } from './github-webhook-server';
@@ -250,7 +251,7 @@ async function main() {
         deliveryId,
         eventType,
       });
-      console.log(JSON.stringify(result, null, 2));
+      console.log(JSON.stringify({ ...result, plan: planGitHubActions(result.gate.evaluation) }, null, 2));
       return;
     }
 

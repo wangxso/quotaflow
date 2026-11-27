@@ -178,6 +178,7 @@ test('evaluates and idempotently stores a GitHub pull gate snapshot', async () =
       delivery: { deliveryId: 'delivery-141', duplicateDelivery: false, duplicateEvent: false },
       gate: { headSha, evaluation: { status: 'blocked', reasons: [{ code: 'draft' },
         { code: 'independent_review_missing' }] } },
+      plan: { status: 'remediation_required', actions: [{ kind: 'independent_review', requiresHuman: false }] },
     });
     const repeated = JSON.parse((await cli(root, args)).stdout);
     expect(repeated).toMatchObject({ duplicate: true, delivery: { duplicateDelivery: true, duplicateEvent: true } });

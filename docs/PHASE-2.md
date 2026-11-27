@@ -17,6 +17,8 @@ QuotaFlow 已在 `wangxso/mcarplay` Issue #82 上创建独立 Worktree，由 Cod
 - 独立批准必须绑定当前 HEAD。PR 作者自批默认不计入，较新的 `CHANGES_REQUESTED` 会覆盖旧批准。
 - 输出始终保留 `humanMergeRequired=true`。门禁只允许进入人工合并，不执行自动合并。
 
+`github gate` 还会输出下一步动作计划。动作按当前阻断阶段排序，避免同时派出多个写任务。CI 失败和 `CHANGES_REQUESTED` 会合并成一个 Review–Fix 任务提示，修复完成后再次运行门禁才会生成独立审查动作。Draft、冲突、HEAD／base 变化和最终合并保留为人工动作。计划包含稳定的 `actionKey`、优先级、原因和可直接交给 Agent 的任务提示。
+
 检查快照时使用：
 
 ```sh
@@ -82,14 +84,14 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
 ## 尚未完成
 
 - GitHub App 或最小权限凭据、公网 TLS 回调部署、反向代理和自动拉取 PR 快照。
-- Review–Fix 任务生成与轮次、预算上限。
-- CI 失败分类、定向修复任务和同 SHA 复跑绑定。
+- 将动作计划物化为受预算和轮次限制的 QuotaFlow 任务。
+- Check-run 日志抓取、失败分类细节和同 SHA 复跑绑定。
 - 写入应答丢失、重复 Webhook、越权请求和凭据轮换演练。
 - Draft 转 Ready、人工批准与合并操作。当前所有合并保持人工执行。
 
 ## 下一里程碑
 
 1. 接入 GitHub App 凭据，并将本地监听器部署到受控公网反向代理。
-2. 根据阻断原因创建 Review 或 Fix 任务，并限制轮次与预算。
+2. 将 Review–Fix 动作计划物化为任务，并限制轮次与预算。
 3. 在 PR #141 获得独立审查后重新评估门禁，保持人工合并。
 4. Phase 2 核心验收完成后进入 Phase 3 Dashboard 与部署。
