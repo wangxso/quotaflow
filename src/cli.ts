@@ -10,6 +10,7 @@ import { reserveNext } from './scheduler';
 import { TaskStore } from './store';
 import { runOnce } from './worker';
 import { recoverInterruptedAttempts } from './recovery';
+import { waitForCancellation } from './cancellation';
 import { ensureWorktree } from './worktree';
 
 const usage = `
@@ -18,7 +19,7 @@ quotaflow task add <title> [--prompt <text>] [--repo <path>] [--workspace <path>
 quotaflow task list [--status <status>] [--config <file>]
 quotaflow task show <id> [--config <file>]
 quotaflow task events <id> [--config <file>]
-quotaflow task cancel <id> [--config <file>]
+quotaflow task cancel <id> [--wait <ms>] [--force] [--config <file>]
 quotaflow task retry <id> [--config <file>]
 quotaflow task prepare <id> [--config <file>]
 quotaflow queue next [--config <file>]
@@ -140,7 +141,18 @@ async function main() {
     }
 
     if (scope === 'task' && action === 'cancel') {
-      console.log(JSON.stringify(store.cancel(requireTaskId(rest)), null, 2));
+      const id = requireTaskId(rest);
+      const waitText = option(rest, '--wait');
+      const force = flag(rest, '--force');
+      if (waitText === undefined && !force) {
+        console.log(JSON.stringify(store.cancel(id), null, 2));
+        return;
+      }
+      const waitMs = waitText === undefined ? 10_000 : Number(waitText);
+      if (!Number.isInteger(waitMs) || waitMs < 0) throw new Error('--wait must be a non-negative integer');
+      const result = await waitForCancellation(store, config, id, { waitMs, force });
+      console.log(JSON.stringify(result, null, 2));
+      if (result.cancellation.outcome !== 'cancelled') process.exitCode = 2;
       return;
     }
 

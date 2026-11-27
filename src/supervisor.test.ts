@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -74,6 +74,35 @@ test('an abort signal stops the supervised job before returning', async () => {
     const result = await running;
     expect(result.stop.activeProcesses).toBe(0);
     expect(result.stop.reason).toBe('controller_closed');
+  } finally {
+    await removeEventually(root);
+  }
+});
+
+test('a cancellation flag stops the job and reports an empty process set', async () => {
+  if (process.platform !== 'win32') return;
+  const root = mkdtempSync(join(tmpdir(), 'quotaflow-supervisor-force-'));
+  try {
+    const status = join(root, 'attempt');
+    const running = launchSupervised(
+      [process.execPath, fixture, 'hold'],
+      root,
+      status,
+    );
+    const deadline = Date.now() + 10_000;
+    while (!existsSync(join(status, 'ready.json')) && Date.now() < deadline) {
+      await Bun.sleep(30);
+    }
+    writeFileSync(join(status, 'cancel.flag'), JSON.stringify({ terminateOwner: false }));
+    const result = await running;
+    expect(result.stop).toMatchObject({
+      activeProcesses: 0,
+      reason: 'cancelled',
+    });
+    expect(JSON.parse(readFileSync(join(status, 'stopped.json'), 'utf8'))).toMatchObject({
+      activeProcesses: 0,
+      reason: 'cancelled',
+    });
   } finally {
     await removeEventually(root);
   }

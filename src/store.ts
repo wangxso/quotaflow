@@ -612,6 +612,28 @@ export class TaskStore {
     `).get(taskId, attemptId));
   }
 
+  requestForcedCancellation(taskId: string, waitMs: number, now = Date.now()): boolean {
+    return this.db.transaction(() => {
+      const task = this.getTask(taskId);
+      if (['completed', 'failed', 'cancelled'].includes(task.status)) return false;
+      const active = this.activeAttempt(taskId);
+      if (!active) return false;
+      const present = this.db.query<{ present: number }, [string, number]>(`
+        SELECT 1 AS present
+        FROM events
+        WHERE task_id = ? AND attempt_id = ? AND kind = 'cancel_forced'
+        LIMIT 1
+      `).get(taskId, active.id);
+      if (present) return false;
+      this.#event(taskId, active.id, 'cancel_forced', {
+        reason: 'worker_unresponsive',
+        waitMs,
+        now,
+      });
+      return true;
+    }).immediate();
+  }
+
   block(taskId: string, reason: string, now = Date.now()): Task {
     return this.db.transaction(() => {
       const task = this.getTask(taskId);

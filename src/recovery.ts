@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Attempt, QuotaFlowConfig } from './domain';
 import type { TaskStore } from './store';
@@ -32,6 +32,8 @@ export interface RecoveryReport {
 
 export interface RecoveryDependencies {
   now?: number;
+  taskId?: string;
+  cancellationReason?: string;
   isProcessAlive?: (pid: number) => boolean;
   verifyStop?: (statusDir: string) => SupervisorStop;
   snapshot?: typeof checkpoint;
@@ -56,7 +58,7 @@ export function writeAttemptOwner(
   return owner;
 }
 
-function readAttemptOwner(statusDir: string): AttemptOwner | null {
+export function readAttemptOwner(statusDir: string): AttemptOwner | null {
   const file = join(statusDir, 'owner.json');
   if (!existsSync(file)) return null;
   try {
@@ -66,6 +68,25 @@ function readAttemptOwner(statusDir: string): AttemptOwner | null {
   } catch {
     return null;
   }
+}
+
+export function writeCancellationFlag(
+  config: Pick<QuotaFlowConfig, 'worktreeRoot'>,
+  taskId: string,
+  attemptId: number,
+  options: { terminateOwner?: boolean; requestedAt?: number; requesterPid?: number } = {},
+): string {
+  const statusDir = attemptDirectory(config, taskId, attemptId);
+  const target = join(statusDir, 'cancel.flag');
+  const pending = `${target}.${process.pid}.pending`;
+  mkdirSync(statusDir, { recursive: true });
+  writeFileSync(pending, JSON.stringify({
+    requestedAt: options.requestedAt ?? Date.now(),
+    requesterPid: options.requesterPid ?? process.pid,
+    terminateOwner: options.terminateOwner ?? false,
+  }));
+  renameSync(pending, target);
+  return target;
 }
 
 export function isProcessAlive(pid: number): boolean {
@@ -103,6 +124,7 @@ export function recoverInterruptedAttempts(
   const items: RecoveryItem[] = [];
 
   for (const attempt of store.activeAttempts()) {
+    if (dependencies.taskId && attempt.taskId !== dependencies.taskId) continue;
     const task = store.getTask(attempt.taskId);
     const cancellationRequested = store.cancelRequested(task.id, attempt.id);
     const statusDir = attemptDirectory(config, task.id, attempt.id);
@@ -282,7 +304,7 @@ export function recoverInterruptedAttempts(
     }
 
     const reason = cancellationRequested
-      ? 'cancellation_completed'
+      ? dependencies.cancellationReason ?? 'cancellation_completed'
       : supervisorStop ? 'worker_restart_verified' : 'worker_restart_unlaunched';
     try {
       store.recoverAttempt(attempt.id, {

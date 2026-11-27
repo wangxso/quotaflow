@@ -1,0 +1,85 @@
+{
+  "date": "2026-11-27",
+  "kind": "phase1-cancel-escalation",
+  "result": "passed",
+  "method": "Windows integration test with an owner that intentionally does not poll cancellation, followed by CLI wait timeout and forced reclaim",
+  "scenario": {
+    "adapter": "supervised command fixture in hold mode",
+    "unresponsiveOwner": {
+      "behavior": "reserves the attempt, launches the Windows Job Object supervisor, writes partial work, then remains alive without polling cancel_requested",
+      "workspaceChange": "app.txt=partial"
+    },
+    "waitPath": {
+      "command": "task cancel <id> --wait 100",
+      "observedStatus": "cancelling",
+      "outcome": "timeout",
+      "exitCode": 2
+    },
+    "forcePath": {
+      "command": "task cancel <id> --force --wait 5000",
+      "auditEvents": [
+        "cancel_requested",
+        "cancel_forced",
+        "attempt_recovered",
+        "attempt_finished"
+      ],
+      "cancelMarker": "attempt/cancel.flag",
+      "processStop": {
+        "mechanism": "Windows Job Object plus owner termination",
+        "receipt": "stopped.json",
+        "reason": "cancelled",
+        "activeProcesses": 0
+      },
+      "ownershipCheck": "owner.json PID is no longer alive before checkpoint recovery",
+      "checkpointSaved": true,
+      "finalStatus": "cancelled",
+      "recoveryReason": "cancellation_forced"
+    },
+    "repeatRequest": {
+      "result": "cancelled",
+      "idempotent": true
+    },
+    "codexWithoutStopReceipt": {
+      "command": "task cancel <id> --force --wait 100",
+      "finalStatus": "blocked",
+      "recoveryReason": "writer_unverified",
+      "checkpoint": null,
+      "writeTransfer": false
+    }
+  },
+  "assertions": {
+    "waitReportedAsTimeout": true,
+    "forceEscalationAudited": true,
+    "jobObjectStoppedBeforeCheckpoint": true,
+    "activeProcessesZero": true,
+    "ownerExitedBeforeCheckpoint": true,
+    "partialCheckpointPreserved": true,
+    "finalTaskStatusCancelled": true,
+    "repeatCancellationIdempotent": true,
+    "unverifiedCodexWriteBlocked": true,
+    "providerInvoiceUnknown": true
+  },
+  "gate": {
+    "command": "bun test",
+    "result": "77 pass / 0 fail",
+    "assertions": 324
+  },
+  "safetyBoundary": {
+    "rule": "No checkpoint or write transfer without a verified empty supervised process set and an exited owner.",
+    "forceMarker": "cancel.flag",
+    "forceOwnerTermination": "Only the Windows Job Object supervisor path terminates an unresponsive owner after publishing activeProcesses=0; control-plane recovery still waits for owner exit.",
+    "codexWithoutStopReceipt": "blocked",
+    "unsupervisedOrUnlaunchedAttempt": "no write transfer"
+  },
+  "limitations": [
+    "Forced owner termination is implemented only for the Windows Job Object supervisor used by supervised commands and OpenCode.",
+    "Codex App Server has cooperative turn interruption but no Windows Job Object stop receipt; force cancellation remains blocked rather than guessed.",
+    "Unknown usage keeps its budget hold pending and does not change the Provider invoice from UNKNOWN."
+  ],
+  "reproduction": [
+    "bun test src/supervisor.test.ts --test-name-pattern \"cancellation flag\"",
+    "bun test src/recovery.test.ts --test-name-pattern \"targeted recovery\"",
+    "bun test src/cli.test.ts --test-name-pattern \"force-cancels|refuses unverified\"",
+    "bun test"
+  ]
+}

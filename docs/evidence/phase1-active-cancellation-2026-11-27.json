@@ -34,8 +34,8 @@
     "restartHonorsPendingCancellation": true
   },
   "limitations": [
-    "Cancellation depends on a running Worker polling the cancellation event.",
-    "A hung Worker requires a future timeout and forced-reclaim path.",
+    "This run covers the cooperative path where a running Worker polls the cancellation event.",
+    "Timeout reporting and forced reclaim are recorded separately in phase1-cancel-escalation-2026-11-27.json.",
     "Unknown usage keeps its budget hold pending.",
     "The Codex adapter has cooperative turn interruption, not a Windows Job Object stop receipt."
   ],

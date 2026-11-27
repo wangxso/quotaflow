@@ -338,6 +338,9 @@ test('cancel requests active cancellation and succeeds for queued work', () => {
     expect(store.cancelRequested('one', reservation.attempt.id)).toBe(true);
     expect(store.cancel('one', now)).toMatchObject({ status: 'cancelling' });
     expect(store.events('one').filter((event) => event.kind === 'cancel_requested')).toHaveLength(1);
+    expect(store.requestForcedCancellation('one', 5000, now + 1)).toBe(true);
+    expect(store.requestForcedCancellation('one', 5000, now + 2)).toBe(false);
+    expect(store.events('one').filter((event) => event.kind === 'cancel_forced')).toHaveLength(1);
     store.beginCheckpoint(reservation.attempt.id, 'cancelled_by_operator', 0, now);
     store.settle(reservation.attempt.id, '', 'cancelled', 'cancelled_by_operator', 1000, now);
     expect(store.getTask('one').status).toBe('cancelled');

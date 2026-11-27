@@ -194,6 +194,56 @@ test('a live worker owner is not preempted', () => {
   }
 });
 
+test('targeted recovery does not touch an unrelated active attempt', () => {
+  const { root, repo, now, config, db, store } = setup();
+  try {
+    for (const id of ['target', 'other']) {
+      store.createTask({
+        id,
+        title: id,
+        repoPath: repo,
+        workspacePath: join(root, id),
+        now,
+      });
+    }
+    const target = store.reserve('target', config.lanes, now)!;
+    const other = store.reserve('other', [{
+      ...config.lanes[0],
+      id: 'other-lane',
+      account: 'other-account',
+    }], now)!;
+    for (const [taskId, attemptId] of [
+      ['target', target.attempt.id],
+      ['other', other.attempt.id],
+    ] as const) {
+      const statusDir = attemptDirectory(config, taskId, attemptId);
+      writeAttemptOwner(statusDir, 999_999, now);
+      writeFileSync(join(statusDir, 'ready.json'), '{}');
+    }
+
+    const report = recoverInterruptedAttempts(store, config, {
+      now: now + 10,
+      taskId: 'target',
+      isProcessAlive: () => false,
+      verifyStop: () => ({
+        supervisorPid: 1,
+        workerPid: 2,
+        exitCode: null,
+        activeProcesses: 0,
+        reason: 'controller_closed',
+      }),
+    });
+
+    expect(report).toMatchObject({ recovered: 1, blocked: 0, skipped: 0, errors: 0 });
+    expect(store.getTask('target').status).toBe('queued');
+    expect(store.getTask('other').status).toBe('running');
+    expect(store.activeAttempt('other')?.id).toBe(other.attempt.id);
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('a low-level reservation without owner evidence is left untouched', () => {
   const { root, repo, now, config, db, store } = setup();
   try {

@@ -15,6 +15,7 @@ public static class QuotaFlowGuard
     private const uint KillOnClose = 0x2000;
     private const uint CreateSuspended = 0x4;
     private const uint CreateNoWindow = 0x08000000;
+    private const uint OwnerAccess = 0x101001;
     private const uint WaitObject = 0;
     private const uint WaitTimeout = 258;
     private const int BasicAccounting = 1;
@@ -42,7 +43,7 @@ public static class QuotaFlowGuard
             Limits limits = new Limits();
             limits.Basic.Flags = KillOnClose;
             Require(SetInformationJobObject(job, ExtendedLimit, ref limits, Marshal.SizeOf(typeof(Limits))));
-            owner = OpenProcess(0x101000, false, ownerPid);
+            owner = OpenProcess(OwnerAccess, false, ownerPid);
             long creation, exit, kernel, user;
             if (owner == IntPtr.Zero || !GetProcessTimes(owner, out creation, out exit, out kernel, out user) ||
                 new DateTimeOffset(DateTime.FromFileTimeUtc(creation)).ToUnixTimeMilliseconds() > createdBy ||
@@ -72,8 +73,17 @@ public static class QuotaFlowGuard
                 supervisor, worker.ProcessId, Process.GetCurrentProcess().SessionId, name));
 
             uint? exitCode = null;
+            bool cancelled = false;
+            bool terminateOwner = false;
             while (!ControllerStopped(owner, parent))
             {
+                string cancel = Path.Combine(status, "cancel.flag");
+                if (File.Exists(cancel))
+                {
+                    cancelled = true;
+                    terminateOwner = OwnerTerminationRequested(cancel);
+                    break;
+                }
                 uint wait = WaitForSingleObject(worker.Process, 30);
                 if (wait == WaitObject)
                 {
@@ -92,7 +102,19 @@ public static class QuotaFlowGuard
                 if (deadline.ElapsedMilliseconds > 5000) throw new TimeoutException("Job processes still active");
                 Thread.Sleep(20);
             }
-            WriteStopped(status, supervisor, worker.ProcessId, exitCode, exitCode.HasValue ? "worker_exit" : "controller_closed");
+            if (cancelled && terminateOwner)
+            {
+                WriteStopped(status, supervisor, worker.ProcessId, exitCode, "cancelled");
+                if (WaitForSingleObject(owner, 0) != WaitObject)
+                {
+                    if (!TerminateProcess(owner, 73)) throw new Win32Exception();
+                    if (WaitForSingleObject(owner, 5000) != WaitObject)
+                        throw new TimeoutException("Worker owner did not stop");
+                }
+                return;
+            }
+            WriteStopped(status, supervisor, worker.ProcessId, exitCode,
+                cancelled ? "cancelled" : exitCode.HasValue ? "worker_exit" : "controller_closed");
         }
         finally
         {
@@ -128,6 +150,18 @@ public static class QuotaFlowGuard
             finally { CloseHandle(job); }
         }
         if (!File.Exists(Path.Combine(dir, "stopped.json"))) WriteStopped(dir, supervisor, worker, null, "job_reaped");
+    }
+
+    private static bool OwnerTerminationRequested(string file)
+    {
+        try
+        {
+            return Regex.IsMatch(File.ReadAllText(file), "\"terminateOwner\"\\s*:\\s*true");
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static void WriteStopped(string dir, int supervisor, uint worker, uint? exitCode, string reason)
