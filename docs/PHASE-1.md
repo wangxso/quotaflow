@@ -103,6 +103,12 @@ macOS 监督适用于可信工作负载。已覆盖 Codex CLI 0.171.0 `command/e
 
 Linux aarch64 在 Bun 官方容器中运行完整测试，结果为 95 通过、1 个 Windows 专用用例跳过、0 失败。同一镜像内使用 Codex CLI 0.171.0 完成零推理初始化、`command/exec` 写读和后台子进程回收，停止凭证为 `activeProcesses=0`。默认 Codex Adapter 另在 macOS 经 Magpie 免费模型写入 `app.txt=43`，通过独立 verifier 验证后保存检查点，确认接口分离没有破坏真实执行。Docker Desktop 默认禁止 Codex 的 namespace 沙箱，因此 Linux smoke 使用 `--privileged`；普通 Linux 主机按实际 namespace 权限运行。 [Linux 与停止契约证据](evidence/phase1-linux-supervision-2026-11-27.json)
 
+## mcarplay 真实 Issue 试点
+
+2026-11-27 在 `mcarplay` 当前 `main`（`daf67e87`）选择 Issue #82。该 Issue 只统一 iAP2 消息目录的方向注释、日志名称和未确认常量名称，不改变消息时序或载荷，可由 JVM 测试离线验证。QuotaFlow 创建独立 Worktree，Codex 经 Magpie `hy4-flash-free` 修改 3 个文件并写入交接笔记，任务在 88 秒内完成，检查点为 `f39bfdf7025ff48c200beb7f81d8dda172f82d15`，停止凭证为 `activeProcesses=0`。
+
+控制面随后运行完整门禁。Android 标准 JVM 测试 1,344 项、remote JVM 测试 25 项、Python 测试 87 项全部通过；Spotless、lint 和 `assembleStandardDebug` 通过。提交 `abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48` 已推送为 Draft PR [#141](https://github.com/wangxso/mcarplay/pull/141)，两次 Android CI 和 GitGuardian 均对同一 HEAD 通过。该 PR 保持 Draft，等待独立审查、人工批准与合并。目录修正不声明新的车型或手机兼容性。 [mcarplay 试点证据](evidence/phase1-mcarplay-issue-82-2026-11-27.json)
+
 ## 跨 Agent 交接笔记
 
 在已配置运行 Lane 的仓库中，可用以下命令为一项新任务开启交接。`--handoff-protect` 也会开启交接，可重复指定仓库相对路径，路径使用正斜杠。
@@ -131,6 +137,6 @@ macOS 已用受监督 fixture 验证额度中断后的跨 Lane 接手，并实�
 
 ## 下一里程碑
 
-1. 在 mcarplay 或等价真实仓库完成端到端任务，并补并发、额度等待和失败恢复测试。
+1. 完成 Phase 2 的独立 Review–Fix、CI 失败分流、重复事件和人工合并门禁。
 2. 自动化 Worktree 生命周期、清理和备份恢复。
 3. 接入实际 Provider 账单证据，继续把无法核对的归属保留为 `UNKNOWN`。

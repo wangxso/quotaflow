@@ -1,0 +1,85 @@
+{
+  "recordedOn": "2026-11-27",
+  "quotaflowBaseRevision": "044f83dfbe809ea71ebe03ad19abeb16b0ffbe1c",
+  "mcarplayBaseRevision": "daf67e87a72aa9033a4d62f88e9a9d05ce047d9e",
+  "environment": {
+    "os": "macOS 26.6.2 arm64",
+    "bun": "1.4.5",
+    "java": "Temurin 21.0.13",
+    "androidSdkPlatform": 35,
+    "androidBuildTools": "35.0.0",
+    "python": 3,
+    "codex": "0.171.0",
+    "magpie": "0.1.4539"
+  },
+  "issue": {
+    "repository": "wangxso/mcarplay",
+    "number": 82,
+    "title": "docs(iap2): 消息目录三处不一致（0xAA04 方向、nameOf 缺 10 项、0x4E0C 双重命名）",
+    "selectionReason": "Naming-only changes with explicit offline tests, no message timing or payload changes, and a path that triggers the normal Android CI gate."
+  },
+  "quotaflowTask": {
+    "id": "mcarplay-issue-82",
+    "agent": "codex:codex-magpie",
+    "requestedModel": "opencode-go/hy4-flash-free",
+    "actualModel": "opencode-go/hy4-flash-free",
+    "status": "completed",
+    "checkpoint": "f39bfdf7025ff48c200beb7f81d8dda172f82d15",
+    "startedAt": "2026-11-27T13:50:55.833Z",
+    "endedAt": "2026-11-27T13:52:23.991Z",
+    "worktree": "Detached Git worktree created from mcarplay main",
+    "stop": { "activeProcesses": 0, "exitCode": 0, "reason": "worker_exit" },
+    "handoffNoteSaved": true,
+    "changedPaths": [
+      "app/src/main/java/com/mcarplay/app/airplay/VirtualIap2Link.kt",
+      "app/src/main/java/com/mcarplay/app/iap2/Iap2MessageIds.kt",
+      "app/src/test/java/com/mcarplay/app/iap2/Iap2MessageIdsTest.kt"
+    ]
+  },
+  "implementation": {
+    "messageCatalog": "Added readable names for the 10 missing device-state and MFi IDs and exposed ALL_IDS for complete-catalog regression coverage.",
+    "direction": "Corrected 0xAA04 to accessory-to-phone and documented that this repository currently handles the inbound direction.",
+    "ambiguousConstant": "Renamed the tunnel-local 0x4E0C constant to DEVICE_UUID_OR_SESSION and cross-referenced the unresolved semantic difference.",
+    "behavior": "No message send timing, payload, log phrase, or diagnostic code changes."
+  },
+  "validation": {
+    "targeted": {
+      "command": "./gradlew spotlessApply :app:testStandardDebugUnitTest --tests 'com.mcarplay.app.iap2.Iap2MessageIdsTest'",
+      "result": "passed"
+    },
+    "androidGate": {
+      "command": "./gradlew spotlessCheck :app:testStandardDebugUnitTest :app:lintStandardDebug :app:assembleStandardDebug :app:testRemoteDebugUnitTest --tests 'com.mcarplay.app.bridge.*'",
+      "result": "passed",
+      "standardTests": 1344,
+      "remoteTests": 25,
+      "failures": 0
+    },
+    "pythonGate": {
+      "command": ".venv/bin/python -m unittest discover -s tools -p 'test_*.py'",
+      "tests": 87,
+      "result": "passed"
+    },
+    "debugApkSha256": "ff5bf6185eddc27e67256dfbe6983c3bdf4ff95452b32a4eb0bbad5fc47a8243"
+  },
+  "draftPullRequest": {
+    "number": 141,
+    "url": "https://github.com/wangxso/mcarplay/pull/141",
+    "head": "quotaflow/issue-82-iap2-catalog",
+    "headSha": "abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48",
+    "base": "main",
+    "baseSha": "daf67e87a72aa9033a4d62f88e9a9d05ce047d9e",
+    "draft": true,
+    "mergeable": "MERGEABLE",
+    "changedFiles": 3,
+    "checks": [
+      { "name": "Android CI", "runId": 46011575575, "conclusion": "success" },
+      { "name": "Android CI", "runId": 46011622926, "conclusion": "success" },
+      { "name": "GitGuardian Security Checks", "conclusion": "success" }
+    ]
+  },
+  "scope": {
+    "hardwareClaim": "The catalog-only change does not claim new vehicle or phone compatibility.",
+    "humanReview": "The pull request remains Draft for human review and merge approval.",
+    "providerInvoice": "UNKNOWN"
+  }
+}

@@ -4,7 +4,7 @@
 
 QuotaFlow 是一个额度感知的 AI 软件研发调度工具。它按账户额度、并发和预算安排 Codex 或 OpenCode 执行任务，将改动保存在独立的 Git 工作树和检查点中，供中断后恢复。
 
-**当前状态（2026-11-27）**　Phase 0 技术门禁有条件通过，已在临时仓库验证 Codex 写入、保存检查点和 OpenCode 接续。Phase 1 单机 CLI 正在开发。Windows 已验证 Magpie 路由任务、OpenCode 请求级用量回写和受监督恢复。macOS 已验证默认 Codex／OpenCode Adapter 经 Magpie 免费模型完成真实写入、跨进程组回收、用量回写，以及原生额度耗尽后的 Agent 交接。Linux 已通过 subreaper 进程树回收和 Codex App Server 零推理 smoke。首个 GitHub 试点计划在 Phase 2 使用 `mcarplay`。 [Phase 0 验收](docs/PHASE-0-GATE-CLOSURE.md) · [Phase 1 实现与验证](docs/PHASE-1.md)
+**当前状态（2026-11-27）**　Phase 0 技术门禁有条件通过。Phase 1 单机 CLI 已具备三平台监督、检查点恢复、预算审计和可选交接笔记。Phase 2 已启动：QuotaFlow 在真实 `mcarplay` 仓库完成 Issue #82，并创建 Draft PR [#141](https://github.com/wangxso/mcarplay/pull/141)，Android CI 与 GitGuardian 均通过，等待独立审查和人工合并。GUI 计划在 Phase 3 交付。 [Phase 0 验收](docs/PHASE-0-GATE-CLOSURE.md) · [Phase 1 实现与验证](docs/PHASE-1.md) · [mcarplay 试点证据](docs/evidence/phase1-mcarplay-issue-82-2026-11-27.json)
 
 ## 当前功能
 

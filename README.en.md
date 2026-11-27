@@ -4,7 +4,7 @@
 
 QuotaFlow schedules AI software development tasks using account quotas, concurrency limits, and budgets. It runs Codex or OpenCode in dedicated Git worktrees and saves checkpoints so interrupted work can resume.
 
-**Status as of 2026-11-27.** Phase 0 passed its technical gate with conditions and demonstrated Codex writing changes, Git checkpointing, and OpenCode resuming in a temporary repository. The Phase 1 single-host CLI is in development. Windows verification covers Magpie-routed tasks, request-level OpenCode usage reconciliation, and supervised recovery. The default macOS Codex and OpenCode adapters have completed live Magpie writes, cross-process-group cleanup, usage reconciliation, and an agent handoff after the native quota was exhausted. Linux verification covers subreaper process-tree cleanup and a zero-inference Codex App Server smoke. The first GitHub pilot is planned for Phase 2 with `mcarplay`. [Phase 0 gate results](docs/PHASE-0-GATE-CLOSURE.md) · [Phase 1 implementation and verification](docs/PHASE-1.md)
+**Status as of 2026-11-27.** Phase 0 passed its technical gate with conditions. Phase 1 now has three-platform supervision, checkpoint recovery, budget audits, and optional handoff notes. Phase 2 has started: QuotaFlow completed issue #82 in the real `mcarplay` repository and opened Draft PR [#141](https://github.com/wangxso/mcarplay/pull/141). Android CI and GitGuardian pass, with independent review and human merge approval pending. The GUI is planned for Phase 3. [Phase 0 gate results](docs/PHASE-0-GATE-CLOSURE.md) · [Phase 1 implementation and verification](docs/PHASE-1.md) · [mcarplay pilot evidence](docs/evidence/phase1-mcarplay-issue-82-2026-11-27.json)
 
 ## Current capabilities
 

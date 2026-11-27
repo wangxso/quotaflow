@@ -14,7 +14,7 @@
 
 ### 本轮执行状态
 
-方案获审后已执行 Phase 0 并提交 [验证报告](PHASE-0.md)、[PoC](../poc/README.md) 和[许可证审查](LICENSING-REVIEW.md)。确定性故障恢复用例通过。2026-11-27 已完成真实 Codex Agent 写入、检查点恢复和 OpenCode 接续，技术门禁有条件通过；Codex 实际经 Magpie 路由到第三方模型，原生 ChatGPT 路径、商用路由组和服务商账单仍未验证。负责人已允许 Phase 1 使用 Magpie 路由模型，首个任务状态、原子预留和 CLI 切片已启动；详见[Phase 1 说明](PHASE-1.md)与[门禁收口记录](PHASE-0-GATE-CLOSURE.md)。
+方案获审后已执行 Phase 0 并提交 [验证报告](PHASE-0.md)、[PoC](../poc/README.md) 和[许可证审查](LICENSING-REVIEW.md)。确定性故障恢复用例通过。2026-11-27 已完成真实 Codex Agent 写入、检查点恢复和 OpenCode 接续，技术门禁有条件通过；Codex 实际经 Magpie 路由到第三方模型，原生 ChatGPT 路径、商用路由组和服务商账单仍未验证。Phase 1 已形成三平台监督、预算审计和恢复闭环。Phase 2 已启动，QuotaFlow 在 `mcarplay` Issue #82 上生成 Draft PR #141，完整 CI 通过；独立审查和人工合并仍未完成。详见[Phase 1 说明](PHASE-1.md)与[门禁收口记录](PHASE-0-GATE-CLOSURE.md)。
 
 ## Phase 0 · 调研与可行性验证
 
@@ -65,6 +65,8 @@ Linux 采用 child subreaper 与 `/proc` 进程树枚举，补齐全套停止、
 2. 选择一个已有明确预期和可自动验证回归的真实 Issue，优先考虑诊断工具或可离线验证的 Kotlin 单元测试。锁定测试命令和成功标准，创建任务 Worktree 和幂等的 Draft PR。
 3. 运行与仓库匹配的 Python、Gradle 和 GitHub Actions 检查，将 Reviewer 结果与 PR 当前 HEAD 绑定。有车机硬件依赖时保留 `待硬件验证`，模拟器与离线协议回放各自记录覆盖范围。
 4. 将模块、Android 构建、兼容性知识与高风险目录规则写入项目配置和知识库。生产发布、正式 APK 签名、合并策略变更按仓库权限与审批规则执行。
+
+2026-11-27 已按上述路径执行 Issue #82。QuotaFlow 在 `mcarplay` `daf67e87` 的隔离 Worktree 中运行 Codex，完成 iAP2 消息目录命名与测试，检查点为 `f39bfdf7025ff48c200beb7f81d8dda172f82d15`。Android 标准测试 1,344 项、remote 测试 25 项、Python 测试 87 项及 lint/APK 构建通过。提交 `abc4c5b` 形成 Draft PR [#141](https://github.com/wangxso/mcarplay/pull/141)，Android CI 与 GitGuardian 均通过。独立 Reviewer、真实车机日志复核和人工合并仍保留为后续门禁。 [mcarplay 试点证据](evidence/phase1-mcarplay-issue-82-2026-11-27.json)
 
 ## 主要风险与处理
 
