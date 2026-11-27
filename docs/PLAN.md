@@ -51,6 +51,8 @@
 
 首轮使用项目自有的交接格式。完整 CLM 上下文编辑、社区 OpenCode 插件和推理侧 Suffix Cache Reuse 依据实验结果与部署条件另行评估。 [CLM 仓库与许可](https://github.com/facebookresearch/context-language-models)
 
+2026-11-27 在 macOS 完成首轮 Codex → OpenCode 对照。两组从同一检查点接手，功能测试均为 3/3。A 组只修改待办的 `label.ts`。B 组对已验证的 `parser.ts` 执行了两次编辑，最终多出一个空行，未通过保留已完成文件的验收项。B 组接手时的输入 Token 从 8,447 降到 7,621，计入生成笔记后为 9,058。每组执行一次，效率收益仍待复测。 [首轮脱敏证据](evidence/phase1-macos-handoff-experiment-2026-11-27.json)
+
 ## mcarplay 试点
 
 1. 以[源码初筛的 CI 基线](RESEARCH.md#mcarplay-首个试点)作为起点。开跑前重新核对基线 SHA、默认分支、实际目标分支、受保护分支规则及必需检查。

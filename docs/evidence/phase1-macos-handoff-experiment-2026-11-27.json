@@ -1,0 +1,282 @@
+{
+  "date": "2026-11-27",
+  "sourceRevision": "fa0fc4dcccd908e18e990190d42ef81fd542cf1c",
+  "planRevision": "67ac18d41f913de56e0b6f6e4cd17b59fe872729",
+  "environment": {
+    "os": "macOS 26.6.2 arm64",
+    "bun": "1.4.5",
+    "git": "2.56.1",
+    "codex": "0.171.0",
+    "opencode": "1.19.6",
+    "magpie": "0.1.4539"
+  },
+  "projectVerification": {
+    "test": "bun test",
+    "passed": 83,
+    "failed": 0,
+    "windowsOnlySkipped": 2,
+    "build": "bun run build",
+    "buildPassed": true
+  },
+  "fixtureScenarios": [
+    {
+      "fault": "quota",
+      "state": "waiting_quota",
+      "checkpoint": "e423e33802f863b5748cf2ea16047b7dda8a7a9e",
+      "activeProcesses": 0,
+      "reason": "controller_closed",
+      "heartbeatStopped": true,
+      "missingNoteFallback": true,
+      "invalidNoteFallback": true,
+      "mismatchedCheckpointFallback": true,
+      "arms": [
+        {
+          "arm": "A",
+          "checkpoint": "e423e33802f863b5748cf2ea16047b7dda8a7a9e",
+          "noteSupplied": false,
+          "testsPassed": 1,
+          "answer": 42
+        },
+        {
+          "arm": "B",
+          "checkpoint": "e423e33802f863b5748cf2ea16047b7dda8a7a9e",
+          "noteSupplied": true,
+          "testsPassed": 1,
+          "answer": 42
+        }
+      ]
+    },
+    {
+      "fault": "restart",
+      "state": "queued",
+      "checkpoint": "f3d563c8504fe529c9740cbce4af43062120af97",
+      "activeProcesses": 0,
+      "reason": "controller_closed",
+      "heartbeatStopped": true,
+      "missingNoteFallback": true,
+      "invalidNoteFallback": true,
+      "mismatchedCheckpointFallback": true,
+      "arms": [
+        {
+          "arm": "A",
+          "checkpoint": "f3d563c8504fe529c9740cbce4af43062120af97",
+          "noteSupplied": false,
+          "testsPassed": 1,
+          "answer": 42
+        },
+        {
+          "arm": "B",
+          "checkpoint": "f3d563c8504fe529c9740cbce4af43062120af97",
+          "noteSupplied": true,
+          "testsPassed": 1,
+          "answer": 42
+        }
+      ]
+    }
+  ],
+  "modelExperiment": {
+    "outcome": "Single comparison completed. B passed all functional tests and failed the unchanged-parser check.",
+    "task": "Validate and format a retry limit in a synthetic Git repository. The donor fixes parser.ts and the recipient finishes label.ts.",
+    "acceptance": [
+      "All 3 tests pass",
+      "Only label.ts changes after the handoff"
+    ],
+    "isolation": "Separate worktrees restored from the same Git checkpoint and fresh OpenCode profiles. macOS Seatbelt blocked process creation and limited writes and network access. OpenCode’s Git locator was hidden during both runs and restored after exit.",
+    "budgets": {
+      "maxRequestsPerStage": 10,
+      "codexMaxOutputTokens": 4096,
+      "openCodeSteps": 8,
+      "modelCatalogPromptAndCompletionPrice": 0
+    },
+    "requestedModel": "opencode-go/hy4-flash-free",
+    "recipientRunsPerArm": 1,
+    "order": [
+      "A",
+      "B"
+    ],
+    "checkpoint": "1bbae80d0c38a90b7b2760669981cb122973a9d7",
+    "donorStartedAt": "2026-11-27T11:09:10.994Z",
+    "recipientComparisonStartedAt": "2026-11-27T11:11:55.371Z",
+    "codex": {
+      "patchStatus": "completed",
+      "noteStatus": "completed",
+      "parserTests": {
+        "exitCode": 0,
+        "passed": 2,
+        "failed": 0
+      },
+      "fullBefore": {
+        "exitCode": 1,
+        "passed": 2,
+        "failed": 1
+      },
+      "exitCode": 0,
+      "childProcessesDenied": true,
+      "codeTurnUsage": {
+        "requests": 2,
+        "httpStatuses": [
+          200,
+          200
+        ],
+        "magpieRows": 2,
+        "inputTokens": 3486,
+        "outputTokens": 835,
+        "cacheReadTokens": 2560,
+        "costEstimate": 0,
+        "priced": true,
+        "providerInvoice": "UNKNOWN",
+        "servedModels": [
+          "hy4-flash-free"
+        ]
+      },
+      "noteTurnUsage": {
+        "requests": 2,
+        "httpStatuses": [
+          200,
+          200
+        ],
+        "magpieRows": 2,
+        "inputTokens": 1437,
+        "outputTokens": 1102,
+        "cacheReadTokens": 6912,
+        "costEstimate": 0,
+        "priced": true,
+        "providerInvoice": "UNKNOWN",
+        "servedModels": [
+          "hy4-flash-free"
+        ]
+      },
+      "fileTool": "apply_patch via an explicit model capability descriptor",
+      "noteRequestDurationTotalMs": 14979
+    },
+    "originalPromptBytes": 489,
+    "note": {
+      "schema": [
+        "completed",
+        "failedAttempts",
+        "blockers",
+        "nextSteps",
+        "checks"
+      ],
+      "bytes": 359,
+      "content": {
+        "completed": [
+          "parser.ts: strict parser for trimmed ASCII decimal whole numbers 0-10; leading zeros allowed; empty, invalid, or out-of-range input throws RangeError."
+        ],
+        "failedAttempts": [],
+        "blockers": [],
+        "nextSteps": [
+          "Update label.ts so label.test.ts passes."
+        ],
+        "checks": [
+          "bun test parser.test.ts: 2 passed.",
+          "label.test.ts is the only remaining failing test."
+        ]
+      }
+    },
+    "arms": [
+      {
+        "arm": "A",
+        "checkpoint": "1bbae80d0c38a90b7b2760669981cb122973a9d7",
+        "noteSupplied": false,
+        "completed": true,
+        "exitCode": 0,
+        "durationMs": 24903,
+        "stepFinishes": 5,
+        "toolCounts": {
+          "glob": 1,
+          "read": 6,
+          "edit": 1
+        },
+        "repeatedIdenticalToolCalls": 1,
+        "readsOfCompletedParserFiles": 2,
+        "tests": {
+          "exitCode": 0,
+          "passed": 3,
+          "failed": 0
+        },
+        "changed": [
+          "label.ts"
+        ],
+        "gitLocatorHidden": true,
+        "errors": [],
+        "usage": {
+          "status": "recorded",
+          "rows": 6,
+          "model": "hy4-flash-free",
+          "inputTokens": 8447,
+          "outputTokens": 2188,
+          "cacheReadTokens": 17920,
+          "costEstimate": 0,
+          "priced": true,
+          "providerInvoice": "UNKNOWN"
+        },
+        "parserEditCalls": 0
+      },
+      {
+        "arm": "B",
+        "checkpoint": "1bbae80d0c38a90b7b2760669981cb122973a9d7",
+        "noteSupplied": true,
+        "completed": false,
+        "exitCode": 0,
+        "durationMs": 26579,
+        "stepFinishes": 8,
+        "toolCounts": {
+          "read": 6,
+          "glob": 1,
+          "edit": 3
+        },
+        "repeatedIdenticalToolCalls": 1,
+        "readsOfCompletedParserFiles": 3,
+        "tests": {
+          "exitCode": 0,
+          "passed": 3,
+          "failed": 0
+        },
+        "changed": [
+          "label.ts",
+          "parser.ts"
+        ],
+        "gitLocatorHidden": true,
+        "errors": [],
+        "usage": {
+          "status": "recorded",
+          "rows": 9,
+          "model": "hy4-flash-free",
+          "inputTokens": 7621,
+          "outputTokens": 1350,
+          "cacheReadTokens": 34816,
+          "costEstimate": 0,
+          "priced": true,
+          "providerInvoice": "UNKNOWN"
+        },
+        "parserEditCalls": 2,
+        "parserDiffAfterB": "one added blank line at end of parser.ts"
+      }
+    ],
+    "comparisonIncludingNoteGeneration": {
+      "A": {
+        "magpieRequests": 6,
+        "inputTokens": 8447,
+        "cacheReadTokens": 17920,
+        "costEstimate": 0
+      },
+      "B": {
+        "magpieRequests": 11,
+        "inputTokens": 9058,
+        "cacheReadTokens": 41728,
+        "costEstimate": 0
+      },
+      "inputTokenDifferenceBMinusA": 611,
+      "providerInvoice": "UNKNOWN"
+    },
+    "setupDiagnostics": [
+      "An initial Codex turn used fallback model metadata without apply_patch. It exited without changing the worktree. Magpie recorded 7 requests and a cost estimate of 0.",
+      "After the donor checkpoint was saved, both initial OpenCode launches exited before inference because repository discovery spawned Git. The comparison reused the verified donor checkpoint after a loopback preflight confirmed the Git locator workaround."
+    ],
+    "limits": [
+      "A single run per arm gives no repeatability estimate.",
+      "The note injection and Seatbelt profile belong to the experiment harness."
+    ]
+  }
+}
