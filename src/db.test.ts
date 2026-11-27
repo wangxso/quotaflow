@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDatabase } from './db';
 
-function createLegacyDatabase(version: 1 | 2 | 3 | 4 | 5 | 6): { root: string; file: string } {
+function createLegacyDatabase(version: 1 | 2 | 3 | 4 | 5 | 6 | 7): { root: string; file: string } {
   const root = mkdtempSync(join(tmpdir(), `quotaflow-db-v${version}-`));
   const file = join(root, 'state.sqlite');
   const db = new Database(file);
@@ -53,8 +53,9 @@ function createLegacyDatabase(version: 1 | 2 | 3 | 4 | 5 | 6): { root: string; f
     ${version >= 5 ? `
       CREATE TABLE budget_leases (
         id INTEGER PRIMARY KEY, attempt_id INTEGER NOT NULL, state TEXT NOT NULL
+        ${version >= 7 ? ', expired_at INTEGER' : ''}
       );
-      INSERT INTO budget_leases VALUES (1, 1, 'pending');
+      INSERT INTO budget_leases (id, attempt_id, state) VALUES (1, 1, 'pending');
     ` : ''}
     PRAGMA user_version = ${version};
   `);
@@ -80,12 +81,12 @@ function createLegacyDatabase(version: 1 | 2 | 3 | 4 | 5 | 6): { root: string; f
   return { root, file };
 }
 
-for (const version of [1, 2, 3, 4, 5, 6] as const) {
-  test(`migrates schema v${version} to v7 without losing task data`, () => {
+for (const version of [1, 2, 3, 4, 5, 6, 7] as const) {
+  test(`migrates schema v${version} to v8 without losing task data`, () => {
     const { root, file } = createLegacyDatabase(version);
     const db = openDatabase(file);
     try {
-      expect(db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version).toBe(7);
+      expect(db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version).toBe(8);
       expect(db.query("SELECT prompt, handoff_config FROM tasks WHERE id = 'legacy'").get())
         .toEqual({ prompt: version === 1 ? '' : 'kept prompt', handoff_config: null });
       expect(db.query("SELECT actual_model, handoff_note FROM attempts WHERE task_id = 'legacy'").get())
@@ -96,6 +97,12 @@ for (const version of [1, 2, 3, 4, 5, 6] as const) {
       expect(db.query<{ name: string }, []>(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'budget_leases'",
       ).get()?.name).toBe('budget_leases');
+      expect(db.query<{ name: string }, []>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'github_deliveries'",
+      ).get()?.name).toBe('github_deliveries');
+      expect(db.query<{ name: string }, []>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'github_gate_results'",
+      ).get()?.name).toBe('github_gate_results');
       if (version >= 5) expect(db.query('SELECT state, expired_at FROM budget_leases').get())
         .toEqual({ state: 'pending', expired_at: null });
     } finally {

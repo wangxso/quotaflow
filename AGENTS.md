@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 
 - `src/cli.ts` is the QuotaFlow CLI entry point. `src/config.ts` and `src/domain.ts` define configuration and shared types. `src/db.ts` and `src/store.ts` manage SQLite state.
-- Scheduling, execution, recovery, and Git worktrees live in `src/`, alongside the Codex and OpenCode adapters. Tests sit beside the code as `*.test.ts`.
+- Scheduling, execution, recovery, Git worktrees, and the GitHub PR gate live in `src/`, alongside the Codex and OpenCode adapters. Tests sit beside the code as `*.test.ts`.
 - `poc/` contains Phase 0 experiments and fixture workers. Platform process guards live in `src/`. See `docs/PHASE-1.md` for current workflows, `docs/adr/` for design decisions, and `docs/evidence/` for recorded verification results.
 
 ## Build, Test, and Development Commands

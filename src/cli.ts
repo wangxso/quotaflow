@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadConfig } from './config';
 import { agentForLane } from './agent-factory';
@@ -12,6 +13,7 @@ import { runOnce } from './worker';
 import { recoverInterruptedAttempts } from './recovery';
 import { waitForCancellation } from './cancellation';
 import { ensureWorktree } from './worktree';
+import { hashGitHubPayload, parseGitHubPullSnapshot } from './github';
 
 const usage = `
 quotaflow config validate [--config <file>]
@@ -27,6 +29,7 @@ quotaflow worker once [--config <file>]
 quotaflow worker recover [--config <file>]
 quotaflow budget status [--config <file>]
 quotaflow budget audit [--limit <n>] [--config <file>]
+quotaflow github gate <snapshot.json> [--delivery-id <id>] [--event-type <type>] [--expected-head <sha>] [--expected-base <sha>] [--require-check <name>]... [--required-approvals <n>] [--allow-author-self-approval] [--config <file>]
 `.trim();
 
 function option(args: string[], name: string): string | undefined {
@@ -198,6 +201,46 @@ async function main() {
       const limit = Number(limitText);
       if (!Number.isInteger(limit) || limit <= 0) throw new Error('--limit must be a positive integer');
       console.log(JSON.stringify(store.budgetAudit(config.budgets ?? [], Date.now(), limit), null, 2));
+      return;
+    }
+
+    if (scope === 'github' && action === 'gate') {
+      const snapshotFile = rest.shift();
+      if (!snapshotFile || snapshotFile.startsWith('--')) throw new Error('Expected a GitHub pull snapshot JSON file');
+      const snapshotText = readFileSync(snapshotFile, 'utf8');
+      if (Buffer.byteLength(snapshotText) > 1_000_000) throw new Error('GitHub pull snapshot exceeds 1 MiB');
+      const snapshot = parseGitHubPullSnapshot(JSON.parse(snapshotText) as unknown);
+      const expectedHeadSha = option(rest, '--expected-head');
+      const expectedBaseSha = option(rest, '--expected-base');
+      const eventType = option(rest, '--event-type') ?? 'pull_request';
+      if (!eventType.trim()) throw new Error('--event-type must not be empty');
+      const requiredChecks: string[] = [];
+      for (let check = option(rest, '--require-check'); check !== undefined; check = option(rest, '--require-check')) {
+        if (!check.trim()) throw new Error('--require-check must not be empty');
+        requiredChecks.push(check.trim());
+      }
+      const approvalsText = option(rest, '--required-approvals');
+      const requiredApprovals = approvalsText === undefined ? undefined : Number(approvalsText);
+      if (requiredApprovals !== undefined && (!Number.isInteger(requiredApprovals) || requiredApprovals < 0)) {
+        throw new Error('--required-approvals must be a non-negative integer');
+      }
+      const allowAuthorSelfApproval = flag(rest, '--allow-author-self-approval');
+      const deliveryId = option(rest, '--delivery-id') ?? `local:${hashGitHubPayload(snapshot).slice(0, 24)}`;
+      if (rest.length > 0) throw new Error(`Unexpected github gate arguments: ${rest.join(' ')}`);
+      if (!deliveryId.trim()) throw new Error('--delivery-id must not be empty');
+      const result = store.ingestGitHubGate({
+        snapshot,
+        policy: {
+          ...(expectedHeadSha ? { expectedHeadSha } : {}),
+          ...(expectedBaseSha ? { expectedBaseSha } : {}),
+          ...(requiredChecks.length ? { requiredChecks } : {}),
+          ...(requiredApprovals === undefined ? {} : { requiredApprovals }),
+          allowAuthorSelfApproval,
+        },
+        deliveryId,
+        eventType,
+      });
+      console.log(JSON.stringify(result, null, 2));
       return;
     }
 

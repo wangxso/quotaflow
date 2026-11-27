@@ -1,0 +1,66 @@
+{
+  "recordedOn": "2026-11-27",
+  "baseRevision": "378a5d45771c5498e9b9758d33055934f7767e36",
+  "schemaVersion": 8,
+  "pullRequest": {
+    "repository": "wangxso/mcarplay",
+    "number": 141,
+    "url": "https://github.com/wangxso/mcarplay/pull/141",
+    "headSha": "abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48",
+    "baseSha": "daf67e87a72aa9033a4d62f88e9a9d05ce047d9e",
+    "draft": true,
+    "mergeableState": "clean",
+    "mergeable": true,
+    "reviews": 0
+  },
+  "policy": {
+    "expectedHeadSha": "abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48",
+    "expectedBaseSha": "daf67e87a72aa9033a4d62f88e9a9d05ce047d9e",
+    "requiredChecks": [
+      "Check and build debug APK",
+      "GitGuardian Security Checks"
+    ],
+    "requiredApprovals": 1,
+    "authorSelfApprovalAllowed": false,
+    "humanMergeRequired": true
+  },
+  "liveEvaluation": {
+    "status": "blocked",
+    "checksOnCurrentHead": [
+      { "name": "Check and build debug APK", "conclusion": "success", "headSha": "abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48", "passed": true },
+      { "name": "GitGuardian Security Checks", "conclusion": "success", "headSha": "abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48", "passed": true }
+    ],
+    "independentApprovals": 0,
+    "reasons": ["draft", "independent_review_missing"],
+    "policyHash": "4442b0bbe72f2644e01dc4499c2ae69c6b7ceceff5a5b3014e9a1ae530dbf927"
+  },
+  "idempotency": {
+    "deliveryId": "live-pr-141-abc4c5b-base-v1",
+    "policyIngest": { "duplicate": false, "newGateResult": true },
+    "samePolicyRetry": { "duplicate": true, "gateUpdatedAtUnchanged": true },
+    "sameDeliveryRetry": { "coveredByTests": true, "duplicateDelivery": true, "duplicateEvent": true },
+    "logicalEventDeduplication": "Same event content with another delivery ID returns the original gate result.",
+    "conflictingReplay": "Reusing a delivery ID with different content raises an error and performs no write."
+  },
+  "storage": {
+    "tables": ["github_deliveries", "github_gate_results"],
+    "deliveryKey": "GitHub delivery_id unique primary key",
+    "logicalEventKey": "SHA-256 of event type, normalized repository, PR number, head SHA and normalized snapshot hash",
+    "gateKey": "repository, pull number, head SHA and policy hash",
+    "staleEvidence": "Check runs and reviews with another commit SHA are ignored."
+  },
+  "verification": {
+    "githubEvaluationTests": 9,
+    "githubPersistenceTests": 2,
+    "schemaMigrationTests": "v1 through v7 migrate to v8",
+    "cliTests": "snapshot parsing, live gate shape, same-delivery retry and logical-event redelivery",
+    "fullSuite": { "macOS": 111, "linux": 111, "windowsOnlySkipped": 1, "failed": 0 }
+  },
+  "scope": {
+    "automaticMerge": false,
+    "webhookReceiver": "not implemented",
+    "reviewFixWorkflow": "not implemented",
+    "ciFailureTriage": "not implemented",
+    "nextGate": "PR #141 requires an independent approval and leaving Draft before it can become ready_for_human_merge."
+  }
+}

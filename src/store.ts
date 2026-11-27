@@ -17,6 +17,17 @@ import type {
   UsageReport,
 } from './domain';
 import { parseHandoffNote, parseHandoffOptions, type HandoffDraft, type SavedHandoff } from './handoff';
+import {
+  evaluateGitHubPull,
+  githubEventKey,
+  hashGitHubPayload,
+  type GitHubDeliveryInput,
+  type GitHubDeliveryRecord,
+  type GitHubGateIngestInput,
+  type GitHubGateIngestResult,
+  type GitHubGateRecord,
+  type GitHubGateResult,
+} from './github';
 import { usageActualModel } from './magpie-usage';
 
 const maxAttemptsPerTask = 3;
@@ -100,6 +111,31 @@ type BudgetRow = {
   updated_at: number;
   expires_at: number;
   expired_at: number | null;
+};
+
+type GitHubDeliveryRow = {
+  delivery_id: string;
+  event_key: string;
+  event_type: string;
+  repository: string;
+  pull_number: number;
+  head_sha: string;
+  payload_hash: string;
+  received_at: number;
+  outcome: string | null;
+};
+
+type GitHubGateRow = {
+  repository: string;
+  pull_number: number;
+  head_sha: string;
+  policy_hash: string;
+  status: string;
+  snapshot_hash: string;
+  delivery_id: string;
+  detail: string;
+  created_at: number;
+  updated_at: number;
 };
 
 function taskFrom(row: TaskRow): Task {
@@ -189,6 +225,36 @@ function budgetFrom(row: BudgetRow): BudgetLease {
     updatedAt: row.updated_at,
     expiresAt: row.expires_at,
     expiredAt: row.expired_at,
+  };
+}
+
+function githubDeliveryFrom(row: GitHubDeliveryRow, duplicateDelivery: boolean, duplicateEvent: boolean): GitHubDeliveryRecord {
+  return {
+    deliveryId: row.delivery_id,
+    eventKey: row.event_key,
+    eventType: row.event_type,
+    repository: row.repository,
+    pullNumber: row.pull_number,
+    headSha: row.head_sha,
+    payloadHash: row.payload_hash,
+    now: row.received_at,
+    duplicateDelivery,
+    duplicateEvent,
+    outcome: row.outcome,
+  };
+}
+
+function githubGateFrom(row: GitHubGateRow): GitHubGateRecord {
+  return {
+    repository: row.repository,
+    pullNumber: row.pull_number,
+    headSha: row.head_sha,
+    policyHash: row.policy_hash,
+    snapshotHash: row.snapshot_hash,
+    deliveryId: row.delivery_id,
+    evaluation: JSON.parse(row.detail) as GitHubGateResult,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -343,6 +409,101 @@ export class TaskStore {
       `)
       .all(taskId)
       .map(usageFrom);
+  }
+
+  recordGitHubDelivery(input: GitHubDeliveryInput): GitHubDeliveryRecord {
+    return this.db.transaction(() => this.#recordGitHubDelivery(input)).immediate();
+  }
+
+  ingestGitHubGate(input: GitHubGateIngestInput): GitHubGateIngestResult {
+    return this.db.transaction(() => {
+      const now = input.now ?? Date.now();
+      const payloadHash = hashGitHubPayload(input.snapshot);
+      const baseDelivery = {
+        eventType: input.eventType,
+        repository: input.snapshot.repository,
+        pullNumber: input.snapshot.number,
+        headSha: input.snapshot.headSha,
+        payloadHash,
+      };
+      const delivery = this.#recordGitHubDelivery({
+        ...baseDelivery,
+        deliveryId: input.deliveryId,
+        eventKey: githubEventKey(baseDelivery),
+        now,
+      });
+      const evaluation = evaluateGitHubPull(input.snapshot, input.policy);
+      const snapshotHash = payloadHash;
+      const existing = this.getGitHubGate(
+        evaluation.repository,
+        evaluation.pullNumber,
+        evaluation.headSha,
+        evaluation.policyHash,
+      );
+      const duplicate = delivery.duplicateDelivery || delivery.duplicateEvent;
+      if (duplicate && existing) return { delivery, gate: existing, duplicate: true };
+
+      this.db.run(
+        `INSERT INTO github_gate_results
+          (repository, pull_number, head_sha, policy_hash, status, snapshot_hash, delivery_id, detail, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(repository, pull_number, head_sha, policy_hash) DO UPDATE SET
+          status = excluded.status,
+          snapshot_hash = excluded.snapshot_hash,
+          delivery_id = excluded.delivery_id,
+          detail = excluded.detail,
+          updated_at = excluded.updated_at`,
+        [evaluation.repository, evaluation.pullNumber, evaluation.headSha, evaluation.policyHash,
+          evaluation.status, snapshotHash, delivery.deliveryId, JSON.stringify(evaluation), existing?.createdAt ?? now, now],
+      );
+      this.db.run(
+        'UPDATE github_deliveries SET outcome = ? WHERE delivery_id = ?',
+        [JSON.stringify({ status: evaluation.status, reasons: evaluation.reasons.map((reason) => reason.code) }), delivery.deliveryId],
+      );
+      const gate = this.getGitHubGate(
+        evaluation.repository,
+        evaluation.pullNumber,
+        evaluation.headSha,
+        evaluation.policyHash,
+      )!;
+      return { delivery: { ...delivery, outcome: JSON.stringify({ status: evaluation.status,
+        reasons: evaluation.reasons.map((reason) => reason.code) }) }, gate, duplicate: false };
+    }).immediate();
+  }
+
+  getGitHubGate(repository: string, pullNumber: number, headSha: string, policyHash: string): GitHubGateRecord | null {
+    const row = this.db.query<GitHubGateRow, [string, number, string, string]>(`
+      SELECT * FROM github_gate_results
+      WHERE repository = ? AND pull_number = ? AND head_sha = ? AND policy_hash = ?
+    `).get(repository, pullNumber, headSha, policyHash);
+    return row ? githubGateFrom(row) : null;
+  }
+
+  #recordGitHubDelivery(input: GitHubDeliveryInput): GitHubDeliveryRecord {
+    const now = input.now ?? Date.now();
+    const byDelivery = this.db.query<GitHubDeliveryRow, [string]>(
+      'SELECT * FROM github_deliveries WHERE delivery_id = ?',
+    ).get(input.deliveryId);
+    if (byDelivery) {
+      if (byDelivery.event_key !== input.eventKey || byDelivery.payload_hash !== input.payloadHash
+        || byDelivery.event_type !== input.eventType || byDelivery.repository !== input.repository
+        || byDelivery.pull_number !== input.pullNumber || byDelivery.head_sha !== input.headSha) {
+        throw new Error(`GitHub delivery ${input.deliveryId} was reused with different content`);
+      }
+      return githubDeliveryFrom(byDelivery, true, true);
+    }
+    const byEvent = this.db.query<GitHubDeliveryRow, [string]>(
+      'SELECT * FROM github_deliveries WHERE event_key = ?',
+    ).get(input.eventKey);
+    if (byEvent) return githubDeliveryFrom(byEvent, false, true);
+    this.db.run(
+      `INSERT INTO github_deliveries
+        (delivery_id, event_key, event_type, repository, pull_number, head_sha, payload_hash, received_at, outcome)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+      [input.deliveryId, input.eventKey, input.eventType, input.repository, input.pullNumber,
+        input.headSha, input.payloadHash, now],
+    );
+    return { ...input, now, duplicateDelivery: false, duplicateEvent: false, outcome: null };
   }
 
   budgetStatus(policies: BudgetPolicy[], now = Date.now()): BudgetStatus[] {

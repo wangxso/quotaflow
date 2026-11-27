@@ -4,13 +4,14 @@
 
 QuotaFlow 是一个额度感知的 AI 软件研发调度工具。它按账户额度、并发和预算安排 Codex 或 OpenCode 执行任务，将改动保存在独立的 Git 工作树和检查点中，供中断后恢复。
 
-**当前状态（2026-11-27）**　Phase 0 技术门禁有条件通过。Phase 1 单机 CLI 已具备三平台监督、检查点恢复、预算审计和可选交接笔记。Phase 2 已启动：QuotaFlow 在真实 `mcarplay` 仓库完成 Issue #82，并创建 Draft PR [#141](https://github.com/wangxso/mcarplay/pull/141)，Android CI 与 GitGuardian 均通过，等待独立审查和人工合并。GUI 计划在 Phase 3 交付。 [Phase 0 验收](docs/PHASE-0-GATE-CLOSURE.md) · [Phase 1 实现与验证](docs/PHASE-1.md) · [mcarplay 试点证据](docs/evidence/phase1-mcarplay-issue-82-2026-11-27.json)
+**当前状态（2026-11-27）**　Phase 0 技术门禁有条件通过。Phase 1 单机 CLI 已具备三平台监督、检查点恢复、预算审计和可选交接笔记。Phase 2 已接入同 HEAD CI、独立审查、Draft 状态和人工合并门禁，并完成 delivery／逻辑事件两层幂等。真实 Draft PR [#141](https://github.com/wangxso/mcarplay/pull/141) 的 CI 已通过，门禁正确保持阻断，等待独立审查。GUI 计划在 Phase 3 交付。 [Phase 1](docs/PHASE-1.md) · [Phase 2](docs/PHASE-2.md) · [mcarplay 试点证据](docs/evidence/phase1-mcarplay-issue-82-2026-11-27.json)
 
 ## 当前功能
 
-- **任务调度**　SQLite v7 持久化任务、尝试、事件和预算租约。调度器以事务方式预留账户并发槽位、额度和已配置预算。`budget audit` 可审计到期租约，恢复产生的 unknown hold 会联动账户冷却。
+- **任务调度**　SQLite v8 持久化任务、尝试、事件、预算租约和 GitHub 门禁记录。调度器以事务方式预留账户并发槽位、额度和已配置预算。`budget audit` 可审计到期租约，恢复产生的 unknown hold 会联动账户冷却。
 - **执行与恢复**　CLI 支持提交、查看、取消和重试任务。Windows 使用 Job Object。macOS 原生监督器跟踪根进程、子进程和进程组。Linux 以 subreaper 收养 detached 后代并扫描 `/proc`。保存检查点和恢复任务均要求独立验证的停止凭证。已启动的受监督尝试在缺少凭证时进入 `blocked`，并保留写入权。`--handoff` 可在中断后把与检查点匹配的简短笔记交给下一个 Agent。
 - **模型接入与用量**　默认 Codex App Server 与 OpenCode Adapter 支持 Windows、macOS 和 Linux 受监督执行。Magpie 路由需要配置中的显式授权，网关估算用于预算租约，服务商账单归属仍为 `UNKNOWN`。 [配置与适配器说明](docs/PHASE-1.md)
+- **GitHub 门禁**　`github gate` 对 PR 当前 HEAD 的检查、独立审查、Draft／mergeable 状态和人工合并要求进行校验。delivery ID 和逻辑事件键均具备幂等记录。 [Phase 2 说明](docs/PHASE-2.md)
 
 ## 快速开始
 
@@ -45,5 +46,5 @@ bun run src/cli.ts budget audit --limit 100
 | --- | --- |
 | [路线图](ROADMAP.md#中文) · [建设计划](docs/PLAN.md) | 阶段状态、交付范围与验收门槛 |
 | [架构](docs/ARCHITECTURE.md) · [编排 ADR](docs/adr/0001-orchestration-and-state.md) · [模型接入 ADR](docs/adr/0002-model-access.md) | 调度、恢复和模型接入决策 |
-| [Phase 0 报告](docs/PHASE-0.md) · [Phase 1 说明](docs/PHASE-1.md) · [验收证据](docs/evidence/) | 验证方法、结果和已知限制 |
+| [Phase 0 报告](docs/PHASE-0.md) · [Phase 1 说明](docs/PHASE-1.md) · [Phase 2 说明](docs/PHASE-2.md) · [验收证据](docs/evidence/) | 验证方法、结果和已知限制 |
 | [上游调研](docs/RESEARCH.md) · [许可证审查](docs/LICENSING-REVIEW.md) · [需求追踪](docs/TRACEABILITY.md) | 依赖评估与验收映射 |

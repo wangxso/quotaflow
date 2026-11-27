@@ -4,13 +4,14 @@
 
 QuotaFlow schedules AI software development tasks using account quotas, concurrency limits, and budgets. It runs Codex or OpenCode in dedicated Git worktrees and saves checkpoints so interrupted work can resume.
 
-**Status as of 2026-11-27.** Phase 0 passed its technical gate with conditions. Phase 1 now has three-platform supervision, checkpoint recovery, budget audits, and optional handoff notes. Phase 2 has started: QuotaFlow completed issue #82 in the real `mcarplay` repository and opened Draft PR [#141](https://github.com/wangxso/mcarplay/pull/141). Android CI and GitGuardian pass, with independent review and human merge approval pending. The GUI is planned for Phase 3. [Phase 0 gate results](docs/PHASE-0-GATE-CLOSURE.md) · [Phase 1 implementation and verification](docs/PHASE-1.md) · [mcarplay pilot evidence](docs/evidence/phase1-mcarplay-issue-82-2026-11-27.json)
+**Status as of 2026-11-27.** Phase 0 passed its technical gate with conditions. Phase 1 now has three-platform supervision, checkpoint recovery, budget audits, and optional handoff notes. Phase 2 now enforces current-head CI, independent review, Draft state, and mandatory human merge, with delivery and logical-event idempotency. Draft PR [#141](https://github.com/wangxso/mcarplay/pull/141) has passing CI and remains correctly blocked pending independent review. The GUI is planned for Phase 3. [Phase 1](docs/PHASE-1.md) · [Phase 2](docs/PHASE-2.md) · [mcarplay pilot evidence](docs/evidence/phase1-mcarplay-issue-82-2026-11-27.json)
 
 ## Current capabilities
 
-- **Scheduling.** SQLite v7 stores tasks, attempts, events, and budget leases. The scheduler reserves account concurrency slots, quota, and any configured budget in one transaction. `budget audit` reports expired leases, and an unknown hold created during recovery propagates to account cooldowns.
+- **Scheduling.** SQLite v8 stores tasks, attempts, events, budget leases, and GitHub gate records. The scheduler reserves account concurrency slots, quota, and any configured budget in one transaction. `budget audit` reports expired leases, and an unknown hold created during recovery propagates to account cooldowns.
 - **Execution and recovery.** The CLI can submit, inspect, cancel, and retry tasks. Windows uses Job Objects. The native macOS supervisor tracks roots, children, and process groups. Linux enables child-subreaper mode to adopt detached descendants and scans `/proc`. Checkpointing and recovery require an independently verified stop receipt. A launched supervised attempt with a missing receipt stays `blocked` and retains write ownership. `--handoff` can pass a checkpoint-bound note to the next agent after an interruption.
 - **Adapters and usage.** The default Codex App Server and OpenCode adapters support supervised execution on Windows, macOS, and Linux. Magpie routing requires explicit configuration approval. Gateway estimates back budget leases, and provider invoice attribution remains `UNKNOWN`. [Configuration and adapter details](docs/PHASE-1.md)
+- **GitHub gate.** `github gate` validates current-head checks, independent review, Draft/mergeable state, and mandatory human merge. Delivery IDs and logical event keys are persisted idempotently. [Phase 2 notes](docs/PHASE-2.md)
 
 ## Quick start
 
@@ -45,5 +46,5 @@ On supported platforms, run `bun run poc/demo.ts` to see a simulated quota inter
 | --- | --- |
 | [Roadmap](ROADMAP.md#english) · [Project plan](docs/PLAN.md) | Phase status, scope, and acceptance criteria |
 | [Architecture](docs/ARCHITECTURE.md) · [Orchestration ADR](docs/adr/0001-orchestration-and-state.md) · [Model access ADR](docs/adr/0002-model-access.md) | Scheduling, recovery, and model access decisions |
-| [Phase 0 report](docs/PHASE-0.md) · [Phase 1 notes](docs/PHASE-1.md) · [Verification evidence](docs/evidence/) | Test methods, results, and known limits |
+| [Phase 0 report](docs/PHASE-0.md) · [Phase 1 notes](docs/PHASE-1.md) · [Phase 2 notes](docs/PHASE-2.md) · [Verification evidence](docs/evidence/) | Test methods, results, and known limits |
 | [Upstream research](docs/RESEARCH.md) · [Licensing review](docs/LICENSING-REVIEW.md) · [Requirements traceability](docs/TRACEABILITY.md) | Dependency evaluation and acceptance scenarios |

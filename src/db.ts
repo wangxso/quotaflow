@@ -51,6 +51,36 @@ const budgetSchema = `
     ON budget_leases(account, state, expires_at);
 `;
 
+const githubSchema = `
+  CREATE TABLE IF NOT EXISTS github_deliveries (
+    delivery_id TEXT PRIMARY KEY,
+    event_key TEXT NOT NULL UNIQUE,
+    event_type TEXT NOT NULL,
+    repository TEXT NOT NULL,
+    pull_number INTEGER NOT NULL,
+    head_sha TEXT NOT NULL,
+    payload_hash TEXT NOT NULL,
+    received_at INTEGER NOT NULL,
+    outcome TEXT
+  );
+  CREATE INDEX IF NOT EXISTS github_deliveries_pull
+    ON github_deliveries(repository, pull_number, received_at);
+
+  CREATE TABLE IF NOT EXISTS github_gate_results (
+    repository TEXT NOT NULL,
+    pull_number INTEGER NOT NULL,
+    head_sha TEXT NOT NULL,
+    policy_hash TEXT NOT NULL,
+    status TEXT NOT NULL,
+    snapshot_hash TEXT NOT NULL,
+    delivery_id TEXT NOT NULL REFERENCES github_deliveries(delivery_id),
+    detail TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY(repository, pull_number, head_sha, policy_hash)
+  );
+`;
+
 const schema = `
   CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
@@ -106,6 +136,7 @@ const schema = `
 
   ${usageSchema}
   ${budgetSchema}
+  ${githubSchema}
 `;
 
 function migrate(db: Database, action: () => void): void {
@@ -134,12 +165,12 @@ export function openDatabase(file: string): Database {
   `);
   const version = db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version ?? 0;
   try {
-    if (version > 7) throw new Error(`Unsupported QuotaFlow database version ${version}`);
-    if (version < 7) {
+    if (version > 8) throw new Error(`Unsupported QuotaFlow database version ${version}`);
+    if (version < 8) {
       migrate(db, () => {
         const current = db.query<{ user_version: number }, []>('PRAGMA user_version').get()!.user_version;
-        if (current > 7) throw new Error(`Unsupported QuotaFlow database version ${current}`);
-        if (current === 7) return;
+        if (current > 8) throw new Error(`Unsupported QuotaFlow database version ${current}`);
+        if (current === 8) return;
         if (current < 1) {
           db.exec(schema);
         } else {
@@ -151,9 +182,10 @@ export function openDatabase(file: string): Database {
             db.run('ALTER TABLE tasks ADD COLUMN handoff_config TEXT');
             db.run('ALTER TABLE attempts ADD COLUMN handoff_note TEXT');
           }
-          if (current >= 5) db.run('ALTER TABLE budget_leases ADD COLUMN expired_at INTEGER');
+          if (current >= 5 && current < 7) db.run('ALTER TABLE budget_leases ADD COLUMN expired_at INTEGER');
+          if (current < 8) db.exec(githubSchema);
         }
-        db.run('PRAGMA user_version = 7');
+        db.run('PRAGMA user_version = 8');
       });
     }
     return db;

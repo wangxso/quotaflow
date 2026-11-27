@@ -141,6 +141,51 @@ test('shows configured budget status', async () => {
   }
 });
 
+test('evaluates and idempotently stores a GitHub pull gate snapshot', async () => {
+  const { root } = setup();
+  const headSha = 'abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48';
+  try {
+    const snapshotFile = join(root, 'pr-141.json');
+    writeFileSync(snapshotFile, JSON.stringify({
+      repository: 'wangxso/mcarplay',
+      update: {
+        number: 141,
+        state: 'OPEN',
+        draft: true,
+        mergeable: 'MERGEABLE',
+        authorLogin: 'wangxso',
+        baseRef: 'main',
+        headRef: 'quotaflow/issue-82-iap2-catalog',
+        baseSha: 'daf67e87a72aa9033a4d62f88e9a9d05ce047d9e',
+        headSha,
+        checks: [
+          { name: 'Check and build debug APK', status: 'completed', conclusion: 'success', headSha,
+            startedAt: '2026-11-27T13:57:30Z', completedAt: '2026-11-27T14:03:00Z' },
+          { name: 'GitGuardian Security Checks', status: 'completed', conclusion: 'success', headSha,
+            startedAt: '2026-11-27T13:57:55Z', completedAt: '2026-11-27T13:57:56Z' },
+        ],
+        reviews: [],
+      },
+    }));
+    const args = ['github', 'gate', snapshotFile, '--delivery-id', 'delivery-141',
+      '--expected-head', headSha, '--require-check', 'Check and build debug APK',
+      '--require-check', 'GitGuardian Security Checks'];
+    const first = JSON.parse((await cli(root, args)).stdout);
+    expect(first).toMatchObject({
+      duplicate: false,
+      delivery: { deliveryId: 'delivery-141', duplicateDelivery: false, duplicateEvent: false },
+      gate: { headSha, evaluation: { status: 'blocked', reasons: [{ code: 'draft' },
+        { code: 'independent_review_missing' }] } },
+    });
+    const repeated = JSON.parse((await cli(root, args)).stdout);
+    expect(repeated).toMatchObject({ duplicate: true, delivery: { duplicateDelivery: true, duplicateEvent: true } });
+    const redelivered = JSON.parse((await cli(root, [...args.slice(0, 4), 'delivery-redelivery', ...args.slice(5)])).stdout);
+    expect(redelivered).toMatchObject({ duplicate: true, delivery: { duplicateDelivery: false, duplicateEvent: true } });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('shows task budget leases through the CLI', async () => {
   const { root } = setup();
   const now = Date.now();
