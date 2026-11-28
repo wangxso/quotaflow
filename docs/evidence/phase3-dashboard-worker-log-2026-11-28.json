@@ -1,0 +1,105 @@
+{
+  "recordedOn": "2026-11-28",
+  "kind": "phase3-dashboard-worker-log",
+  "baseRevision": "ed3c15362e79a56a65244695c7d08947e5d42e64",
+  "environment": {
+    "host": "macOS 26.6.2, arm64",
+    "bun": "1.4.5",
+    "browser": "Microsoft Edge",
+    "serviceManager": "macOS launchd",
+    "serviceLabel": "com.quotaflow.dashboard"
+  },
+  "task": {
+    "id": "dashboard-start-smoke",
+    "requestId": "06834902-9717-48aa-b91b-5844115be739",
+    "workerPid": 23501,
+    "workerExitCode": 0,
+    "workerState": "exited",
+    "attemptsStarted": 0
+  },
+  "workerRunSummary": {
+    "requestScoped": true,
+    "fields": [
+      "state",
+      "pid",
+      "exitCode",
+      "error",
+      "requestedAt",
+      "startedAt",
+      "exitedAt",
+      "logAvailable",
+      "logBytes",
+      "logModifiedAt"
+    ],
+    "stateMapping": {
+      "requested": "dashboard_action:start without a lifecycle result",
+      "started": "dashboard_worker_started without exit",
+      "exited": "dashboard_worker_exited with exit code 0",
+      "failed": "spawn failure, unavailable exit status, or non-zero exit code"
+    }
+  },
+  "logEndpoint": {
+    "path": "/api/tasks/dashboard-start-smoke/workers/06834902-9717-48aa-b91b-5844115be739/log",
+    "status": 200,
+    "sourceBytes": 23,
+    "returnedBytes": 23,
+    "truncated": false,
+    "content": {
+      "status": "idle"
+    }
+  },
+  "negativeChecks": {
+    "unassociatedRequestId": {
+      "status": 404,
+      "body": {
+        "error": "worker_log_not_found"
+      }
+    },
+    "symbolicLinkRejected": true,
+    "invalidPathRejected": true
+  },
+  "security": {
+    "requiresMatchingTaskStartAuditEvent": true,
+    "maximumBytes": 65536,
+    "readsTailOnly": true,
+    "regularFilesOnly": true,
+    "symbolicLinksRejected": true,
+    "ansiEscapesRemoved": true,
+    "controlCharactersRemoved": true,
+    "redacts": [
+      "GitHub and API tokens",
+      "Authorization Bearer values",
+      "query-string credentials",
+      "credential assignments and JSON fields",
+      "private keys"
+    ],
+    "dynamicTextRenderedWithTextContent": true,
+    "filesystemPathExposed": false
+  },
+  "browserVerification": {
+    "workerRunsSectionVisible": true,
+    "runObserved": "EXITED, PID 23501, exit 0",
+    "logButtonObserved": "查看日志 · 23 B",
+    "logOpenedInline": true,
+    "logStatusObserved": "idle",
+    "requiresSessionForRead": false,
+    "loopbackBoundary": "127.0.0.1 only"
+  },
+  "verification": {
+    "targetedTests": {
+      "tests": 8,
+      "assertions": 93,
+      "failed": 0
+    },
+    "fullSuite": {
+      "macOS": 171,
+      "linux": 171,
+      "windowsOnlySkipped": 1,
+      "failed": 0,
+      "assertions": 829
+    },
+    "build": "passed",
+    "configurationValidation": "passed",
+    "jsonAndDiffChecks": "passed"
+  }
+}

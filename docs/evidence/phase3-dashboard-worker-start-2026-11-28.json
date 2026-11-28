@@ -63,6 +63,7 @@
   },
   "workerLog": {
     "path": ".quotaflow/dashboard-workers/06834902-9717-48aa-b91b-5844115be739.log",
+    "boundedViewEvidence": "phase3-dashboard-worker-log-2026-11-28.json",
     "mode": "0600",
     "bytes": 23,
     "sha256": "f240d6d16d366d1e435e2be9dc7ce565d90a8ce6e550301c7b3923c1c22d652c",
@@ -107,11 +108,11 @@
       "failed": 0
     },
     "fullSuite": {
-      "macOS": 168,
-      "linux": 168,
+      "macOS": 171,
+      "linux": 171,
       "windowsOnlySkipped": 1,
       "failed": 0,
-      "assertions": 805
+      "assertions": 829
     },
     "build": "passed",
     "jsonAndDiffChecks": "passed",

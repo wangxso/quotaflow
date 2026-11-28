@@ -15,7 +15,7 @@ bun run src/cli.ts dashboard --config quotaflow.config.json
 
 - Overview：任务状态、事件流、Lane、仓库映射和 GitHub 指标。
 - Tasks：状态筛选、搜索、最近任务和完整任务详情。
-- 任务详情：attempt、实际模型、checkpoint、prompt、handoff、usage、预算租约和事件时间线。
+- 任务详情：attempt、实际模型、checkpoint、prompt、handoff、usage、预算租约、Worker Run 和事件时间线。
 - GitHub：最近 Gate 结果、阻断原因和同 HEAD CI rerun 记录。
 - Budgets：预算使用、余额、活跃租约和 Lane 配置。
 - 项目筛选：Overview、Tasks、GitHub 和最近任务共享同一个 repository 过滤上下文。
@@ -44,6 +44,7 @@ macOS 当前通过 `com.quotaflow.dashboard` LaunchAgent 常驻，并由现有�
 - 状态修改与 `dashboard_action` 审计事件在同一 SQLite 事务提交。
 - `start` 的持久幂等阻止同一 `requestId` 重复派生 Worker；`dashboard_worker_started`、`dashboard_worker_exited` 和 `dashboard_worker_spawn_failed` 记录进程结果。
 - Worker 输出写入状态目录下的 `.quotaflow/dashboard-workers/<requestId>.log`，新文件权限为 `0600`；不会把 session 或 CSRF token 写入页面或日志。
+- Worker 日志只对同一任务、同一 `requestId` 的 `start` 审计事件开放。读取上限为最后 64 KiB，拒绝符号链接，并清理 ANSI、控制字符和常见令牌、密码、私钥格式。
 - Task/Event/PR 文本作为不可信内容展示。
 
 审批、合并和设置修改仍需各自独立的权限、确认和审计设计，不能直接复用任务动作接口。
@@ -56,6 +57,7 @@ macOS 当前通过 `com.quotaflow.dashboard` LaunchAgent 常驻，并由现有�
 - `GET /api/session`
 - `GET /api/tasks`
 - `GET /api/tasks/:id`
+- `GET /api/tasks/:id/workers/:requestId/log`
 - `GET /api/github`
 - `GET /api/budgets`
 - `GET /api/config`
@@ -63,7 +65,6 @@ macOS 当前通过 `com.quotaflow.dashboard` LaunchAgent 常驻，并由现有�
 
 ## 下一步
 
-1. 在任务详情展示按 `requestId` 关联的 Worker 生命周期摘要和日志入口。
-2. 增加时间范围、Lane 和审查状态组合筛选。
-3. 在 GitHub 写权限和人工确认流程下增加批准／合并。
-4. 增加桌面发行、备份、恢复和 Linux／Windows + WSL2 启动检查。
+1. 增加时间范围、Lane 和审查状态组合筛选。
+2. 在 GitHub 写权限和人工确认流程下增加批准／合并。
+3. 增加桌面发行、备份、恢复和 Linux／Windows + WSL2 启动检查。
