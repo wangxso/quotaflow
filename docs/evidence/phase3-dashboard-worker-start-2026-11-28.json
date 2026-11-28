@@ -1,0 +1,120 @@
+{
+  "recordedOn": "2026-11-28",
+  "kind": "phase3-dashboard-worker-start",
+  "baseRevision": "90da3142c087ea097f405c46bec64a88de071a38",
+  "environment": {
+    "host": "macOS 26.6.2 (25G83), arm64",
+    "kernel": "Darwin 25.6.0",
+    "bun": "1.4.5",
+    "linuxTestImage": "quotaflow-linux-test:1.4.5",
+    "browser": "Microsoft Edge"
+  },
+  "dashboard": {
+    "url": "http://127.0.0.1:8788/",
+    "hostBoundary": "loopback only",
+    "serviceManager": "macOS launchd",
+    "serviceLabel": "com.quotaflow.dashboard",
+    "healthStatus": "ok",
+    "readOnly": false,
+    "writeActions": [
+      "cancel",
+      "retry",
+      "start"
+    ]
+  },
+  "action": {
+    "name": "start",
+    "taskId": "dashboard-start-smoke",
+    "requestId": "06834902-9717-48aa-b91b-5844115be739",
+    "confirmation": "The browser confirmation dialog and request body both used the exact task ID",
+    "initialStatus": "queued",
+    "resultingStatus": "waiting_quota",
+    "workerPid": 23501,
+    "workerExitCode": 0,
+    "attemptsStarted": 0,
+    "modelInvocations": 0
+  },
+  "schedulerRecheck": {
+    "command": "bun run src/cli.ts worker once --task-id dashboard-start-smoke",
+    "targetedTaskOnly": true,
+    "laneFilters": [
+      {
+        "laneId": "codex-magpie",
+        "reason": "UNKNOWN"
+      }
+    ],
+    "observedStatus": "waiting_quota",
+    "reason": "The configured quota windows remain placeholder UNKNOWN values, so reservation stopped before an Agent attempt or model call"
+  },
+  "audit": {
+    "taskEvents": [
+      "task_created",
+      "dashboard_action:start",
+      "dashboard_worker_started",
+      "waiting_quota",
+      "dashboard_worker_exited",
+      "cancelled",
+      "dashboard_action:cancel"
+    ],
+    "startEvents": 4,
+    "duplicateStartActions": 0,
+    "agentAttempts": 0,
+    "cancellationAuditRetained": true
+  },
+  "workerLog": {
+    "path": ".quotaflow/dashboard-workers/06834902-9717-48aa-b91b-5844115be739.log",
+    "mode": "0600",
+    "bytes": 23,
+    "sha256": "f240d6d16d366d1e435e2be9dc7ce565d90a8ce6e550301c7b3923c1c22d652c",
+    "content": {
+      "status": "idle"
+    },
+    "containsSessionToken": false,
+    "containsCsrfToken": false
+  },
+  "browserVerification": {
+    "taskRowObserved": "WAITING QUOTA",
+    "taskDetailObserved": "waiting_quota",
+    "workersObservedInTaskDetail": [
+      "dashboard_worker_started",
+      "waiting_quota",
+      "dashboard_worker_exited"
+    ],
+    "cancelObserved": "cancelled",
+    "reloadRequiredAfterDeployment": true
+  },
+  "safeguards": {
+    "acceptedStatuses": [
+      "queued",
+      "waiting_quota"
+    ],
+    "requiresDueTask": true,
+    "rejectsActiveAttempt": true,
+    "dashboardRunsModelInServerProcess": false,
+    "oneShotWorkerPerAcceptedRequest": true,
+    "requestIdempotency": "A duplicate request returns replayed without spawning another Worker",
+    "workerLifecycleEvents": [
+      "dashboard_worker_started",
+      "dashboard_worker_exited",
+      "dashboard_worker_spawn_failed"
+    ],
+    "logFileMode": "0600"
+  },
+  "verification": {
+    "targetedTests": {
+      "tests": 21,
+      "assertions": 172,
+      "failed": 0
+    },
+    "fullSuite": {
+      "macOS": 168,
+      "linux": 168,
+      "windowsOnlySkipped": 1,
+      "failed": 0,
+      "assertions": 805
+    },
+    "build": "passed",
+    "jsonAndDiffChecks": "passed",
+    "realBrowserStart": "passed"
+  }
+}

@@ -1,18 +1,19 @@
 {
   "recordedOn": "2026-11-28",
-  "baseRevision": "18fb681e2c0de01a0ee20fedfde1acd2c303dd1c",
+  "baseRevision": "90da3142c087ea097f405c46bec64a88de071a38",
   "actions": {
     "allowed": [
+      "start",
       "cancel",
       "retry"
     ],
     "notEnabled": [
-      "start_worker",
       "github_approve",
       "github_merge",
       "configuration_write"
     ],
     "confirmation": "Exact task ID in both UI confirmation and request body",
+    "startSemantics": "Queued or due waiting_quota tasks without an active attempt may spawn one targeted Worker; the Worker rechecks lanes, quota, budgets, and due state",
     "retrySemantics": "Requeue only; no Worker or model is started directly",
     "cancelSemantics": "Queued task becomes cancelled; active task becomes cancelling and is stopped by the supervised Worker"
   },
@@ -60,18 +61,26 @@
     "duplicateAuditEvents": 0,
     "taskRetainedForAudit": true
   },
+  "liveWorkerStart": {
+    "evidence": "phase3-dashboard-worker-start-2026-11-28.json",
+    "taskId": "dashboard-start-smoke",
+    "resultingStatus": "waiting_quota",
+    "attemptsStarted": 0,
+    "workerExited": 0
+  },
   "verification": {
     "dashboardTests": 2,
-    "dashboardAssertions": 48,
+    "dashboardAssertions": 56,
     "fullSuite": {
-      "macOS": 167,
-      "linux": 167,
+      "macOS": 168,
+      "linux": 168,
       "windowsOnlySkipped": 1,
       "failed": 0,
-      "assertions": 794
+      "assertions": 805
     },
     "build": "passed",
     "browserCancellation": "passed",
+    "browserWorkerStart": "passed",
     "invalidSession": 401,
     "invalidCsrf": 403,
     "invalidOrigin": 403,
@@ -81,7 +90,8 @@
   "scope": {
     "readOnlyDashboard": false,
     "guardedTaskActions": true,
-    "modelExecutionFromDashboard": false,
+    "directModelExecutionFromDashboard": false,
+    "workerRunsThroughScheduler": true,
     "githubWriteFromDashboard": false
   }
 }

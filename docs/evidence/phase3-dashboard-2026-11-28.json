@@ -1,10 +1,10 @@
 {
   "recordedOn": "2026-11-28",
-  "baseRevision": "51b6e1ed876b5158d0fae057d66fe64a21139737",
+  "baseRevision": "90da3142c087ea097f405c46bec64a88de071a38",
   "dashboard": {
     "command": "bun run src/cli.ts dashboard --config quotaflow.config.json",
     "url": "http://127.0.0.1:8788/",
-    "mode": "read-only",
+    "mode": "guarded-actions",
     "hostRestriction": "loopback only",
     "views": [
       "overview",
@@ -91,10 +91,10 @@
     "jsonAndDiffChecks": "passed"
   },
   "boundary": {
-    "readOnly": true,
+    "readOnly": false,
     "authentication": "loopback-only network boundary",
     "sse": "implemented",
-    "writeActions": "guarded cancel and retry implemented; see phase3-dashboard-actions-2026-11-28.json",
+    "writeActions": "guarded start, cancel and retry implemented; see phase3-dashboard-actions-2026-11-28.json",
     "multiProjectFilters": "implemented in Dashboard and API"
   }
 }
