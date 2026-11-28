@@ -24,6 +24,7 @@ QuotaFlow 当前使用 Cloudflare Named Tunnel 提供稳定的 GitHub App Webhoo
 | --- | --- | --- |
 | `com.quotaflow.webhook` | 运行 `bun run src/cli.ts github serve-webhook` | `~/Library/LaunchAgents/com.quotaflow.webhook.plist` |
 | `com.quotaflow.cloudflared` | 运行 `cloudflared tunnel run quotaflow-webhook` | `~/Library/LaunchAgents/com.quotaflow.cloudflared.plist` |
+| `com.quotaflow.dashboard` | 在 `127.0.0.1:8788` 运行只读 Dashboard | `~/Library/LaunchAgents/com.quotaflow.dashboard.plist` |
 | `com.quotaflow.healthcheck` | 每 60 秒检查本地与公网健康状态 | `~/Library/LaunchAgents/com.quotaflow.healthcheck.plist` |
 
 启动脚本位于 `~/.local/share/quotaflow/bin/`。日志位于 `~/.local/state/quotaflow/`。
@@ -31,13 +32,15 @@ QuotaFlow 当前使用 Cloudflare Named Tunnel 提供稳定的 GitHub App Webhoo
 ```sh
 launchctl print "gui/$(id -u)/com.quotaflow.webhook"
 launchctl print "gui/$(id -u)/com.quotaflow.cloudflared"
+launchctl print "gui/$(id -u)/com.quotaflow.dashboard"
 launchctl print "gui/$(id -u)/com.quotaflow.healthcheck"
 
 launchctl kickstart -k "gui/$(id -u)/com.quotaflow.webhook"
 launchctl kickstart -k "gui/$(id -u)/com.quotaflow.cloudflared"
+launchctl kickstart -k "gui/$(id -u)/com.quotaflow.dashboard"
 ```
 
-健康检查会重启本地失败或公网不可达的组件。`KeepAlive=true` 会在进程异常退出后自动拉起。
+健康检查会重启本地失败或公网不可达的组件。Dashboard 只检查本机 `/api/health`，不通过 Cloudflare 暴露。`KeepAlive=true` 会在进程异常退出后自动拉起。
 
 ## Cloudflare 路由
 

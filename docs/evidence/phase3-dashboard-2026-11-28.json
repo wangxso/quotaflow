@@ -1,0 +1,83 @@
+{
+  "recordedOn": "2026-11-28",
+  "baseRevision": "aede805492969165487ae040d9b105e5bf43231b",
+  "dashboard": {
+    "command": "bun run src/cli.ts dashboard --config quotaflow.config.json",
+    "url": "http://127.0.0.1:8788/",
+    "mode": "read-only",
+    "hostRestriction": "loopback only",
+    "views": [
+      "overview",
+      "tasks",
+      "github",
+      "budgets"
+    ],
+    "taskDetail": [
+      "attempts",
+      "actual model",
+      "checkpoint",
+      "prompt",
+      "handoff",
+      "usage",
+      "budget leases",
+      "events"
+    ],
+    "visualReference": "T3 Code density and desktop workspace hierarchy, without copied assets or interface reproduction"
+  },
+  "security": {
+    "contentSecurityPolicy": "self-only scripts, styles and connections",
+    "frameProtection": "X-Frame-Options DENY and frame-ancestors none",
+    "dynamicTextRendering": "textContent only",
+    "privateKeyPathExposed": false,
+    "webhookSecretExposed": false,
+    "writeMethods": "405",
+    "externalAssets": false
+  },
+  "api": [
+    "/api/health",
+    "/api/overview",
+    "/api/tasks",
+    "/api/tasks/:id",
+    "/api/github",
+    "/api/budgets",
+    "/api/config"
+  ],
+  "browserVerification": {
+    "realSqliteDataRendered": true,
+    "taskCount": 1,
+    "taskDetailOpened": true,
+    "responsiveLayoutImplemented": true,
+    "decorativeNumberingRemoved": true,
+    "chineseLabelsRendered": true
+  },
+  "processSupervision": {
+    "serviceManager": "macOS launchd",
+    "label": "com.quotaflow.dashboard",
+    "keepAlive": true,
+    "runAtLoad": true,
+    "healthcheckIntervalSeconds": 60,
+    "healthUrl": "http://127.0.0.1:8788/api/health",
+    "publiclyExposed": false
+  },
+  "verification": {
+    "dashboardTests": 2,
+    "dashboardAssertions": 22,
+    "fullSuite": {
+      "macOS": 167,
+      "linux": 167,
+      "windowsOnlySkipped": 1,
+      "failed": 0,
+      "assertions": 768
+    },
+    "build": "passed",
+    "configurationValidation": "passed",
+    "jsonAndDiffChecks": "passed"
+  },
+  "boundary": {
+    "readOnly": true,
+    "authentication": "loopback-only network boundary",
+    "sse": "planned",
+    "writeActions": "planned with CSRF and explicit permission design",
+    "multiProjectFilters": "planned"
+  }
+}
