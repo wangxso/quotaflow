@@ -77,6 +77,10 @@
     "dashboardMerge": "failed due to GitHub App repository permission",
     "requiredPermission": "Contents: write",
     "existingPermission": "Contents: read",
-    "nextAction": "Grant and verify Contents write before using Dashboard merge without an administrator fallback"
+    "resolution": {
+      "status": "resolved",
+      "evidence": "phase3-github-app-contents-write-resolution-2026-11-28.json"
+    },
+    "nextAction": "Exercise Dashboard merge end to end on a second controlled pull request without an administrator fallback"
   }
 }

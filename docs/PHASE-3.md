@@ -27,7 +27,7 @@ bun run src/cli.ts dashboard --config quotaflow.config.json
 
 macOS 当前通过 `com.quotaflow.dashboard` LaunchAgent 常驻，并由现有健康检查每分钟确认 `/api/health`。Dashboard 不经过 Cloudflare Named Tunnel，也不会暴露到公网。
 
-受控 PR #152 在 Bot 批准后以精确 HEAD 合并为 `d42c690`。合并后的 `main` 提交通过 [Android CI](https://github.com/wangxso/mcarplay/actions/runs/46128177378) 与 [Instrumentation](https://github.com/wangxso/mcarplay/actions/runs/46128177328)；Dashboard App merge 因缺少 `Contents: write` 被 GitHub 拒绝，最终合并使用仓库管理员授权路径。上述结果同时记录在[受控 PR 合并证据](evidence/phase3-github-controlled-pr-merge-2026-11-28.json)。
+受控 PR #152 在 Bot 批准后以精确 HEAD 合并为 `d42c690`。合并后的 `main` 提交通过 [Android CI](https://github.com/wangxso/mcarplay/actions/runs/46128177378) 与 [Instrumentation](https://github.com/wangxso/mcarplay/actions/runs/46128177328)。Dashboard App merge 最初因缺少 `Contents: write` 被 GitHub 拒绝，最终合并使用仓库管理员授权路径。GitHub App 与 installation 的 `contents: write` 权限随后已完成设置、安装侧确认和 API 复核，Dashboard 也已重启刷新令牌。上述结果记录在[受控 PR 合并证据](evidence/phase3-github-controlled-pr-merge-2026-11-28.json)与[权限修复证据](evidence/phase3-github-app-contents-write-resolution-2026-11-28.json)。
 
 ## 视觉方向
 
@@ -71,5 +71,5 @@ macOS 当前通过 `com.quotaflow.dashboard` LaunchAgent 常驻，并由现有�
 
 ## 下一步
 
-1. 为 GitHub App 授予并验证 `Contents: write`，在第二个受控 PR 上完成 Dashboard merge 实操。
+1. 在第二个受控 PR 上完成无管理员回退的 Dashboard merge 实操，验证 `contents: write` 的端到端效果。
 2. 增加桌面发行、备份、恢复和 Linux／Windows + WSL2 启动检查。

@@ -1,0 +1,44 @@
+{
+  "recordedOn": "2026-11-28",
+  "kind": "phase3-github-app-contents-write-resolution",
+  "repository": "wangxso/mcarplay",
+  "githubApp": {
+    "id": 5955591,
+    "slug": "quotaflow-review-gate-wangxso",
+    "installationId": 186560843
+  },
+  "permissionUpdate": {
+    "permission": "contents",
+    "before": "read",
+    "after": "write",
+    "appPermissionSaved": true,
+    "installationApprovalAccepted": true,
+    "acceptedBy": "wangxso",
+    "acceptedAt": "2026-11-28T09:45:26Z"
+  },
+  "effectivePermissions": {
+    "checks": "read",
+    "actions": "write",
+    "contents": "write",
+    "metadata": "read",
+    "pull_requests": "write"
+  },
+  "dashboard": {
+    "launchAgent": "com.quotaflow.dashboard",
+    "restarted": true,
+    "health": "ok",
+    "githubActions": [
+      "approve",
+      "merge"
+    ],
+    "githubRepositories": [
+      "wangxso/mcarplay"
+    ]
+  },
+  "verification": {
+    "source": "GitHub App and installation REST APIs",
+    "result": "contents_write_effective",
+    "tokenCacheRefreshedByRestart": true
+  },
+  "verificationBoundary": "The requested and effective installation permissions are verified. A second controlled pull request is still required to exercise the Dashboard merge endpoint end to end without an administrator fallback."
+}
