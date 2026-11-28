@@ -34,6 +34,8 @@ PR #141 随后由有权限的操作者转为 Ready。重新拉取快照后，Dra
 
 随后在临时 Draft PR #147 完成真实 CI 修复闭环。新增 `githubWebhook.requiredChecks` 将试点门禁限定为 `controlled-code-failure`。初始 HEAD 的 Python 失败被分类为 `code_or_test`，稳定 Cloudflare Webhook 创建一个包含脱敏日志的 `ci_fix` 任务；免费 Magpie Codex 在隔离 Worktree 中完成单行修复，写入手交笔记和 `activeProcesses=0` 停止凭证，形成 checkpoint `28be6be`。控制面审查后将修复提交 `f59d37d` 写回临时 PR，新 Check 对最终 HEAD 成功，门禁只剩 Draft 与独立审查。临时 PR、分支和 Worktree 全部清理。详见 [CI 修复闭环证据](evidence/phase2-github-ci-fix-loop-2026-11-28.json)。
 
+同日完成 Phase 2 故障门槛。GitHub delivery 去重改为绑定原始 Webhook 字节哈希，刷新后的 REST 快照哈希单独保存；丢弃首次 HTTP 响应后以同一 delivery 重试仍只创建一个任务，快照变化也不再产生错误 `409`。公网无权限签名返回 `401`，超限载荷返回 `413`，未支持事件返回 `422`，fork、未授权分支和未映射仓库均不建任务。隔离服务完成旧 secret、重启换 secret、旧签名拒绝、新签名接受的轮换演练。macOS 与 Linux 全量测试均为 164 通过、1 个平台性 skip、0 失败、743 断言。Phase 2 核心闭环完成，下一阶段进入 Phase 3 Dashboard。[故障门槛证据](evidence/phase2-webhook-hardening-2026-11-28.json)。
+
 ## Phase 0 · 调研与可行性验证
 
 | 顺序 | 工作 | 通过证据 |

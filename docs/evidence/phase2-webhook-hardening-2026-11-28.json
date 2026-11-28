@@ -1,0 +1,83 @@
+{
+  "recordedOn": "2026-11-28",
+  "baseRevision": "4463fbb50054ddb56579cc9d1e5dbfa8cadaf107",
+  "deliveryIdentity": {
+    "deliveryKey": "SHA-256 of raw GitHub webhook bytes",
+    "snapshotAuditKey": "SHA-256 of the refreshed REST pull request snapshot",
+    "snapshotRefreshAfterInitialDelivery": "still resolves to duplicate instead of conflict",
+    "wrongPriorBehavior": "A changed REST snapshot could make the same GitHub delivery ID fail with 409."
+  },
+  "lostResponseDrill": {
+    "method": "Discarded the first successful handler response and replayed the identical delivery",
+    "firstStatus": 202,
+    "retryStatus": 200,
+    "retryClassification": "duplicate",
+    "taskOutcomes": [
+      "task_created",
+      "task_exists"
+    ],
+    "taskCount": 1
+  },
+  "duplicateWebhookDrill": {
+    "sameDeliveryReplay": "duplicateDelivery=true and duplicateEvent=true",
+    "samePayloadDifferentDelivery": "duplicateEvent=true",
+    "differentPayloadSameDelivery": 409,
+    "duplicateTaskRows": 0,
+    "duplicateCiRerunPosts": 0
+  },
+  "authorizationDrill": {
+    "publicInvalidSignature": {
+      "httpStatus": 401,
+      "response": "invalid_signature"
+    },
+    "oversizedPayload": {
+      "maximumBytes": 2000000,
+      "response": 413
+    },
+    "unsupportedEvent": {
+      "response": 422
+    },
+    "forkPullRequest": "ignored without a task",
+    "branchOutsideAllowlist": "ignored without a task",
+    "unmappedRepository": "not_configured without a task"
+  },
+  "secretRotationDrill": {
+    "scope": "isolated loopback server and temporary database",
+    "productionSecretChanged": false,
+    "oldSecretBeforeRotation": {
+      "httpStatus": 200,
+      "response": "pong"
+    },
+    "newSecretAfterRestart": {
+      "oldSignatureHttpStatus": 401,
+      "oldSignatureResponse": "invalid_signature",
+      "newSignatureHttpStatus": 200,
+      "newSignatureResponse": "pong"
+    },
+    "temporarySecretFilesRemoved": true,
+    "constantTimeComparison": true
+  },
+  "verification": {
+    "fullSuite": {
+      "macOS": 164,
+      "linux": 164,
+      "windowsOnlySkipped": 1,
+      "failed": 0,
+      "assertions": 743
+    },
+    "build": "passed",
+    "publicProductionHealth": {
+      "url": "https://quotaflow-hooks.wangxso.com/healthz",
+      "status": 200
+    },
+    "jsonAndDiffChecks": "passed"
+  },
+  "scope": {
+    "lostResponseRecovery": "verified",
+    "duplicateWebhookRecovery": "verified",
+    "authorizationRejection": "verified",
+    "webhookSecretRotation": "verified in isolation",
+    "productionSecretRotation": "requires coordinated GitHub App secret update and operator window",
+    "phase2HardeningGate": "complete"
+  }
+}

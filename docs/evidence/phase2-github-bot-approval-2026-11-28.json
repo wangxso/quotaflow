@@ -67,6 +67,6 @@
     "branchProtection": "none",
     "githubReviewDecision": "",
     "automaticMerge": false,
-    "mergeDecision": "pending repository owner action"
+    "mergeDecision": "completed by repository owner; see phase2-github-merge-2026-11-28.json"
   }
 }

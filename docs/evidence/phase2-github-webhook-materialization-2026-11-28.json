@@ -68,7 +68,7 @@
   "scope": {
     "automaticTaskMaterialization": "implemented for mapped same-repository branches",
     "automaticPushCommentApproveOrMerge": false,
-    "durablePublicWebhook": "pending",
-    "ciLogClassificationAndRerun": "pending"
+    "durablePublicWebhook": "completed with Cloudflare Named Tunnel",
+    "ciLogClassificationAndRerun": "completed; see phase2-github-ci-triage and phase2-github-ci-rerun evidence"
   }
 }

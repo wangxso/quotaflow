@@ -109,6 +109,6 @@
     "automaticPushCommentApproveOrMerge": false,
     "liveRerunAfterActionsWrite": "verified",
     "newCheckSameShaObservation": "verified",
-    "durablePublicWebhook": "pending"
+    "durablePublicWebhook": "completed with Cloudflare Named Tunnel"
   }
 }

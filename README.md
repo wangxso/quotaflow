@@ -4,7 +4,7 @@
 
 QuotaFlow 是一个额度感知的 AI 软件研发调度工具。它按账户额度、并发和预算安排 Codex 或 OpenCode 执行任务，将改动保存在独立的 Git 工作树和检查点中，供中断后恢复。
 
-**当前状态（2026-11-28）**　Phase 0 技术门禁有条件通过。Phase 1 单机 CLI 已具备三平台监督、检查点恢复、预算审计和可选交接笔记。Phase 2 已接入同 HEAD CI、独立审查、Draft 状态和人工合并门禁，并完成签名 Webhook、双层幂等、受限任务物化、只读审查执行、Bot 批准、CI 日志分类、同 SHA 限次复跑和真实 CI 修复闭环。真实 PR [#141](https://github.com/wangxso/mcarplay/pull/141) 已由仓库管理员人工合并到 `main`，合并提交为 `23033142`。Webhook 现可在显式仓库与分支白名单下自动抓取 PR HEAD/base、幂等创建任务，并使用 App token 下载、脱敏和分类失败日志。Actions read/write 已在受控 Draft PR #146 验证；临时 Draft PR #147 进一步完成真实失败日志→`ci_fix` 任务→免费 Magpie Agent→checkpoint→补丁回写→新 HEAD CI 转绿→门禁复核。稳定 Webhook 已迁移到 Cloudflare Named Tunnel `https://quotaflow-hooks.wangxso.com/github/webhook`，由 macOS launchd 监督并带公网健康自愈；GUI 计划在 Phase 3 交付。 [Phase 1](docs/PHASE-1.md) · [Phase 2](docs/PHASE-2.md) · [CI 修复证据](docs/evidence/phase2-github-ci-fix-loop-2026-11-28.json) · [Cloudflare 部署](docs/deployment/cloudflare-tunnel.md)
+**当前状态（2026-11-28）**　Phase 0 技术门禁有条件通过。Phase 1 单机 CLI 已具备三平台监督、检查点恢复、预算审计和可选交接笔记。Phase 2 核心闭环完成：同 HEAD CI、独立审查、Draft 与人工合并门禁、签名 Webhook、双层幂等、受限任务物化、只读审查、Bot 批准、CI 日志分类、同 SHA 限次复跑和真实 CI 修复均已验证。真实 PR [#141](https://github.com/wangxso/mcarplay/pull/141) 已人工合并到 `main`，合并提交为 `23033142`。Actions read/write 在受控 PR #146 完成同 SHA 复跑；PR #147 完成失败日志→`ci_fix` 任务→免费 Magpie Agent→checkpoint→补丁回写→新 HEAD CI 转绿→门禁复核。写入应答丢失、重复投递、越权请求和隔离 secret 轮换演练也已通过。稳定入口为 `https://quotaflow-hooks.wangxso.com/github/webhook`，由 macOS launchd 监督并带公网健康自愈。下一阶段进入 Phase 3 Dashboard。 [Phase 1](docs/PHASE-1.md) · [Phase 2](docs/PHASE-2.md) · [CI 修复证据](docs/evidence/phase2-github-ci-fix-loop-2026-11-28.json) · [故障门槛证据](docs/evidence/phase2-webhook-hardening-2026-11-28.json) · [Cloudflare 部署](docs/deployment/cloudflare-tunnel.md)
 
 ## 当前功能
 

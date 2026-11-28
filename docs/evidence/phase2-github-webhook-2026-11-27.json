@@ -54,10 +54,10 @@
   },
   "scope": {
     "httpReceiver": "implemented for local Bun HTTP use",
-    "publicDeployment": "temporary SSH TLS tunnel validated; durable hosting pending",
+    "publicDeployment": "temporary SSH TLS tunnel validated; later replaced by a Cloudflare Named Tunnel",
     "automaticSnapshotFetch": "implemented through github snapshot",
     "reviewFixTaskCreation": "implemented through github gate --materialize",
     "ciFailureTriage": "minimal task materialization implemented; log analysis and automatic rerun not implemented",
-    "actualGitHubDelivery": "GitHub ping and signed end-to-end PR events have been delivered through a temporary public TLS callback. The secret is stored outside the repository and the durable hosting target remains pending."
+    "actualGitHubDelivery": "GitHub ping and signed end-to-end PR events have been delivered through a public TLS callback. The temporary callback was later replaced by phase2-cloudflare-tunnel-2026-11-28.json."
   }
 }

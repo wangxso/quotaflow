@@ -1,6 +1,6 @@
 # QuotaFlow Phase 2 · GitHub 开发闭环
 
-**状态** 已启动 · 2026-11-28
+**状态** 核心闭环完成 · 2026-11-28
 
 ## 首个真实试点
 
@@ -137,12 +137,20 @@ GitHub App installation 已将 Actions 权限从 read 提升为 read and write�
 
 控制面审查该 checkpoint 后，将单行修复提交 `f59d37d` 写回临时 PR。新的 `controlled-code-failure` Check 对同一 PR 的最终 HEAD 成功；重新运行门禁时，阻断项只剩 Draft 和独立审查，CI 阻断已消失。临时 PR、远端分支和两个 Worktree 随后全部清理。本次 Codex 调用没有可归属的请求级 Magpie 用量行，Provider 账单仍为 `UNKNOWN`。 [CI 修复闭环证据](evidence/phase2-github-ci-fix-loop-2026-11-28.json)
 
-## 尚未完成
+## 投递与凭据故障门槛
 
-- 写入应答丢失、重复 Webhook、越权请求和凭据轮换演练。
+Delivery 去重现在使用原始 Webhook 字节哈希，刷新后的 PR 快照单独记录为 Gate 审计哈希。测试先完成一次任务物化后丢弃 HTTP 响应，再以相同 delivery 重放，第二次返回 `duplicate` 且最终只有一个任务。即使两次请求间 REST 快照发生变化，也不会错误返回 `409`。
+
+公网无权限签名返回 `401`，超过 2 MB 的载荷返回 `413`，不支持的事件返回 `422`。fork、未命中 `branchPrefixes` 的分支和未映射仓库均不会创建任务。隔离端口使用旧 secret 时签名 `ping` 返回 `200`，重启到新 secret 后旧签名返回 `401`、新签名返回 `200`。演练使用临时 secret 和数据库并已清理，生产 secret 未改变。
+
+双平台全量测试为 164 通过、1 个平台性 skip、0 失败、743 断言。Phase 2 的写入应答丢失、重复投递、越权拒绝和 secret 轮换门槛均已通过。[故障门槛证据](evidence/phase2-webhook-hardening-2026-11-28.json)
+
+## 后续扩展
+
 - 在不同仓库和多项目映射上扩大真实运行样本。
+- 在维护窗口中执行一次生产 Webhook secret、GitHub App private key 和 Cloudflare Tunnel 凭据轮换。
 
 ## 下一里程碑
 
-1. 完成 Webhook 投递故障、越权与凭据轮换演练。
-2. Phase 2 核心验收完成后进入 Phase 3 Dashboard 与部署。
+1. 进入 Phase 3 Dashboard、多项目管理和部署体验。
+2. 用真实运行数据验证 Dashboard 与 CLI 的状态一致性。

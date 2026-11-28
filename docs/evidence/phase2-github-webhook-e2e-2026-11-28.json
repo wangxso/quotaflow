@@ -119,7 +119,7 @@
     "automaticGatePersistence": "implemented",
     "automaticActionPlan": "implemented",
     "automaticTaskMaterialization": "requires a separate repository mapping",
-    "durablePublicDeployment": "pending",
-    "secretRotationDrill": "pending"
+    "durablePublicDeployment": "completed with Cloudflare Named Tunnel; see phase2-cloudflare-tunnel-2026-11-28.json",
+    "secretRotationDrill": "passed in isolation; see phase2-webhook-hardening-2026-11-28.json"
   }
 }

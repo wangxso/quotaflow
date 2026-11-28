@@ -64,7 +64,31 @@ curl -fsS https://quotaflow-hooks.wangxso.com/healthz
 
 ## 轮换与恢复
 
-Webhook secret 轮换需要同时更新 GitHub App 和本地 secret 文件，然后重启 `com.quotaflow.webhook`。轮换窗口内 GitHub 投递可能返回 401，应避开活跃任务。
+Delivery 去重使用原始 Webhook 字节哈希，Gate 另存刷新后的 REST 快照哈希。因此同一 GitHub delivery 在首次写入后如果 PR 快照发生变化，重试仍按重复事件处理，不会被误报为内容冲突。
+
+Webhook secret 轮换需要短暂维护窗口。不要在活跃任务处理期间执行：
+
+1. 确认当前没有 `running` 或 `cancelling` 任务，并停止接收新的发布操作。
+2. 在终端生成新值，不输出到会话或日志：
+
+   ```sh
+   umask 077
+   openssl rand -hex 32 > ~/.config/quotaflow/github-webhook-secret.next
+   pbcopy < ~/.config/quotaflow/github-webhook-secret.next
+   ```
+
+3. 在 GitHub App 设置中把 Webhook secret 更新为剪贴板中的新值。
+4. 原子替换本地文件并重启服务：
+
+   ```sh
+   mv ~/.config/quotaflow/github-webhook-secret ~/.config/quotaflow/github-webhook-secret.previous
+   mv ~/.config/quotaflow/github-webhook-secret.next ~/.config/quotaflow/github-webhook-secret
+   launchctl kickstart -k "gui/$(id -u)/com.quotaflow.webhook"
+   ```
+
+5. 验证公网 `/healthz`，再从 GitHub App Recent Deliveries 重发一个 `ping` 或安全事件。成功后再删除 `.previous`。
+
+若 GitHub 侧更新失败，保留原文件。若 GitHub 已更新而本地尚未切换，立即在 GitHub 恢复旧 secret，再重新执行整个流程。旧签名在新服务上必须返回 `401 invalid_signature`，新签名必须返回 `200`。
 
 GitHub App private key 轮换时，先在 App 设置中生成新 key，安全写入 `~/.config/quotaflow/`，更新 `quotaflow.config.json` 的 `privateKeyPath`，重启 Webhook 并确认安装令牌获取成功，再撤销旧 key。
 
