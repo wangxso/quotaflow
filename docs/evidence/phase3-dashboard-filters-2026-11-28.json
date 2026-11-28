@@ -111,13 +111,13 @@
   },
   "verification": {
     "dashboardTests": 2,
-    "dashboardAssertions": 74,
+    "dashboardAssertions": 85,
     "fullSuite": {
-      "macOS": 171,
-      "linux": 171,
+      "macOS": 176,
+      "linux": 176,
       "platformSkips": 1,
       "failed": 0,
-      "assertions": 836
+      "assertions": 865
     },
     "build": "passed",
     "configurationValidation": "passed",

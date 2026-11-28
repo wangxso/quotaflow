@@ -92,11 +92,11 @@
       "failed": 0
     },
     "fullSuite": {
-      "macOS": 171,
-      "linux": 171,
+      "macOS": 176,
+      "linux": 176,
       "windowsOnlySkipped": 1,
       "failed": 0,
-      "assertions": 836
+      "assertions": 865
     },
     "build": "passed",
     "configurationValidation": "passed",

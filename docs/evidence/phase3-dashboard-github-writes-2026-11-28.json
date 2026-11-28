@@ -1,0 +1,105 @@
+{
+  "recordedOn": "2026-11-28",
+  "kind": "phase3-dashboard-github-writes",
+  "baseRevision": "0b818a88d2f61a032598fd95b6c9126b81e7f001",
+  "environment": {
+    "host": "macOS 26.6.2, arm64",
+    "bun": "1.4.5",
+    "browser": "Microsoft Edge",
+    "serviceManager": "macOS launchd",
+    "serviceLabel": "com.quotaflow.dashboard"
+  },
+  "capability": {
+    "requiresGitHubApp": true,
+    "requiresBotApprovalsEnabled": true,
+    "requiresRepositoryMapping": true,
+    "actions": [
+      "approve",
+      "merge"
+    ],
+    "mappedRepositories": [
+      "wangxso/mcarplay"
+    ],
+    "actualGitHubWritesExecuted": false
+  },
+  "confirmation": {
+    "targetFormat": "owner/repo#pullNumber@headSha",
+    "typedTargetRequired": true,
+    "sessionRequired": true,
+    "csrfRequired": true,
+    "sameOriginRequired": true,
+    "requestIdempotency": true
+  },
+  "approval": {
+    "currentHeadRefetch": true,
+    "openStateRequired": true,
+    "changesRequestedBlocked": true,
+    "forkPolicyApplied": true,
+    "branchPrefixPolicyApplied": true,
+    "reviewCommitSha": "expectedHeadSha",
+    "reviewEvent": "APPROVE"
+  },
+  "merge": {
+    "currentHeadRefetch": true,
+    "gateReevaluation": true,
+    "ciAndReviewReasonsBlockMerge": true,
+    "mergeableRequired": true,
+    "mergeMethod": "merge",
+    "headShaSentToGitHub": true
+  },
+  "audit": {
+    "store": "github_deliveries",
+    "deliveryIdFormat": "dashboard-action:<requestId>",
+    "states": [
+      "running",
+      "succeeded",
+      "failed"
+    ],
+    "fields": [
+      "action",
+      "actor",
+      "repository",
+      "pullNumber",
+      "headSha",
+      "requestId",
+      "httpStatus",
+      "result",
+      "error",
+      "completedAt"
+    ],
+    "unknownResultReplayBlocked": true,
+    "successfulOrFailedReplayReturnsStoredOutcome": true
+  },
+  "testCoverage": {
+    "approvalSendsExactHead": true,
+    "approvalReplayAvoidsSecondGitHubWrite": true,
+    "mergeSendsConfirmedHead": true,
+    "blockedGateAvoidsMerge": true,
+    "failedOutcomeRemainsAudited": true,
+    "branchPrefixMismatchAvoidsGitHubWrite": true
+  },
+  "browserVerification": {
+    "gateRowsWithActionColumn": true,
+    "botApproveButtonsVisible": true,
+    "mergeButtonVisibleOnReadyGate": true,
+    "approvalDialogOpened": true,
+    "exactConfirmationTargetObserved": "wangxso/mcarplay#148@18c53eb454b0584b5fe926d12b57183560bf84de",
+    "dialogCancelledWithoutWrite": true
+  },
+  "verification": {
+    "dashboardTests": 2,
+    "dashboardAssertions": 85,
+    "githubActionTests": 5,
+    "githubActionAssertions": 18,
+    "fullSuite": {
+      "macOS": 176,
+      "linux": 176,
+      "platformSkips": 1,
+      "failed": 0,
+      "assertions": 865
+    },
+    "build": "passed",
+    "configurationValidation": "passed",
+    "jsonAndDiffChecks": "passed"
+  }
+}

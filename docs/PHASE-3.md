@@ -21,6 +21,7 @@ bun run src/cli.ts dashboard --config quotaflow.config.json
 - 组合筛选：项目与时间范围作用于任务、事件和 GitHub 数据；Tasks 可再按 Lane 筛选，GitHub 可再按审查状态筛选，筛选偏好保存在本地浏览器。
 - 实时事件：`/api/events/stream` 通过 SSE 从 SQLite event cursor 增量推送任务和运行状态，断线后自动重连。
 - 受控任务操作：支持 `start`、`cancel` 和 `retry`，均要求明确确认；动作请求写入 `dashboard_action`，Worker 启动和退出写入独立生命周期事件。
+- 受控 GitHub 操作：配置 GitHub App、显式允许 Bot 批准并映射仓库后，可对 current-head 门禁执行 `approve` 或 `merge`。操作前重新拉取 PR，HEAD、分支或 fork 变化会中止；合并还会重新检查 CI、审查和 mergeable 状态。
 
 服务默认绑定 `127.0.0.1:8788`，不能通过 `--host` 绑定非回环地址。Dashboard 本身不执行模型。`start` 只为已到期且没有活跃 attempt 的 `queued` 或 `waiting_quota` 任务派生一次性 Worker 子进程。子进程通过 `worker once --task-id` 定向领取该任务，并重新检查 Lane、额度、预算和调度状态；条件不满足时停在 `waiting_quota`，不会绕过现有调度器。Dashboard 仍不批准 Review、合并 PR 或修改配置。
 
@@ -43,6 +44,8 @@ macOS 当前通过 `com.quotaflow.dashboard` LaunchAgent 常驻，并由现有�
 - 写操作要求 `confirmTaskId` 与目标任务完全一致，并用客户端 `requestId` 做持久幂等。
 - 状态修改与 `dashboard_action` 审计事件在同一 SQLite 事务提交。
 - `start` 的持久幂等阻止同一 `requestId` 重复派生 Worker；`dashboard_worker_started`、`dashboard_worker_exited` 和 `dashboard_worker_spawn_failed` 记录进程结果。
+- GitHub 写操作要求输入完整 `owner/repo#pull@headSha`，并使用 `requestId` 在 `github_deliveries` 中原子登记 `running`、`succeeded` 或 `failed`。未知结果不会自动重放外部请求。
+- Bot 批准使用当前 HEAD 的正式 Review。合并必须在重新拉取快照后通过当前门禁，并向 GitHub 发送同一 `headSha` 和固定 merge commit 策略。
 - Worker 输出写入状态目录下的 `.quotaflow/dashboard-workers/<requestId>.log`，新文件权限为 `0600`；不会把 session 或 CSRF token 写入页面或日志。
 - Worker 日志只对同一任务、同一 `requestId` 的 `start` 审计事件开放。读取上限为最后 64 KiB，拒绝符号链接，并清理 ANSI、控制字符和常见令牌、密码、私钥格式。
 - Task/Event/PR 文本作为不可信内容展示。
@@ -62,8 +65,9 @@ macOS 当前通过 `com.quotaflow.dashboard` LaunchAgent 常驻，并由现有�
 - `GET /api/budgets`
 - `GET /api/config`
 - `POST /api/tasks/:id/actions`
+- `POST /api/github/actions`
 
 ## 下一步
 
-1. 在 GitHub 写权限和人工确认流程下增加批准／合并。
+1. 使用一个受控 PR 完成真实 Dashboard Bot 批准与合并演练，保留 current-head 和审计证据。
 2. 增加桌面发行、备份、恢复和 Linux／Windows + WSL2 启动检查。

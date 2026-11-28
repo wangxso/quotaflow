@@ -8,14 +8,20 @@
       "retry"
     ],
     "notEnabled": [
-      "github_approve",
-      "github_merge",
+      "mark_ready",
       "configuration_write"
     ],
     "confirmation": "Exact task ID in both UI confirmation and request body",
     "startSemantics": "Queued or due waiting_quota tasks without an active attempt may spawn one targeted Worker; the Worker rechecks lanes, quota, budgets, and due state",
     "retrySemantics": "Requeue only; no Worker or model is started directly",
     "cancelSemantics": "Queued task becomes cancelled; active task becomes cancelling and is stopped by the supervised Worker"
+  },
+  "githubActions": {
+    "allowed": [
+      "approve",
+      "merge"
+    ],
+    "evidence": "phase3-dashboard-github-writes-2026-11-28.json"
   },
   "security": {
     "networkBoundary": "loopback only",
@@ -70,13 +76,13 @@
   },
   "verification": {
     "dashboardTests": 2,
-    "dashboardAssertions": 74,
+    "dashboardAssertions": 85,
     "fullSuite": {
-      "macOS": 171,
-      "linux": 171,
+      "macOS": 176,
+      "linux": 176,
       "windowsOnlySkipped": 1,
       "failed": 0,
-      "assertions": 836
+      "assertions": 865
     },
     "build": "passed",
     "browserCancellation": "passed",
@@ -92,6 +98,6 @@
     "guardedTaskActions": true,
     "directModelExecutionFromDashboard": false,
     "workerRunsThroughScheduler": true,
-    "githubWriteFromDashboard": false
+    "githubWriteFromDashboard": true
   }
 }

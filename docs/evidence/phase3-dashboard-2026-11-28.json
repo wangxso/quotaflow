@@ -25,6 +25,7 @@
       "events"
     ],
     "filters": "project, time range, task Lane, and gate review status",
+    "githubWrites": "GitHub App Bot approve and exact-head merge with current snapshot revalidation",
     "liveEvents": "SSE with SQLite event cursor and automatic reconnect",
     "visualReference": "T3 Code density and desktop workspace hierarchy, without copied assets or interface reproduction"
   },
@@ -56,6 +57,7 @@
     "/api/tasks",
     "/api/tasks/:id",
     "/api/tasks/:id/workers/:requestId/log",
+    "/api/github/actions",
     "/api/github",
     "/api/budgets",
     "/api/config"
@@ -81,13 +83,13 @@
   },
   "verification": {
     "dashboardTests": 2,
-    "dashboardAssertions": 74,
+    "dashboardAssertions": 85,
     "fullSuite": {
-      "macOS": 171,
-      "linux": 171,
+      "macOS": 176,
+      "linux": 176,
       "windowsOnlySkipped": 1,
       "failed": 0,
-      "assertions": 836
+      "assertions": 865
     },
     "build": "passed",
     "configurationValidation": "passed",
