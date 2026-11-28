@@ -112,7 +112,7 @@
       "linux": 171,
       "windowsOnlySkipped": 1,
       "failed": 0,
-      "assertions": 835
+      "assertions": 836
     },
     "build": "passed",
     "jsonAndDiffChecks": "passed",

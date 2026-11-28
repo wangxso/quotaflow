@@ -70,13 +70,13 @@
   },
   "verification": {
     "dashboardTests": 2,
-    "dashboardAssertions": 73,
+    "dashboardAssertions": 74,
     "fullSuite": {
       "macOS": 171,
       "linux": 171,
       "windowsOnlySkipped": 1,
       "failed": 0,
-      "assertions": 835
+      "assertions": 836
     },
     "build": "passed",
     "browserCancellation": "passed",

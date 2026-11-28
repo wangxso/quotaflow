@@ -1,7 +1,7 @@
 {
   "recordedOn": "2026-11-28",
   "kind": "phase3-dashboard-filters",
-  "baseRevision": "9eaf8ab3ff07d534a177fbd3fc4b16a29fa75d32",
+  "baseRevision": "2668b3995ade6c3ac31fb4e7f9fd604bb1a39e32",
   "environment": {
     "host": "macOS 26.6.2, arm64",
     "bun": "1.4.5",
@@ -105,18 +105,19 @@
     "taskSummaryAddsLaneIds": true,
     "clientSideFiltering": true,
     "persistentDataModelChanged": false,
+    "githubDatasetLimit": 500,
     "additionalNetworkRequestsPerFilterChange": false,
     "dynamicValuesRenderedWithTextContent": true
   },
   "verification": {
     "dashboardTests": 2,
-    "dashboardAssertions": 73,
+    "dashboardAssertions": 74,
     "fullSuite": {
       "macOS": 171,
       "linux": 171,
       "platformSkips": 1,
       "failed": 0,
-      "assertions": 835
+      "assertions": 836
     },
     "build": "passed",
     "configurationValidation": "passed",
