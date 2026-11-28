@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { createHmac } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,7 +12,10 @@ import {
   type GitHubPullSnapshot,
 } from './github';
 import { materializeGitHubWebhookActions } from './github-webhook-actions';
-import type { GitHubWebhookActionContext } from './github-webhook-server';
+import {
+  createGitHubWebhookHandler,
+  type GitHubWebhookActionContext,
+} from './github-webhook-server';
 import { TaskStore } from './store';
 import { worktreeGit } from './worktree';
 
@@ -149,6 +153,62 @@ test('webhook action materialization fetches the exact head and is idempotent', 
     expect(repeated).toMatchObject({
       status: 'materialized',
       materialization: { status: 'task_exists' },
+    });
+    expect(store.listTasks()).toHaveLength(1);
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a lost HTTP response followed by the same delivery creates one task', async () => {
+  const { root, repo, baseSha, headSha } = setupRepository();
+  const db = openDatabase(':memory:');
+  const store = new TaskStore(db);
+  const webhookSecret = ['lost', 'response', 'secret'].join('-');
+  try {
+    const value = snapshot(baseSha, headSha);
+    const rawBody = Buffer.from(JSON.stringify({
+      action: 'synchronize',
+      repository: { full_name: value.repository },
+      pull_request: {
+        number: value.number,
+        head: { sha: value.headSha },
+        base: { sha: value.baseSha },
+      },
+    }));
+    const webhookSignature = `sha256=${createHmac('sha256', webhookSecret).update(rawBody).digest('hex')}`;
+    const handle = createGitHubWebhookHandler({
+      store,
+      secret: webhookSecret,
+      path: '/github/webhook',
+      snapshotFetcher: async () => value,
+      gatePolicy: { requiredApprovals: 0 },
+      actionHandler: (actionContext) => materializeGitHubWebhookActions(
+        store,
+        config(repo, join(root, 'worktrees')),
+        actionContext,
+      ),
+    });
+    const request = () => new Request('http://localhost/github/webhook', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-github-event': 'pull_request',
+        'x-github-delivery': 'lost-response-delivery',
+        'x-hub-signature-256': webhookSignature,
+      },
+      body: rawBody,
+    });
+
+    const first = await handle(request());
+    expect(first.status).toBe(202);
+    const retry = await handle(request());
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toMatchObject({
+      status: 'duplicate',
+      delivery: { duplicateDelivery: true, duplicateEvent: true },
+      taskMaterialization: { materialization: { status: 'task_exists' } },
     });
     expect(store.listTasks()).toHaveLength(1);
   } finally {

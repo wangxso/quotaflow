@@ -111,6 +111,7 @@ export interface GitHubGateIngestInput {
   policy?: GitHubGatePolicy;
   deliveryId: string;
   eventType: string;
+  webhookPayloadHash?: string;
   now?: number;
 }
 

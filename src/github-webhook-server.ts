@@ -158,6 +158,7 @@ export function createGitHubWebhookHandler(options: GitHubWebhookHandlerOptions)
           },
           deliveryId,
           eventType: event.eventType,
+          webhookPayloadHash: event.payloadHash,
         });
         const plan = planGitHubActions(result.gate.evaluation);
         let taskMaterialization: unknown;

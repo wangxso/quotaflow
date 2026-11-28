@@ -529,7 +529,8 @@ export class TaskStore {
   ingestGitHubGate(input: GitHubGateIngestInput): GitHubGateIngestResult {
     return this.db.transaction(() => {
       const now = input.now ?? Date.now();
-      const payloadHash = hashGitHubPayload(input.snapshot);
+      const snapshotHash = hashGitHubPayload(input.snapshot);
+      const payloadHash = input.webhookPayloadHash ?? snapshotHash;
       const baseDelivery = {
         eventType: input.eventType,
         repository: input.snapshot.repository,
@@ -544,7 +545,6 @@ export class TaskStore {
         now,
       });
       const evaluation = evaluateGitHubPull(input.snapshot, input.policy);
-      const snapshotHash = payloadHash;
       const existing = this.getGitHubGate(
         evaluation.repository,
         evaluation.pullNumber,

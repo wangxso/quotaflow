@@ -22,18 +22,22 @@ function payload(action = 'synchronize') {
   }));
 }
 
-function signature(body: Uint8Array): string {
-  return `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
+function signature(body: Uint8Array, signingSecret = secret): string {
+  return `sha256=${createHmac('sha256', signingSecret).update(body).digest('hex')}`;
 }
 
-function request(body: Uint8Array, overrides: Record<string, string> = {}): Request {
+function request(
+  body: Uint8Array,
+  overrides: Record<string, string> = {},
+  signingSecret = secret,
+): Request {
   return new Request(`http://localhost${path}`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       'x-github-event': 'pull_request',
       'x-github-delivery': 'delivery-1',
-      'x-hub-signature-256': signature(body),
+      'x-hub-signature-256': signature(body, signingSecret),
       ...overrides,
     },
     body,
@@ -181,6 +185,12 @@ test('HTTP webhook handler fetches the current snapshot and stores a gate', asyn
       plan: { actions: [{ kind: 'independent_review' }] },
       taskMaterialization: { status: 'materialized', taskId: 'task-1' },
     });
+    current = snapshot();
+    current.checks[0] = {
+      ...current.checks[0]!,
+      startedAt: '2026-11-27T14:10:00Z',
+      completedAt: '2026-11-27T14:11:00Z',
+    };
     const duplicate = await handle(request(body));
     expect(duplicate.status).toBe(200);
     expect(await duplicate.json()).toMatchObject({
@@ -200,6 +210,29 @@ test('HTTP webhook handler fetches the current snapshot and stores a gate', asyn
     expect(await unavailable.json()).toEqual({ error: 'snapshot_fetch_failed' });
     expect(db.query<{ n: number }, []>('SELECT count(*) AS n FROM github_deliveries').get()?.n).toBe(1);
     expect(db.query<{ n: number }, []>('SELECT count(*) AS n FROM github_gate_results').get()?.n).toBe(1);
+  } finally {
+    db.close();
+  }
+});
+
+test('rotating the webhook secret rejects old signatures and accepts the replacement', async () => {
+  const db = openDatabase(':memory:');
+  const store = new TaskStore(db);
+  const oldSecret = ['old', 'webhook', 'secret'].join('-');
+  const newSecret = ['new', 'webhook', 'secret'].join('-');
+  const oldHandler = createGitHubWebhookHandler({ store, secret: oldSecret, path });
+  const newHandler = createGitHubWebhookHandler({ store, secret: newSecret, path });
+  try {
+    const body = Buffer.from('{"zen":"rotation drill"}');
+    const oldSignature = signature(body, oldSecret);
+    const newSignature = signature(body, newSecret);
+    const ping = { 'x-github-event': 'ping', 'x-github-delivery': 'rotation-ping' };
+
+    expect((await oldHandler(request(body, { ...ping, 'x-hub-signature-256': oldSignature }))).status).toBe(200);
+    const rejected = await newHandler(request(body, { ...ping, 'x-hub-signature-256': oldSignature }));
+    expect(rejected.status).toBe(401);
+    expect(await rejected.json()).toEqual({ error: 'invalid_signature' });
+    expect((await newHandler(request(body, { ...ping, 'x-hub-signature-256': newSignature }))).status).toBe(200);
   } finally {
     db.close();
   }

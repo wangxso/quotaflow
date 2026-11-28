@@ -104,3 +104,45 @@ test('GitHub gate ingestion rejects one delivery id with changed content and rec
     db.close();
   }
 });
+
+test('GitHub gate delivery identity uses raw webhook bytes instead of a changing REST snapshot', () => {
+  const db = openDatabase(':memory:');
+  const store = new TaskStore(db);
+  try {
+    const rawWebhookHash = 'a'.repeat(64);
+    const first = snapshot();
+    const input = {
+      snapshot: first,
+      policy: { expectedHeadSha: headSha },
+      deliveryId: 'delivery-snapshot-change',
+      eventType: 'check_run',
+      webhookPayloadHash: rawWebhookHash,
+      now: 300,
+    };
+    expect(store.ingestGitHubGate(input)).toMatchObject({
+      duplicate: false,
+      delivery: { payloadHash: rawWebhookHash },
+      gate: { snapshotHash: expect.any(String) },
+    });
+
+    const refreshed = snapshot();
+    refreshed.checks[0] = {
+      ...refreshed.checks[0]!,
+      startedAt: '2026-11-27T14:10:00Z',
+      completedAt: '2026-11-27T14:11:00Z',
+    };
+    const retry = store.ingestGitHubGate({
+      ...input,
+      snapshot: refreshed,
+      now: 301,
+    });
+    expect(retry).toMatchObject({
+      duplicate: true,
+      delivery: { duplicateDelivery: true, duplicateEvent: true, payloadHash: rawWebhookHash },
+      gate: { updatedAt: 300 },
+    });
+    expect(db.query<{ n: number }, []>('SELECT count(*) AS n FROM github_deliveries').get()?.n).toBe(1);
+  } finally {
+    db.close();
+  }
+});
