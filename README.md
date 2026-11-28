@@ -12,7 +12,7 @@ QuotaFlow 是一个额度感知的 AI 软件研发调度工具。它按账户额
 - **执行与恢复**　CLI 支持提交、查看、取消和重试任务。Windows 使用 Job Object。macOS 原生监督器跟踪根进程、子进程和进程组。Linux 以 subreaper 收养 detached 后代并扫描 `/proc`。保存检查点和恢复任务均要求独立验证的停止凭证。已启动的受监督尝试在缺少凭证时进入 `blocked`，并保留写入权。只读任务使用 Agent 原生只读策略，并在完成后校验工作树未变化。`--handoff` 可在中断后把与检查点匹配的简短笔记交给下一个 Agent。
 - **模型接入与用量**　默认 Codex App Server 与 OpenCode Adapter 支持 Windows、macOS 和 Linux 受监督执行。Magpie 路由需要配置中的显式授权，网关估算用于预算租约，服务商账单归属仍为 `UNKNOWN`。 [配置与适配器说明](docs/PHASE-1.md)
 - **GitHub 门禁**　`github snapshot` 通过 GitHub REST 自动读取 PR、当前 HEAD 检查和正式 Review，`github gate` 校验 Draft／mergeable 状态和人工合并要求，输出 Review–Fix／CI 分流计划，并可按稳定动作键物化受尝试次数和预算约束的 Agent 任务。Bot 批准默认不计入，可通过 `githubApproval.allowBotApprovals` 或 `--allow-bot-approvals` 显式启用。`github serve-webhook` 验签后自动写入 Gate，只对显式仓库映射和分支白名单建任务，并从失败 Actions job 提取经过脱敏的分类日志。仅对同一 HEAD 的纯基础设施或取消失败执行默认每 HEAD 一次的原子限额复跑，代码/测试、权限、未知和 SHA 漂移保留人工或修复路径。 [Phase 2 说明](docs/PHASE-2.md)
-- **本地 Dashboard**　`dashboard` 在 `127.0.0.1:8788` 启动只读工作台，展示任务状态、事件、attempt、checkpoint、handoff、预算、仓库映射和 GitHub Gate/CI。界面采用 T3 Code 式高密度桌面层级，使用严格 CSP、无第三方资源和 `textContent` 渲染不可信文本。 [Phase 3 说明](docs/PHASE-3.md)
+- **本地 Dashboard**　`dashboard` 在 `127.0.0.1:8788` 启动只读工作台，展示任务状态、事件、attempt、checkpoint、handoff、预算、仓库映射和 GitHub Gate/CI。项目筛选共享同一 repository 上下文，SSE 从 SQLite event cursor 增量更新并支持断线重连。界面采用 T3 Code 式高密度桌面层级，使用严格 CSP、无第三方资源和 `textContent` 渲染不可信文本。 [Phase 3 说明](docs/PHASE-3.md)
 
 ## 快速开始
 

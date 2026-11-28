@@ -1,6 +1,6 @@
 {
   "recordedOn": "2026-11-28",
-  "baseRevision": "aede805492969165487ae040d9b105e5bf43231b",
+  "baseRevision": "51b6e1ed876b5158d0fae057d66fe64a21139737",
   "dashboard": {
     "command": "bun run src/cli.ts dashboard --config quotaflow.config.json",
     "url": "http://127.0.0.1:8788/",
@@ -22,7 +22,21 @@
       "budget leases",
       "events"
     ],
+    "projectFilter": "all projects or one repository",
+    "liveEvents": "SSE with SQLite event cursor and automatic reconnect",
     "visualReference": "T3 Code density and desktop workspace hierarchy, without copied assets or interface reproduction"
+  },
+  "eventStream": {
+    "endpoint": "/api/events/stream",
+    "protocol": "Server-Sent Events",
+    "cursorSource": "SQLite event ID",
+    "initialCursor": "latest event unless cursor or Last-Event-ID is supplied",
+    "replay": "cursor + 1",
+    "pollIntervalMs": 1000,
+    "heartbeatIntervalMs": 15000,
+    "reconnectRetryMs": 3000,
+    "projectFilterSupported": true,
+    "incrementalTaskMerge": true
   },
   "security": {
     "contentSecurityPolicy": "self-only scripts, styles and connections",
@@ -36,6 +50,7 @@
   "api": [
     "/api/health",
     "/api/overview",
+    "/api/events/stream",
     "/api/tasks",
     "/api/tasks/:id",
     "/api/github",
@@ -46,6 +61,8 @@
     "realSqliteDataRendered": true,
     "taskCount": 1,
     "taskDetailOpened": true,
+    "sseLiveStateObserved": true,
+    "projectFilterRendered": true,
     "responsiveLayoutImplemented": true,
     "decorativeNumberingRemoved": true,
     "chineseLabelsRendered": true
@@ -61,13 +78,13 @@
   },
   "verification": {
     "dashboardTests": 2,
-    "dashboardAssertions": 22,
+    "dashboardAssertions": 30,
     "fullSuite": {
       "macOS": 167,
       "linux": 167,
       "windowsOnlySkipped": 1,
       "failed": 0,
-      "assertions": 768
+      "assertions": 776
     },
     "build": "passed",
     "configurationValidation": "passed",
@@ -76,8 +93,8 @@
   "boundary": {
     "readOnly": true,
     "authentication": "loopback-only network boundary",
-    "sse": "planned",
+    "sse": "implemented",
     "writeActions": "planned with CSRF and explicit permission design",
-    "multiProjectFilters": "planned"
+    "multiProjectFilters": "implemented in Dashboard and API"
   }
 }

@@ -36,7 +36,7 @@ PR #141 随后由有权限的操作者转为 Ready。重新拉取快照后，Dra
 
 同日完成 Phase 2 故障门槛。GitHub delivery 去重改为绑定原始 Webhook 字节哈希，刷新后的 REST 快照哈希单独保存；丢弃首次 HTTP 响应后以同一 delivery 重试仍只创建一个任务，快照变化也不再产生错误 `409`。公网无权限签名返回 `401`，超限载荷返回 `413`，未支持事件返回 `422`，fork、未授权分支和未映射仓库均不建任务。隔离服务完成旧 secret、重启换 secret、旧签名拒绝、新签名接受的轮换演练。macOS 与 Linux 全量测试均为 164 通过、1 个平台性 skip、0 失败、743 断言。Phase 2 核心闭环完成，下一阶段进入 Phase 3 Dashboard。[故障门槛证据](evidence/phase2-webhook-hardening-2026-11-28.json)。
 
-Phase 3 已交付首个只读 Dashboard 切片。`dashboard` 命令在 `127.0.0.1:8788` 提供 Overview、Tasks、GitHub 和 Budgets 视图，任务详情包含 attempt、实际模型、checkpoint、prompt、handoff、usage、预算租约和事件；默认拒绝非回环监听。界面参考 T3 Code 的桌面密度和窄侧栏层级，但使用独立的 QuotaFlow 信息架构、颜色和组件。页面无第三方资源，使用严格 CSP 和 `textContent` 渲染不可信文本。[Phase 3 说明](PHASE-3.md) · [Dashboard 证据](evidence/phase3-dashboard-2026-11-28.json)。
+Phase 3 已交付只读 Dashboard 切片。`dashboard` 命令在 `127.0.0.1:8788` 提供 Overview、Tasks、GitHub 和 Budgets 视图，任务详情包含 attempt、实际模型、checkpoint、prompt、handoff、usage、预算租约和事件；默认拒绝非回环监听。任务、Gate 和事件共享 repository 筛选，`/api/events/stream` 按 SQLite event ID 通过 SSE 增量更新并支持断开补发。界面参考 T3 Code 的桌面密度和窄侧栏层级，但使用独立的 QuotaFlow 信息架构、颜色和组件。页面无第三方资源，使用严格 CSP 和 `textContent` 渲染不可信文本。[Phase 3 说明](PHASE-3.md) · [Dashboard 证据](evidence/phase3-dashboard-2026-11-28.json)。
 
 ## Phase 0 · 调研与可行性验证
 

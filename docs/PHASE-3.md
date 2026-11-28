@@ -18,6 +18,8 @@ bun run src/cli.ts dashboard --config quotaflow.config.json
 - 任务详情：attempt、实际模型、checkpoint、prompt、handoff、usage、预算租约和事件时间线。
 - GitHub：最近 Gate 结果、阻断原因和同 HEAD CI rerun 记录。
 - Budgets：预算使用、余额、活跃租约和 Lane 配置。
+- 项目筛选：Overview、Tasks、GitHub 和最近任务共享同一个 repository 过滤上下文。
+- 实时事件：`/api/events/stream` 通过 SSE 从 SQLite event cursor 增量推送任务和运行状态，断线后自动重连。
 
 服务默认绑定 `127.0.0.1:8788`，不能通过 `--host` 绑定非回环地址。Dashboard 当前没有写操作，只读取现有 SQLite 和配置。
 
@@ -44,6 +46,7 @@ Dashboard 当前仍是只读控制面。提交、取消、审批、合并和设�
 
 - `GET /api/health`
 - `GET /api/overview`
+- `GET /api/events/stream`
 - `GET /api/tasks`
 - `GET /api/tasks/:id`
 - `GET /api/github`
@@ -52,8 +55,7 @@ Dashboard 当前仍是只读控制面。提交、取消、审批、合并和设�
 
 ## 下一步
 
-1. 增加 SSE 或增量事件游标，避免整页轮询。
-2. 增加多项目、状态、时间和 Lane 组合筛选。
-3. 在独立权限与 CSRF 设计下增加受控写操作。
-4. 增加部署、备份、恢复和 Linux／Windows + WSL2 启动检查。
-5. 用 CLI 与 Dashboard 的同状态 fixture 做端到端一致性验证。
+1. 在独立权限与 CSRF 设计下增加受控写操作。
+2. 增加时间范围、Lane 和审查状态组合筛选。
+3. 增加部署、备份、恢复和 Linux／Windows + WSL2 启动检查。
+4. 用 CLI 与 Dashboard 的同状态 fixture 做更完整的分页和一致性验证。
