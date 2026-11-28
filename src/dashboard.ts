@@ -44,10 +44,21 @@ function integer(value: string | null, field: string, fallback: number, minimum:
   return parsed;
 }
 
-function taskSummary(task: Task) {
+function repositoryForPath(config: QuotaFlowConfig, value: string): string {
+  const repoPath = value.replace(/\/+$/, '');
+  return (config.githubProjects ?? []).find((project) =>
+    project.repoPath.replace(/\/+$/, '') === repoPath)?.repository ?? value;
+}
+
+function repositoryForTask(config: QuotaFlowConfig, task: Task): string {
+  return repositoryForPath(config, task.repoPath);
+}
+
+function taskSummary(task: Task, config: QuotaFlowConfig) {
   return {
     id: task.id,
     title: task.title,
+    repository: repositoryForTask(config, task),
     repoPath: task.repoPath,
     workspacePath: task.workspacePath,
     status: task.status,
@@ -61,7 +72,7 @@ function taskSummary(task: Task) {
   };
 }
 
-function eventSummary(store: TaskStore, tasks: Task[]) {
+function eventSummary(store: TaskStore, tasks: Task[], config: QuotaFlowConfig) {
   return tasks
     .slice()
     .sort((left, right) => right.updatedAt - left.updatedAt)
@@ -70,6 +81,7 @@ function eventSummary(store: TaskStore, tasks: Task[]) {
       id: event.id,
       taskId: task.id,
       taskTitle: task.title,
+      repository: repositoryForTask(config, task),
       kind: event.kind,
       detail: event.detail,
       createdAt: event.createdAt,
@@ -110,12 +122,15 @@ function sanitizedConfig(config: QuotaFlowConfig) {
   };
 }
 
-function overview(store: TaskStore, config: QuotaFlowConfig) {
+function overview(store: TaskStore, config: QuotaFlowConfig, repository?: string) {
   const safeConfig = sanitizedConfig(config);
-  const tasks = store.listTasks();
-  const gates = store.listRecentGitHubGates(200);
-  const reruns = store.listRecentGitHubCiReruns(200);
-  const events = eventSummary(store, tasks);
+  const tasks = store.listTasks()
+    .filter((task) => !repository || repositoryForTask(config, task) === repository);
+  const gates = store.listRecentGitHubGates(200)
+    .filter((gate) => !repository || gate.repository === repository);
+  const reruns = store.listRecentGitHubCiReruns(200)
+    .filter((rerun) => !repository || rerun.repository === repository);
+  const events = eventSummary(store, tasks, config);
   return {
     generatedAt: Date.now(),
     tasks: {
@@ -135,8 +150,9 @@ function overview(store: TaskStore, config: QuotaFlowConfig) {
       .slice()
       .sort((left, right) => right.updatedAt - left.updatedAt)
       .slice(0, 12)
-      .map(taskSummary),
+      .map((task) => taskSummary(task, config)),
     recentEvents: events,
+    latestEventId: store.latestEventId(),
     repositories: safeConfig.repositories,
     lanes: config.lanes.map((lane) => ({
       id: lane.id,
@@ -150,22 +166,146 @@ function overview(store: TaskStore, config: QuotaFlowConfig) {
   };
 }
 
-function githubData(store: TaskStore, url: URL) {
+function githubData(store: TaskStore, url: URL, repository?: string) {
   const limit = integer(url.searchParams.get('limit'), 'limit', 100, 1, 500);
   return {
     generatedAt: Date.now(),
-    gates: store.listRecentGitHubGates(limit).map((gate) => ({
-      repository: gate.repository,
-      pullNumber: gate.pullNumber,
-      headSha: gate.headSha,
-      policyHash: gate.policyHash,
-      status: gate.evaluation.status,
-      evaluation: gate.evaluation,
-      createdAt: gate.createdAt,
-      updatedAt: gate.updatedAt,
-    })),
-    reruns: store.listRecentGitHubCiReruns(limit),
+    gates: store.listRecentGitHubGates(limit)
+      .filter((gate) => !repository || gate.repository === repository)
+      .map((gate) => ({
+        repository: gate.repository,
+        pullNumber: gate.pullNumber,
+        headSha: gate.headSha,
+        policyHash: gate.policyHash,
+        status: gate.evaluation.status,
+        evaluation: gate.evaluation,
+        createdAt: gate.createdAt,
+        updatedAt: gate.updatedAt,
+      })),
+    reruns: store.listRecentGitHubCiReruns(limit)
+      .filter((rerun) => !repository || rerun.repository === repository),
   };
+}
+
+function repositoryFilter(url: URL): string | undefined {
+  const value = url.searchParams.get('repository')?.trim();
+  if (!value) return undefined;
+  if (value.length > 1024 || /[\x00-\x1f\x7f]/.test(value)) {
+    throw new Error('repository filter is invalid');
+  }
+  return value;
+}
+
+function eventStream(
+  store: TaskStore,
+  config: QuotaFlowConfig,
+  request: Request,
+  url: URL,
+): Response {
+  const repository = repositoryFilter(url);
+  const cursorValue = url.searchParams.get('cursor') ?? request.headers.get('last-event-id');
+  let cursor = cursorValue === null
+    ? store.latestEventId()
+    : Number(cursorValue);
+  if (!Number.isSafeInteger(cursor) || cursor < 0) {
+    return json({ error: 'invalid_cursor' }, 400);
+  }
+  const encoder = new TextEncoder();
+  let closed = false;
+  let timer: ReturnType<typeof setInterval> | null = null;
+  let heartbeat: ReturnType<typeof setInterval> | null = null;
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const send = (event: string, data: unknown, id?: number) => {
+        if (closed) return;
+        const lines = [
+          'retry: 3000',
+          ...(id === undefined ? [] : [`id: ${id}`]),
+          `event: ${event}`,
+          `data: ${JSON.stringify(data)}`,
+          '',
+          '',
+        ];
+        controller.enqueue(encoder.encode(lines.join('\n')));
+      };
+      const stop = (close = false) => {
+        if (closed) return;
+        closed = true;
+        if (timer) clearInterval(timer);
+        if (heartbeat) clearInterval(heartbeat);
+        if (close) {
+          try {
+            controller.close();
+          } catch {
+            // The client may close the stream between the abort signal and cleanup.
+          }
+        }
+      };
+      const flush = () => {
+        if (closed) return;
+        try {
+          const scanned = store.eventsAfter(cursor, 250);
+          if (scanned.length === 0) return;
+          cursor = scanned.at(-1)!.id;
+          const rows = scanned
+            .filter((event) => !repository || repositoryForPath(config, event.taskRepoPath) === repository);
+          if (rows.length === 0) return;
+          const totalIds = rows.map((event) => event.id);
+          const tasks = new Map<string, ReturnType<typeof taskSummary>>();
+          send('events', rows.map((event) => ({
+            id: event.id,
+            taskId: event.taskId,
+            taskTitle: event.taskTitle,
+            taskStatus: event.taskStatus,
+            repository: repositoryForPath(config, event.taskRepoPath),
+            repoPath: event.taskRepoPath,
+            task: (() => {
+              let task = tasks.get(event.taskId);
+              if (!task) {
+                task = taskSummary(store.getTask(event.taskId), config);
+                tasks.set(event.taskId, task);
+              }
+              return task;
+            })(),
+            kind: event.kind,
+            detail: event.detail,
+            createdAt: event.createdAt,
+          })), Math.max(...totalIds));
+        } catch {
+          send('stream_error', { message: 'Event stream unavailable' });
+          stop(true);
+        }
+      };
+
+      send('ready', { cursor, repository: repository ?? null });
+      if (cursorValue !== null) flush();
+      timer = setInterval(flush, 1000);
+      heartbeat = setInterval(() => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`: heartbeat ${Date.now()}\n\n`));
+        } catch {
+          stop();
+        }
+      }, 15_000);
+      request.signal.addEventListener('abort', () => stop(true), { once: true });
+    },
+    cancel() {
+      closed = true;
+      if (timer) clearInterval(timer);
+      if (heartbeat) clearInterval(heartbeat);
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      ...securityHeaders,
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-store',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
 }
 
 function dashboardHandler(store: TaskStore, config: QuotaFlowConfig) {
@@ -178,17 +318,24 @@ function dashboardHandler(store: TaskStore, config: QuotaFlowConfig) {
     if (url.pathname === '/api/health') {
       return json({ status: 'ok', generatedAt: Date.now(), readOnly: true });
     }
-    if (url.pathname === '/api/overview') return json(overview(store, config));
+    if (url.pathname === '/api/overview') {
+      return json(overview(store, config, repositoryFilter(url)));
+    }
+    if (url.pathname === '/api/events/stream') {
+      return eventStream(store, config, request, url);
+    }
     if (url.pathname === '/api/config') return json(sanitizedConfig(config));
     if (url.pathname === '/api/tasks') {
       const status = url.searchParams.get('status');
       if (status && !TASK_STATUSES.includes(status as typeof TASK_STATUSES[number])) {
         return json({ error: 'invalid_status' }, 400);
       }
+      const repository = repositoryFilter(url);
       const items = store.listTasks(status as typeof TASK_STATUSES[number] | undefined)
+        .filter((task) => !repository || repositoryForTask(config, task) === repository)
         .slice()
         .sort((left, right) => right.updatedAt - left.updatedAt)
-        .map(taskSummary);
+        .map((task) => taskSummary(task, config));
       return json({ generatedAt: Date.now(), items });
     }
     const taskMatch = /^\/api\/tasks\/([^/]+)$/.exec(url.pathname);
@@ -211,7 +358,7 @@ function dashboardHandler(store: TaskStore, config: QuotaFlowConfig) {
         handoffNote: task.handoff ? store.handoffForCheckpoint(task.id, task.checkpoint) : null,
       });
     }
-    if (url.pathname === '/api/github') return json(githubData(store, url));
+    if (url.pathname === '/api/github') return json(githubData(store, url, repositoryFilter(url)));
     if (url.pathname === '/api/budgets') {
       return json({
         generatedAt: Date.now(),

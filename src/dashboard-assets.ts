@@ -55,7 +55,13 @@ export const dashboardHtml = `<!doctype html>
           <p id="view-subtitle" class="view-subtitle">任务、门禁和资源状态的统一视图</p>
         </div>
         <div class="live-block">
-          <span class="live-pill"><span aria-hidden="true"></span> Live</span>
+          <label class="project-filter">
+            <span>项目</span>
+            <select id="project-filter">
+              <option value="">全部项目</option>
+            </select>
+          </label>
+          <span class="live-pill" data-state="connecting"><span aria-hidden="true"></span><b id="live-label">Connecting</b></span>
           <button id="refresh-button" class="icon-button" type="button" aria-label="刷新数据" title="刷新数据">↻</button>
           <small id="last-updated">等待数据</small>
         </div>
@@ -309,12 +315,21 @@ h3 { margin-bottom: 5px; font-size: 14px; }
 .view-subtitle { margin-bottom: 0; color: var(--muted); font-size: 13px; }
 .live-block { display: flex; align-items: center; gap: 10px; }
 .live-block small { color: var(--muted); font: 10px/1 var(--mono); white-space: nowrap; }
+.project-filter { display: flex; align-items: center; gap: 7px; color: var(--faint); font: 9px/1 var(--mono); }
+.project-filter select {
+  max-width: 210px; height: 32px; border: 1px solid var(--line); background: var(--bg-raised);
+  color: var(--text); padding: 0 28px 0 9px; font: 10px/1 var(--mono);
+}
 .live-pill {
   display: inline-flex; align-items: center; gap: 7px; padding: 7px 10px;
   border: 1px solid rgba(119,224,181,0.28); color: var(--mint); background: var(--mint-dim);
   font: 10px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.1em;
 }
 .live-pill span { width: 6px; height: 6px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 10px var(--mint); }
+.live-pill b { font-weight: 500; }
+.live-pill[data-state="connecting"] { color: var(--amber); border-color: rgba(240,184,107,0.3); background: rgba(240,184,107,0.08); }
+.live-pill[data-state="offline"] { color: var(--red); border-color: rgba(239,127,120,0.3); background: rgba(239,127,120,0.08); }
+.live-pill[data-state="offline"] span { background: var(--red); box-shadow: 0 0 10px var(--red); }
 .icon-button {
   display: grid; place-items: center; width: 34px; height: 34px;
   border: 1px solid var(--line); background: var(--bg-raised); cursor: pointer;
@@ -444,6 +459,9 @@ h3 { margin-bottom: 5px; font-size: 14px; }
   .sidebar-section, .sidebar-recents, .sidebar-note { display: none; }
   .main { padding: 24px 14px 40px; }
   .topbar { align-items: flex-start; flex-direction: column; }
+  .live-block { width: 100%; flex-wrap: wrap; }
+  .project-filter { width: 100%; }
+  .project-filter select { max-width: none; flex: 1; }
   .metrics, .metrics-compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .panel-heading-wrap { align-items: stretch; flex-direction: column; }
   .task-tools { flex-direction: column; }
@@ -454,13 +472,24 @@ h3 { margin-bottom: 5px; font-size: 14px; }
   *, *::before, *::after { animation-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }`;
 
-export const dashboardJs = `const state = {
+export const dashboardJs = `const storedProject = (() => {
+  try {
+    return localStorage.getItem('quotaflow.dashboard.project') || '';
+  } catch {
+    return '';
+  }
+})();
+
+const state = {
   view: 'overview',
+  project: storedProject,
   overview: null,
   tasks: [],
   github: { gates: [], reruns: [] },
   budgets: { policies: [], lanes: [] },
   config: null,
+  lastEventId: null,
+  eventSource: null,
   error: null,
 };
 
@@ -479,6 +508,35 @@ function element(tag, className, text) {
   if (className) node.className = className;
   if (text !== undefined && text !== null) node.textContent = String(text);
   return node;
+}
+
+function matchesProject(repository) {
+  return !state.project || repository === state.project;
+}
+
+function visibleTasks() {
+  return state.tasks.filter((task) => matchesProject(task.repository));
+}
+
+function visibleGates() {
+  return (state.github.gates || []).filter((gate) => matchesProject(gate.repository));
+}
+
+function visibleReruns() {
+  return (state.github.reruns || []).filter((rerun) => matchesProject(rerun.repository));
+}
+
+function countByStatus(tasks) {
+  return tasks.reduce((counts, task) => {
+    counts[task.status] = (counts[task.status] || 0) + 1;
+    return counts;
+  }, {});
+}
+
+function setLiveState(value) {
+  const pill = $('.live-pill');
+  pill.dataset.state = value;
+  $('#live-label').textContent = value === 'live' ? 'Live' : value === 'offline' ? 'Reconnecting' : 'Connecting';
 }
 
 function formatDate(value) {
@@ -542,14 +600,104 @@ async function refresh() {
     state.github = github;
     state.budgets = budgets;
     state.config = config;
+    state.lastEventId = overview.latestEventId ?? state.lastEventId;
     setError(null);
     renderAll();
+    if (!state.eventSource) connectEventStream();
     $('#last-updated').textContent = '更新于 ' + formatDate(overview.generatedAt);
   } catch (error) {
     setError(error);
   } finally {
     button.disabled = false;
   }
+}
+
+function populateProjectFilter() {
+  const select = $('#project-filter');
+  const projects = new Set([
+    ...(state.config?.repositories || []).map((repository) => repository.repository),
+    ...state.tasks.map((task) => task.repository),
+    ...(state.github.gates || []).map((gate) => gate.repository),
+  ].filter(Boolean));
+  select.replaceChildren();
+  const all = element('option', null, '全部项目');
+  all.value = '';
+  select.append(all);
+  [...projects].sort().forEach((repository) => {
+    const option = element('option', null, repository);
+    option.value = repository;
+    select.append(option);
+  });
+  if (state.project && !projects.has(state.project)) state.project = '';
+  select.value = state.project;
+}
+
+function connectEventStream() {
+  if (state.eventSource) state.eventSource.close();
+  if (!window.EventSource) {
+    setLiveState('offline');
+    return;
+  }
+  const params = new URLSearchParams();
+  if (state.lastEventId !== null) params.set('cursor', String(state.lastEventId));
+  if (state.project) params.set('repository', state.project);
+  const source = new EventSource('/api/events/stream?' + params.toString());
+  state.eventSource = source;
+  setLiveState('connecting');
+  source.addEventListener('open', () => setLiveState('live'));
+  source.addEventListener('ready', (message) => {
+    try {
+      const ready = JSON.parse(message.data);
+      if (Number.isSafeInteger(ready.cursor)) state.lastEventId = ready.cursor;
+      setLiveState('live');
+    } catch {
+      setError('SSE ready message is invalid');
+    }
+  });
+  source.addEventListener('events', (message) => {
+    try {
+      mergeLiveEvents(JSON.parse(message.data));
+    } catch {
+      setError('SSE event payload is invalid');
+    }
+  });
+  source.addEventListener('stream_error', () => setLiveState('offline'));
+  source.addEventListener('error', () => setLiveState('offline'));
+}
+
+function mergeLiveEvents(events) {
+  if (!Array.isArray(events)) throw new Error('Invalid event list');
+  const byTask = new Map(state.tasks.map((task) => [task.id, task]));
+  const recent = state.overview?.recentEvents || [];
+  let changed = false;
+  for (const event of events) {
+    if (!Number.isSafeInteger(event.id) || event.id <= state.lastEventId) continue;
+    state.lastEventId = event.id;
+    if (event.task && matchesProject(event.task.repository)) {
+      byTask.set(event.task.id, event.task);
+      changed = true;
+    }
+    if (matchesProject(event.repository)) {
+      recent.unshift({
+        id: event.id,
+        taskId: event.taskId,
+        taskTitle: event.taskTitle,
+        repository: event.repository,
+        kind: event.kind,
+        detail: event.detail,
+        createdAt: event.createdAt,
+      });
+    }
+  }
+  if (!changed) return;
+  state.tasks = [...byTask.values()];
+  if (state.overview) state.overview.recentEvents = recent
+    .sort((left, right) => right.createdAt - left.createdAt)
+    .slice(0, 40);
+  renderOverview();
+  renderTasks();
+  $('#last-updated').textContent = '实时更新 ' + formatDate(Date.now());
+  setLiveState('live');
 }
 
 function selectView(view) {
@@ -563,6 +711,7 @@ function selectView(view) {
 }
 
 function renderAll() {
+  populateProjectFilter();
   renderOverview();
   renderTasks();
   renderGithub();
@@ -580,19 +729,22 @@ function metricCard(label, value, detail, tone) {
 
 function renderOverview() {
   if (!state.overview) return;
-  const counts = state.overview.tasks.byStatus || {};
+  const tasks = visibleTasks().slice().sort((left, right) => right.updatedAt - left.updatedAt);
+  const counts = countByStatus(tasks);
+  const gates = visibleGates();
+  const reruns = visibleReruns();
   const metrics = $('#metrics');
   metrics.replaceChildren(
     metricCard('Active', counts.running || 0, (counts.cancelling || 0) + ' cancelling', 'mint'),
     metricCard('Waiting', (counts.waiting_quota || 0) + (counts.waiting_dependency || 0) + (counts.waiting_human || 0), 'quota / dependency / human', 'amber'),
-    metricCard('Completed', counts.completed || 0, state.overview.tasks.total + ' total tasks', 'blue'),
+    metricCard('Completed', counts.completed || 0, tasks.length + ' total tasks', 'blue'),
     metricCard('Blocked', (counts.blocked || 0) + (counts.failed || 0), 'blocked or failed', 'red'),
-    metricCard('GitHub', state.overview.github.blockedGates || 0, state.overview.github.reruns + ' rerun claims', 'mint'),
+    metricCard('GitHub', gates.filter((gate) => gate.evaluation?.status === 'blocked').length, reruns.length + ' rerun claims', 'mint'),
   );
 
   const recents = $('#sidebar-recents');
   recents.replaceChildren();
-  (state.overview.recentTasks || []).slice(0, 7).forEach((task) => {
+  tasks.slice(0, 7).forEach((task) => {
     const button = element('button', 'sidebar-recent');
     button.type = 'button';
     button.append(element('span', null, task.title));
@@ -604,13 +756,13 @@ function renderOverview() {
 
   const taskList = $('#overview-task-list');
   taskList.replaceChildren();
-  (state.overview.recentTasks || []).slice(0, 6).forEach((task) => {
+  tasks.slice(0, 6).forEach((task) => {
     const row = element('button', 'task-row');
     row.type = 'button';
     row.dataset.taskId = task.id;
     const copy = element('div');
     copy.append(element('h3', 'task-title', task.title));
-    copy.append(element('p', 'task-subline', task.id + ' · ' + task.repoPath));
+    copy.append(element('p', 'task-subline', task.repository + ' · ' + task.id));
     const end = element('div', 'task-row-end');
     end.append(element('span', 'priority', 'P' + task.priority));
     end.append(statusNode(task.status));
@@ -622,26 +774,31 @@ function renderOverview() {
 
   const stream = $('#event-stream');
   stream.replaceChildren();
-  (state.overview.recentEvents || []).slice(0, 9).forEach((event) => {
-    const item = element('article', 'event-item');
-    item.append(element('span', 'event-mark'));
-    const copy = element('div');
-    copy.append(element('div', 'event-kind', event.kind));
-    copy.append(element('div', 'event-title', event.taskTitle));
-    copy.append(element('div', 'event-time', formatRelative(event.createdAt)));
-    item.append(copy);
-    stream.append(item);
-  });
+  (state.overview.recentEvents || [])
+    .filter((event) => matchesProject(event.repository))
+    .slice(0, 9)
+    .forEach((event) => {
+      const item = element('article', 'event-item');
+      item.append(element('span', 'event-mark'));
+      const copy = element('div');
+      copy.append(element('div', 'event-kind', event.kind));
+      copy.append(element('div', 'event-title', event.taskTitle));
+      copy.append(element('div', 'event-time', formatRelative(event.createdAt)));
+      item.append(copy);
+      stream.append(item);
+    });
   if (!stream.children.length) stream.append(element('div', 'empty-state', '暂无事件'));
 
   const map = $('#execution-map');
   map.replaceChildren();
-  (state.overview.repositories || []).forEach((repository) => {
-    const item = element('div', 'map-item');
-    item.append(element('strong', null, repository.repository));
-    item.append(element('small', null, repository.branchPrefixes.map((prefix) => prefix + '*').join(' · ')));
-    map.append(item);
-  });
+  (state.overview.repositories || [])
+    .filter((repository) => matchesProject(repository.repository))
+    .forEach((repository) => {
+      const item = element('div', 'map-item');
+      item.append(element('strong', null, repository.repository));
+      item.append(element('small', null, repository.branchPrefixes.map((prefix) => prefix + '*').join(' · ')));
+      map.append(item);
+    });
   (state.overview.lanes || []).forEach((lane) => {
     const item = element('div', 'map-item');
     item.append(element('strong', null, lane.id));
@@ -652,21 +809,26 @@ function renderOverview() {
 
 function populateStatusFilter() {
   const select = $('#task-status-filter');
-  if (select.options.length > 1) return;
-  [...new Set(state.tasks.map((task) => task.status))].sort().forEach((status) => {
+  const current = select.value;
+  select.replaceChildren();
+  const all = element('option', null, '全部状态');
+  all.value = '';
+  select.append(all);
+  [...new Set(visibleTasks().map((task) => task.status))].sort().forEach((status) => {
     const option = element('option', null, status);
     option.value = status;
     select.append(option);
   });
+  select.value = [...select.options].some((option) => option.value === current) ? current : '';
 }
 
 function filteredTasks() {
   const search = $('#task-search').value.trim().toLowerCase();
   const status = $('#task-status-filter').value;
-  return state.tasks.filter((task) => {
+  return visibleTasks().filter((task) => {
     if (status && task.status !== status) return false;
     if (!search) return true;
-    return [task.id, task.title, task.repoPath].some((value) => String(value).toLowerCase().includes(search));
+    return [task.id, task.title, task.repository, task.repoPath].some((value) => String(value).toLowerCase().includes(search));
   });
 }
 
@@ -680,7 +842,7 @@ function renderTasks() {
     row.addEventListener('click', () => openTask(task.id));
     const taskCell = element('td');
     taskCell.append(element('span', 'cell-main', task.title));
-    taskCell.append(element('span', 'cell-sub', task.id + ' · ' + task.repoPath));
+    taskCell.append(element('span', 'cell-sub', task.repository + ' · ' + task.id));
     const statusCell = element('td');
     statusCell.append(statusNode(task.status));
     const priorityCell = element('td', 'priority', task.priority);
@@ -701,8 +863,8 @@ function renderTasks() {
 }
 
 function renderGithub() {
-  const gates = state.github.gates || [];
-  const reruns = state.github.reruns || [];
+  const gates = visibleGates();
+  const reruns = visibleReruns();
   const blocked = gates.filter((gate) => gate.evaluation?.status === 'blocked').length;
   $('#github-metrics').replaceChildren(
     metricCard('Gates', gates.length, blocked + ' blocked', blocked ? 'amber' : 'mint'),
@@ -856,16 +1018,27 @@ async function openTask(taskId) {
 $$('.nav-item').forEach((button) => button.addEventListener('click', () => selectView(button.dataset.view)));
 $$('[data-open-view]').forEach((button) => button.addEventListener('click', () => selectView(button.dataset.openView)));
 $('#refresh-button').addEventListener('click', refresh);
+$('#project-filter').addEventListener('change', (event) => {
+  state.project = event.target.value;
+  try {
+    localStorage.setItem('quotaflow.dashboard.project', state.project);
+  } catch {
+    // Local storage is optional in restricted browser contexts.
+  }
+  renderAll();
+  connectEventStream();
+});
 $('#task-search').addEventListener('input', renderTasks);
 $('#task-status-filter').addEventListener('change', renderTasks);
 $('#dialog-close').addEventListener('click', () => $('#task-dialog').close());
 $('#task-dialog').addEventListener('click', (event) => {
   if (event.target === $('#task-dialog')) $('#task-dialog').close();
 });
+window.addEventListener('beforeunload', () => state.eventSource?.close());
 
 const initialView = location.hash.slice(1);
 selectView(viewCopy[initialView] ? initialView : 'overview');
 refresh();
 setInterval(() => {
   if (!document.hidden && !$('#task-dialog').open) refresh();
-}, 10000);`;
+}, 60000);`;

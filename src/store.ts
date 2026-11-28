@@ -114,6 +114,18 @@ type EventRow = {
   created_at: number;
 };
 
+export interface TaskEventRecord extends EventRecord {
+  taskTitle: string;
+  taskStatus: TaskStatus;
+  taskRepoPath: string;
+}
+
+type TaskEventRow = EventRow & {
+  task_title: string;
+  task_status: TaskStatus;
+  task_repo_path: string;
+};
+
 type UsageRow = {
   id: number;
   attempt_id: number;
@@ -500,6 +512,33 @@ export class TaskStore {
 
   events(taskId: string): EventRecord[] {
     return this.db.query<EventRow, [string]>('SELECT * FROM events WHERE task_id = ? ORDER BY id').all(taskId).map(eventFrom);
+  }
+
+  latestEventId(): number {
+    return this.db.query<{ id: number | null }, []>('SELECT max(id) AS id FROM events').get()?.id ?? 0;
+  }
+
+  eventsAfter(afterId: number, limit = 200): TaskEventRecord[] {
+    if (!Number.isInteger(afterId) || afterId < 0) {
+      throw new Error('Event cursor must be a non-negative integer');
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1000) {
+      throw new Error('Event limit must be an integer between 1 and 1000');
+    }
+    return this.db.query<TaskEventRow, [number, number]>(`
+      SELECT events.*, tasks.title AS task_title, tasks.status AS task_status,
+        tasks.repo_path AS task_repo_path
+      FROM events
+      JOIN tasks ON tasks.id = events.task_id
+      WHERE events.id > ?
+      ORDER BY events.id
+      LIMIT ?
+    `).all(afterId, limit).map((row) => ({
+      ...eventFrom(row),
+      taskTitle: row.task_title,
+      taskStatus: row.task_status,
+      taskRepoPath: row.task_repo_path,
+    }));
   }
 
   usage(attemptId: number): AttemptUsageRecord[] {

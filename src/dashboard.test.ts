@@ -23,12 +23,19 @@ function config(): QuotaFlowConfig {
       installationId: 456,
       privateKeyPath: '/tmp/not-exposed.pem',
     },
-    githubProjects: [{
-      repository: 'owner/repo',
-      repoPath: '/tmp/quotaflow-dashboard-repo',
-      branchPrefixes: ['quotaflow/'],
-      maxCiRerunsPerHead: 1,
-    }],
+    githubProjects: [
+      {
+        repository: 'owner/repo',
+        repoPath: '/tmp/quotaflow-dashboard-repo',
+        branchPrefixes: ['quotaflow/'],
+        maxCiRerunsPerHead: 1,
+      },
+      {
+        repository: 'owner/other',
+        repoPath: '/tmp/quotaflow-other-repo',
+        branchPrefixes: ['quotaflow/'],
+      },
+    ],
     budgets: [],
     lanes: [{
       id: 'local',
@@ -79,15 +86,15 @@ test('dashboard serves a read-only local API and security headers', async () => 
     expect(await health.json()).toEqual(expect.objectContaining({ status: 'ok', readOnly: true }));
 
     const overview = await fetch(new URL('/api/overview', server.url));
-    expect(await overview.json()).toMatchObject({
-      tasks: {
-        total: 1,
-        byStatus: { queued: 1 },
-        activeAttempts: 0,
-      },
-      repositories: [{ repository: 'owner/repo', branchPrefixes: ['quotaflow/'] }],
+    const overviewBody = await overview.json();
+    expect(overviewBody).toMatchObject({
+      tasks: { total: 1, activeAttempts: 0 },
+      latestEventId: 1,
       recentTasks: [{ id: task.id, title: task.title, status: 'queued' }],
     });
+    expect(overviewBody.tasks.byStatus.queued).toBe(1);
+    expect(overviewBody.repositories.map((repository: { repository: string }) => repository.repository))
+      .toEqual(['owner/repo', 'owner/other']);
 
     const tasks = await fetch(new URL('/api/tasks?status=queued', server.url));
     expect(await tasks.json()).toMatchObject({
@@ -101,6 +108,48 @@ test('dashboard serves a read-only local API and security headers', async () => 
       events: [{ kind: 'task_created' }],
       usage: [],
     });
+
+    const other = store.createTask({
+      id: 'other-task',
+      title: 'Inspect another repository',
+      prompt: 'Other repository fixture',
+      repoPath: '/tmp/quotaflow-other-repo',
+      workspacePath: '/tmp/quotaflow-dashboard-worktrees/other-task',
+      now: 200,
+    });
+
+    const filteredTasks = await fetch(new URL('/api/tasks?repository=owner%2Frepo', server.url));
+    const filteredTaskBody = await filteredTasks.json();
+    expect(filteredTaskBody.items.map((item: { id: string }) => item.id)).toEqual([task.id]);
+    expect(filteredTaskBody.items[0].repository).toBe('owner/repo');
+
+    const filteredOverview = await fetch(new URL('/api/overview?repository=owner%2Fother', server.url));
+    expect(await filteredOverview.json()).toMatchObject({
+      tasks: { total: 1, byStatus: { queued: 1 } },
+      recentTasks: [{ id: other.id, repository: 'owner/other' }],
+    });
+
+    const eventController = new AbortController();
+    const eventResponse = await fetch(
+      new URL('/api/events/stream?cursor=0&repository=owner%2Frepo', server.url),
+      { signal: eventController.signal },
+    );
+    expect(eventResponse.headers.get('content-type')).toContain('text/event-stream');
+    const reader = eventResponse.body!.getReader();
+    const decoder = new TextDecoder();
+    let eventText = '';
+    while (!eventText.includes('event: events')) {
+      const timeout = Bun.sleep(2_000).then(() => {
+        throw new Error('Timed out waiting for SSE events');
+      });
+      const chunk = await Promise.race([reader.read(), timeout]);
+      if (chunk.done) break;
+      eventText += decoder.decode(chunk.value, { stream: true });
+    }
+    await reader.cancel();
+    eventController.abort();
+    expect(eventText).toContain('"repository":"owner/repo"');
+    expect(eventText).not.toContain('"repository":"owner/other"');
 
     const configResponse = await fetch(new URL('/api/config', server.url));
     const configText = await configResponse.text();
