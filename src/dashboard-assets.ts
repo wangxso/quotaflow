@@ -43,7 +43,7 @@ export const dashboardHtml = `<!doctype html>
         <span class="local-dot" aria-hidden="true"></span>
         <div>
           <strong>Local control</strong>
-          <small>Guarded start, cancel and retry</small>
+          <small>Guarded task and GitHub actions</small>
         </div>
       </div>
     </aside>
@@ -184,6 +184,7 @@ export const dashboardHtml = `<!doctype html>
                     <th>状态</th>
                     <th>原因</th>
                     <th>更新时间</th>
+                    <th>操作</th>
                   </tr>
                 </thead>
                 <tbody id="gate-table-body"></tbody>
@@ -248,6 +249,23 @@ export const dashboardHtml = `<!doctype html>
       <div class="action-dialog-buttons">
         <button id="action-dialog-cancel" class="secondary-button" type="button">取消</button>
         <button id="action-dialog-confirm" class="danger-button" type="button">确认</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="github-action-dialog" class="action-dialog" aria-labelledby="github-action-title">
+    <form method="dialog" class="action-dialog-shell">
+      <h2 id="github-action-title">确认 GitHub 操作</h2>
+      <p id="github-action-message"></p>
+      <code id="github-action-target" class="github-action-target"></code>
+      <label class="github-confirm-field">
+        <span>输入完整目标以确认</span>
+        <input id="github-action-input" type="text" autocomplete="off" spellcheck="false">
+      </label>
+      <div id="github-action-error" class="action-dialog-error" hidden></div>
+      <div class="action-dialog-buttons">
+        <button id="github-action-cancel" class="secondary-button" type="button">取消</button>
+        <button id="github-action-confirm" class="danger-button" type="button">确认</button>
       </div>
     </form>
   </dialog>
@@ -450,6 +468,9 @@ h3 { margin-bottom: 5px; font-size: 14px; }
 .cell-main { display: block; max-width: 400px; color: var(--text); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cell-sub { display: block; margin-top: 4px; color: var(--faint); font: 9px/1.3 var(--mono); }
 .mono { font-family: var(--mono); }
+.faint { color: var(--faint); }
+.gate-actions { white-space: nowrap; }
+.gate-actions .text-button + .text-button { margin-left: 10px; }
 .empty-state { padding: 28px 20px; color: var(--faint); text-align: center; font: 11px/1.5 var(--mono); }
 .budget-list { display: grid; }
 .budget-row { padding: 17px 20px; border-bottom: 1px solid var(--line-soft); }
@@ -509,6 +530,16 @@ h3 { margin-bottom: 5px; font-size: 14px; }
 .action-dialog-shell { padding: 22px; }
 .action-dialog-shell h2 { margin-bottom: 10px; }
 .action-dialog-shell p { color: var(--muted); font-size: 12px; line-height: 1.6; }
+.github-action-target {
+  display: block; margin-top: 12px; padding: 9px 10px; overflow-wrap: anywhere;
+  border: 1px solid var(--line); background: #080d10; color: var(--text); font: 10px/1.5 var(--mono);
+}
+.github-confirm-field { display: grid; gap: 7px; margin-top: 12px; color: var(--faint); font: 9px/1.3 var(--mono); }
+.github-confirm-field input {
+  width: 100%; min-height: 38px; padding: 0 10px; border: 1px solid var(--line);
+  background: var(--bg-raised); color: var(--text); font: 11px/1 var(--mono);
+}
+.github-confirm-field input:focus { border-color: var(--mint); outline: none; }
 .action-dialog-error { margin-bottom: 12px; padding: 9px 10px; border: 1px solid rgba(239,127,120,0.35); color: var(--red); font-size: 11px; }
 .action-dialog-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 @media (max-width: 1100px) {
@@ -567,6 +598,7 @@ const state = {
   lastEventId: null,
   eventSource: null,
   pendingAction: null,
+  pendingGithubAction: null,
   error: null,
 };
 
@@ -773,6 +805,90 @@ async function executePendingAction() {
     if (taskDialogOpen) openTask(pending.task.id);
   } catch (error) {
     errorBox.textContent = error instanceof Error ? error.message : '操作失败';
+    errorBox.hidden = false;
+  } finally {
+    confirm.disabled = false;
+    cancel.disabled = false;
+  }
+}
+
+function githubConfirmTarget(gate) {
+  return gate.repository + '#' + gate.pullNumber + '@' + gate.headSha;
+}
+
+function showGithubActionConfirmation(gate, action) {
+  const target = githubConfirmTarget(gate);
+  state.pendingGithubAction = {
+    gate,
+    action,
+    target,
+    requestId: requestId(),
+  };
+  const approve = action === 'approve';
+  $('#github-action-title').textContent = approve ? '提交 Bot 批准' : '合并 Pull Request';
+  $('#github-action-message').textContent = approve
+    ? 'GitHub App 将为当前 HEAD 提交正式批准。执行前会重新读取 PR，HEAD 或 PR 状态变化会中止操作。'
+    : '将使用 merge commit 合并当前 HEAD。执行前会重新读取 PR、CI、审查和 mergeable 状态，任一条件变化都会中止操作。';
+  $('#github-action-target').textContent = target;
+  $('#github-action-input').value = '';
+  $('#github-action-input').placeholder = target;
+  $('#github-action-error').hidden = true;
+  $('#github-action-error').textContent = '';
+  $('#github-action-confirm').textContent = approve ? '确认批准' : '确认合并';
+  $('#github-action-confirm').className = approve ? 'primary-button' : 'danger-button';
+  $('#github-action-confirm').disabled = false;
+  $('#github-action-cancel').disabled = false;
+  $('#github-action-dialog').showModal();
+  $('#github-action-input').focus();
+}
+
+async function executeGithubAction() {
+  const pending = state.pendingGithubAction;
+  const session = state.session;
+  const input = $('#github-action-input');
+  const errorBox = $('#github-action-error');
+  if (!pending || !session) {
+    errorBox.textContent = 'Dashboard 会话不可用，请刷新后重试';
+    errorBox.hidden = false;
+    return;
+  }
+  if (input.value !== pending.target) {
+    errorBox.textContent = '确认目标不匹配';
+    errorBox.hidden = false;
+    return;
+  }
+  const confirm = $('#github-action-confirm');
+  const cancel = $('#github-action-cancel');
+  confirm.disabled = true;
+  cancel.disabled = true;
+  errorBox.hidden = true;
+  try {
+    const response = await fetch('/api/github/actions', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'content-type': 'application/json',
+        'x-quotaflow-csrf': session.csrfToken,
+      },
+      body: JSON.stringify({
+        action: pending.action,
+        repository: pending.gate.repository,
+        pullNumber: pending.gate.pullNumber,
+        expectedHeadSha: pending.gate.headSha,
+        confirmTarget: pending.target,
+        requestId: pending.requestId,
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.message || body.error || 'GitHub 操作失败');
+    if (body.outcome?.status === 'failed') {
+      throw new Error(body.outcome.error || 'GitHub 操作失败');
+    }
+    $('#github-action-dialog').close();
+    state.pendingGithubAction = null;
+    await refresh();
+  } catch (error) {
+    errorBox.textContent = error instanceof Error ? error.message : 'GitHub 操作失败';
     errorBox.hidden = false;
   } finally {
     confirm.disabled = false;
@@ -1099,14 +1215,38 @@ function renderGithub() {
   body.replaceChildren();
   gates.forEach((gate) => {
     const row = element('tr');
+    const actions = element('td', 'gate-actions');
+    const writesEnabled = state.session?.githubRepositories?.includes(gate.repository);
     row.append(
       element('td', 'mono', '#' + gate.pullNumber),
       element('td', 'mono', shortSha(gate.headSha)),
       element('td', null, ''),
       element('td', null, (gate.evaluation?.reasons || []).map((reason) => reason.code).join(', ') || 'all checks passed'),
       element('td', 'mono', formatRelative(gate.updatedAt)),
+      actions,
     );
     row.children[2].append(statusNode(gate.evaluation?.status === 'ready_for_human_merge' ? 'ready_for_human_merge' : 'blocked'));
+    if (
+      reviewStatus(gate) === 'missing'
+      && state.session?.githubActions?.includes('approve')
+      && writesEnabled
+    ) {
+      const approve = element('button', 'text-button', 'Bot 批准');
+      approve.type = 'button';
+      approve.addEventListener('click', () => showGithubActionConfirmation(gate, 'approve'));
+      actions.append(approve);
+    }
+    if (
+      gate.evaluation?.status === 'ready_for_human_merge'
+      && state.session?.githubActions?.includes('merge')
+      && writesEnabled
+    ) {
+      const merge = element('button', 'text-button', '合并');
+      merge.type = 'button';
+      merge.addEventListener('click', () => showGithubActionConfirmation(gate, 'merge'));
+      actions.append(merge);
+    }
+    if (!actions.children.length) actions.append(element('span', 'faint', '—'));
     body.append(row);
   });
   $('#gate-empty').hidden = gates.length > 0;
@@ -1369,6 +1509,23 @@ $('#action-dialog-cancel').addEventListener('click', () => {
 $('#action-dialog-confirm').addEventListener('click', executePendingAction);
 $('#action-dialog').addEventListener('close', () => {
   if (!$('#action-dialog-confirm').disabled) state.pendingAction = null;
+});
+$('#github-action-cancel').addEventListener('click', () => {
+  state.pendingGithubAction = null;
+  $('#github-action-dialog').close();
+});
+$('#github-action-confirm').addEventListener('click', executeGithubAction);
+$('#github-action-input').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    executeGithubAction();
+  }
+});
+$('#github-action-dialog').addEventListener('close', () => {
+  if (!$('#github-action-confirm').disabled) state.pendingGithubAction = null;
+});
+$('#github-action-dialog').addEventListener('cancel', (event) => {
+  if ($('#github-action-confirm').disabled) event.preventDefault();
 });
 window.addEventListener('beforeunload', () => state.eventSource?.close());
 

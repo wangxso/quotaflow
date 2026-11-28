@@ -7,6 +7,11 @@ import {
   dashboardWorkerRuns,
   readDashboardWorkerLog,
 } from './dashboard-worker-logs';
+import {
+  DashboardGitHubWriteError,
+  type DashboardGitHubActionInput,
+  type DashboardGitHubActionResult,
+} from './github-dashboard-actions';
 
 export interface DashboardServerOptions {
   host?: string;
@@ -14,6 +19,7 @@ export interface DashboardServerOptions {
   sessionTtlMs?: number;
   workerStarter?: DashboardWorkerStarter;
   workerLogDirectory?: string;
+  githubActionHandler?: DashboardGitHubActionHandler;
 }
 
 export interface DashboardWorkerStart {
@@ -25,6 +31,10 @@ export type DashboardWorkerStarter = (input: {
   taskId: string;
   requestId: string;
 }) => Promise<DashboardWorkerStart> | DashboardWorkerStart;
+
+export type DashboardGitHubActionHandler = (
+  input: DashboardGitHubActionInput,
+) => Promise<DashboardGitHubActionResult>;
 
 const securityHeaders = {
   'Content-Security-Policy':
@@ -405,6 +415,8 @@ function sessionResponse(
   request: Request,
   sessions: DashboardSessions,
   actions: string[],
+  githubActions: string[],
+  githubRepositories: string[],
 ): Response {
   const currentId = cookies(request).get(sessionCookie) ?? null;
   let id = currentId;
@@ -429,6 +441,8 @@ function sessionResponse(
     expiresAt: session.expiresAt,
     actor: 'local-dashboard',
     actions,
+    githubActions,
+    githubRepositories,
   }, 200, setCookie);
 }
 
@@ -548,16 +562,101 @@ async function dashboardTaskAction(
   }
 }
 
+async function dashboardGitHubAction(
+  request: Request,
+  url: URL,
+  sessions: DashboardSessions,
+  handler: DashboardGitHubActionHandler | undefined,
+): Promise<Response> {
+  if (request.headers.get('origin') !== url.origin) return json({ error: 'origin_rejected' }, 403);
+  const session = sessions.get(cookies(request).get(sessionCookie) ?? null);
+  if (!session) return json({ error: 'session_required' }, 401);
+  const csrf = request.headers.get('x-quotaflow-csrf');
+  if (!csrf || !sameSecret(session.csrfToken, csrf)) return json({ error: 'csrf_rejected' }, 403);
+  if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) {
+    return json({ error: 'content_type_required' }, 415);
+  }
+  const bodyText = await request.text();
+  if (bodyText.length > 4096) return json({ error: 'payload_too_large' }, 413);
+  let body: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(bodyText) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
+    body = parsed as Record<string, unknown>;
+  } catch {
+    return json({ error: 'invalid_json' }, 400);
+  }
+  if (!handler) return json({ error: 'github_action_unavailable' }, 503);
+  const action = body.action;
+  if (action !== 'approve' && action !== 'merge') {
+    return json({ error: 'invalid_action' }, 400);
+  }
+  if (
+    typeof body.repository !== 'string'
+    || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(body.repository)
+  ) {
+    return json({ error: 'invalid_repository' }, 400);
+  }
+  const repository = body.repository.toLowerCase();
+  if (
+    typeof body.pullNumber !== 'number'
+    || !Number.isInteger(body.pullNumber)
+    || body.pullNumber <= 0
+  ) {
+    return json({ error: 'invalid_pull_number' }, 400);
+  }
+  if (typeof body.expectedHeadSha !== 'string' || !/^[0-9a-f]{40}$/i.test(body.expectedHeadSha)) {
+    return json({ error: 'invalid_head_sha' }, 400);
+  }
+  const expectedHeadSha = body.expectedHeadSha.toLowerCase();
+  if (typeof body.requestId !== 'string' || !dashboardRequestIdPattern.test(body.requestId)) {
+    return json({ error: 'invalid_request_id' }, 400);
+  }
+  const confirmTarget = `${repository}#${body.pullNumber}@${expectedHeadSha}`;
+  if (body.confirmTarget !== confirmTarget) {
+    return json({ error: 'confirmation_rejected', expected: confirmTarget }, 403);
+  }
+  try {
+    const result = await handler({
+      action,
+      repository,
+      pullNumber: body.pullNumber,
+      expectedHeadSha,
+      requestId: body.requestId,
+      actor: 'local-dashboard',
+    });
+    return json(result, result.status === 'accepted' ? 202 : 200);
+  } catch (error) {
+    if (error instanceof DashboardGitHubWriteError) {
+      const status = error.status >= 400 && error.status <= 599 ? error.status : 409;
+      return json({
+        error: error.code,
+        message: error.message,
+        ...(error.httpStatus === null ? {} : { githubStatus: error.httpStatus }),
+      }, status);
+    }
+    return json({ error: 'github_action_failed' }, 500);
+  }
+}
+
 function dashboardHandler(
   store: TaskStore,
   config: QuotaFlowConfig,
   sessions: DashboardSessions,
   workerStarter: DashboardWorkerStarter | undefined,
   workerLogDirectory: string | undefined,
+  githubActionHandler: DashboardGitHubActionHandler | undefined,
 ) {
   const writeActions = ['cancel', 'retry', ...(workerStarter ? ['start'] : [])];
+  const githubActions = githubActionHandler ? ['approve', 'merge'] : [];
+  const githubRepositories = githubActionHandler
+    ? (config.githubProjects ?? []).map((project) => project.repository.toLowerCase()).sort()
+    : [];
   const route = async function route(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    if (request.method === 'POST' && url.pathname === '/api/github/actions') {
+      return dashboardGitHubAction(request, url, sessions, githubActionHandler);
+    }
     if (request.method === 'POST' && url.pathname.startsWith('/api/tasks/')) {
       return dashboardTaskAction(store, config, request, url, sessions, workerStarter);
     }
@@ -571,9 +670,13 @@ function dashboardHandler(
         generatedAt: Date.now(),
         readOnly: false,
         writeActions,
+        githubActions,
+        githubRepositories,
       });
     }
-    if (url.pathname === '/api/session') return sessionResponse(request, sessions, writeActions);
+    if (url.pathname === '/api/session') {
+      return sessionResponse(request, sessions, writeActions, githubActions, githubRepositories);
+    }
     if (url.pathname === '/api/overview') {
       return json(overview(store, config, repositoryFilter(url)));
     }
@@ -698,6 +801,7 @@ export function startDashboardServer(
       sessions,
       options.workerStarter,
       options.workerLogDirectory,
+      options.githubActionHandler,
     ),
   });
 }

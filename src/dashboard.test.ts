@@ -59,10 +59,36 @@ test('dashboard serves a guarded local API, SSE and combined filters', async () 
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-dashboard-'));
   const workerLogDirectory = join(root, 'dashboard-workers');
   const workerStarts: string[] = [];
+  const githubActions: string[] = [];
   const server = startDashboardServer(store, config(), {
     host: '127.0.0.1',
     port: 0,
     workerLogDirectory,
+    githubActionHandler: async (input) => {
+      githubActions.push(`${input.action}:${input.repository}#${input.pullNumber}@${input.expectedHeadSha}`);
+      return {
+        status: 'accepted',
+        action: input.action,
+        repository: input.repository,
+        pullNumber: input.pullNumber,
+        requestId: input.requestId,
+        headSha: input.expectedHeadSha,
+        outcome: {
+          status: 'succeeded',
+          action: input.action,
+          actor: input.actor,
+          requestId: input.requestId,
+          headSha: input.expectedHeadSha,
+          httpStatus: 201,
+          completedAt: 500,
+          result: { reviewId: 9001, reviewState: 'APPROVED' },
+          error: null,
+        },
+        gate: null,
+        reviewId: 9001,
+        reviewState: 'APPROVED',
+      };
+    },
     workerStarter: ({ taskId, requestId }) => {
       workerStarts.push(`${taskId}:${requestId}`);
       return { pid: 4242, exited: Promise.resolve(0) };
@@ -88,6 +114,7 @@ test('dashboard serves a guarded local API, SSE and combined filters', async () 
     expect(pageHtml).toContain('id="time-filter"');
     expect(pageHtml).toContain('id="task-lane-filter"');
     expect(pageHtml).toContain('id="review-filter"');
+    expect(pageHtml).toContain('id="github-action-dialog"');
 
     const stylesheet = await fetch(new URL('/assets/app.css', server.url));
     expect(stylesheet.headers.get('content-type')).toContain('text/css');
@@ -102,6 +129,7 @@ test('dashboard serves a guarded local API, SSE and combined filters', async () 
     expect(scriptText).toContain('quotaflow.dashboard.lane');
     expect(scriptText).toContain('quotaflow.dashboard.review');
     expect(scriptText).toContain("api('/api/github?limit=500')");
+    expect(scriptText).toContain("showGithubActionConfirmation(gate, 'approve')");
     expect(scriptText).not.toContain('innerHTML');
     expect(() => new Function(scriptText)).not.toThrow();
 
@@ -110,6 +138,8 @@ test('dashboard serves a guarded local API, SSE and combined filters', async () 
       status: 'ok',
       readOnly: false,
       writeActions: ['cancel', 'retry', 'start'],
+      githubActions: ['approve', 'merge'],
+      githubRepositories: ['owner/other', 'owner/repo'],
     }));
 
     const overview = await fetch(new URL('/api/overview', server.url));
@@ -202,6 +232,9 @@ test('dashboard serves a guarded local API, SSE and combined filters', async () 
     const session = await sessionResponse.json() as { csrfToken: string };
     expect(session.csrfToken).toHaveLength(64);
     expect((session as { actions: string[] }).actions).toEqual(['cancel', 'retry', 'start']);
+    expect((session as { githubActions: string[] }).githubActions).toEqual(['approve', 'merge']);
+    expect((session as { githubRepositories: string[] }).githubRepositories)
+      .toEqual(['owner/other', 'owner/repo']);
     const cookie = sessionCookie!.split(';')[0]!;
     const action = async (
       taskId: string,
@@ -246,6 +279,67 @@ test('dashboard serves a guarded local API, SSE and combined filters', async () 
     const badConfirmation = await action(task.id, 'request-bad-confirm', { confirmTaskId: 'other-task' });
     expect(badConfirmation.status).toBe(403);
     expect(await badConfirmation.json()).toEqual({ error: 'confirmation_rejected' });
+
+    const githubBody = {
+      action: 'approve',
+      repository: 'owner/repo',
+      pullNumber: 141,
+      expectedHeadSha: 'abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48',
+      confirmTarget: 'owner/repo#141@abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48',
+      requestId: 'request-github-approve-1',
+    };
+    const githubUnauthorized = await fetch(new URL('/api/github/actions', server.url), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: server.url.origin,
+      },
+      body: JSON.stringify(githubBody),
+    });
+    expect(githubUnauthorized.status).toBe(401);
+    const githubBadCsrf = await fetch(new URL('/api/github/actions', server.url), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: server.url.origin,
+        cookie,
+        'x-quotaflow-csrf': 'b'.repeat(64),
+      },
+      body: JSON.stringify(githubBody),
+    });
+    expect(githubBadCsrf.status).toBe(403);
+    const githubAction = await fetch(new URL('/api/github/actions', server.url), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: server.url.origin,
+        cookie,
+        'x-quotaflow-csrf': session.csrfToken,
+      },
+      body: JSON.stringify(githubBody),
+    });
+    expect(githubAction.status).toBe(202);
+    expect(await githubAction.json()).toMatchObject({
+      status: 'accepted',
+      action: 'approve',
+      reviewId: 9001,
+      outcome: { status: 'succeeded' },
+    });
+    expect(githubActions).toEqual([
+      'approve:owner/repo#141@abc4c5b618ae5a0b0d0e3f5790f44d69be2bff48',
+    ]);
+    const badGithubConfirmation = await fetch(new URL('/api/github/actions', server.url), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: server.url.origin,
+        cookie,
+        'x-quotaflow-csrf': session.csrfToken,
+      },
+      body: JSON.stringify({ ...githubBody, confirmTarget: 'owner/repo#141@wrong' }),
+    });
+    expect(badGithubConfirmation.status).toBe(403);
+    expect(await badGithubConfirmation.json()).toMatchObject({ error: 'confirmation_rejected' });
 
     const cancelled = await action(task.id, 'request-cancel-1');
     expect(cancelled.status).toBe(202);

@@ -30,6 +30,10 @@ import { startGitHubWebhookServer } from './github-webhook-server';
 import { materializeGitHubWebhookActions } from './github-webhook-actions';
 import { materializeGitHubActions } from './github-materialize';
 import { startDashboardServer } from './dashboard';
+import {
+  DashboardGitHubWriteError,
+  executeDashboardGitHubAction,
+} from './github-dashboard-actions';
 
 const usage = `
 quotaflow config validate [--config <file>]
@@ -246,10 +250,43 @@ async function main() {
       const absoluteConfigPath = resolve(configPath);
       const cliEntrypoint = fileURLToPath(import.meta.url);
       const workerLogDirectory = join(dirname(config.database), 'dashboard-workers');
+      const githubWritesEnabled = Boolean(
+        githubAppTokens
+        && config.githubApproval?.allowBotApprovals
+        && (config.githubProjects?.length ?? 0) > 0,
+      );
       const server = startDashboardServer(store, config, {
         host,
         port,
         workerLogDirectory,
+        ...(githubWritesEnabled ? {
+          githubActionHandler: async (input) => {
+            const project = config.githubProjects?.find((candidate) =>
+              candidate.repository.toLowerCase() === input.repository);
+            if (!project) {
+              throw new DashboardGitHubWriteError(
+                'repository_not_configured',
+                `GitHub writes are not configured for ${input.repository}`,
+                403,
+              );
+            }
+            const token = await githubAppTokens!.getToken();
+            return executeDashboardGitHubAction(input, {
+              store,
+              token,
+              ...(config.githubApp?.apiUrl ? { apiUrl: config.githubApp.apiUrl } : {}),
+              policy: {
+                ...(config.githubWebhook?.requiredChecks
+                  ? { requiredChecks: config.githubWebhook.requiredChecks }
+                  : {}),
+                requiredApprovals: 1,
+                allowBotApprovals: true,
+              },
+              allowedBranchPrefixes: project.branchPrefixes,
+              allowForks: project.allowForks ?? false,
+            });
+          },
+        } : {}),
         workerStarter: async ({ taskId, requestId }) => {
           mkdirSync(workerLogDirectory, { recursive: true });
           const logFd = openSync(join(workerLogDirectory, `${requestId}.log`), 'a', 0o600);

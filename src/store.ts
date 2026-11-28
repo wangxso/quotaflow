@@ -82,6 +82,36 @@ export interface DashboardWorkerEventInput {
   now?: number;
 }
 
+export type DashboardGitHubActionKind = 'approve' | 'merge';
+
+export interface DashboardGitHubActionAuditInput {
+  action: DashboardGitHubActionKind;
+  actor: string;
+  repository: string;
+  pullNumber: number;
+  headSha: string;
+  requestId: string;
+  now?: number;
+}
+
+export interface DashboardGitHubActionOutcome {
+  status: 'running' | 'succeeded' | 'failed';
+  action: DashboardGitHubActionKind;
+  actor: string;
+  requestId: string;
+  headSha: string;
+  httpStatus: number | null;
+  completedAt: number | null;
+  result: Record<string, unknown> | null;
+  error: string | null;
+}
+
+export interface DashboardGitHubActionClaim {
+  record: GitHubDeliveryRecord;
+  outcome: DashboardGitHubActionOutcome | null;
+  replayed: boolean;
+}
+
 interface PreparedTaskInput {
   id: string;
   title: string;
@@ -1303,6 +1333,80 @@ export class TaskStore {
       error: input.error?.slice(0, 500) ?? null,
       now,
     }, now);
+  }
+
+  claimDashboardGitHubAction(input: DashboardGitHubActionAuditInput): DashboardGitHubActionClaim {
+    const now = input.now ?? Date.now();
+    const deliveryId = `dashboard-action:${input.requestId}`;
+    const eventKey = hashGitHubPayload(['dashboard-action', input.requestId]);
+    const payloadHash = hashGitHubPayload({
+      action: input.action,
+      actor: input.actor,
+      repository: input.repository,
+      pullNumber: input.pullNumber,
+      headSha: input.headSha,
+      requestId: input.requestId,
+    });
+    return this.db.transaction(() => {
+      const delivery = this.#recordGitHubDelivery({
+        deliveryId,
+        eventType: `dashboard_${input.action}`,
+        eventKey,
+        repository: input.repository.toLowerCase(),
+        pullNumber: input.pullNumber,
+        headSha: input.headSha,
+        payloadHash,
+        now,
+      });
+      const replayed = delivery.duplicateDelivery || delivery.duplicateEvent;
+      const outcome = delivery.outcome
+        ? JSON.parse(delivery.outcome) as DashboardGitHubActionOutcome
+        : null;
+      if (replayed) return { record: delivery, outcome, replayed: true };
+
+      const running: DashboardGitHubActionOutcome = {
+        status: 'running',
+        action: input.action,
+        actor: input.actor,
+        requestId: input.requestId,
+        headSha: input.headSha,
+        httpStatus: null,
+        completedAt: null,
+        result: null,
+        error: null,
+      };
+      this.db.run(
+        'UPDATE github_deliveries SET outcome = ? WHERE delivery_id = ?',
+        [JSON.stringify(running), deliveryId],
+      );
+      return {
+        record: { ...delivery, outcome: JSON.stringify(running) },
+        outcome: running,
+        replayed: false,
+      };
+    }).immediate();
+  }
+
+  completeDashboardGitHubAction(input: {
+    requestId: string;
+    outcome: DashboardGitHubActionOutcome;
+  }): void {
+    const deliveryId = `dashboard-action:${input.requestId}`;
+    const row = this.db.query<GitHubDeliveryRow, [string]>(
+      'SELECT * FROM github_deliveries WHERE delivery_id = ?',
+    ).get(deliveryId);
+    if (!row) throw new Error(`Unknown Dashboard GitHub action ${input.requestId}`);
+    if (
+      input.outcome.requestId !== input.requestId
+      || row.head_sha !== input.outcome.headSha
+      || row.event_type !== `dashboard_${input.outcome.action}`
+    ) {
+      throw new Error(`Dashboard GitHub action ${input.requestId} was reused with different content`);
+    }
+    this.db.run(
+      'UPDATE github_deliveries SET outcome = ? WHERE delivery_id = ?',
+      [JSON.stringify(input.outcome), deliveryId],
+    );
   }
 
   #retry(taskId: string, now: number): Task {
