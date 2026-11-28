@@ -787,7 +787,7 @@ async function refresh() {
     const [overview, tasks, github, budgets, config, session] = await Promise.all([
       api('/api/overview'),
       api('/api/tasks'),
-      api('/api/github'),
+      api('/api/github?limit=500'),
       api('/api/budgets'),
       api('/api/config'),
       api('/api/session'),

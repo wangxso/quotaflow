@@ -101,6 +101,7 @@ test('dashboard serves a guarded local API, SSE and combined filters', async () 
     expect(scriptText).toContain('quotaflow.dashboard.time');
     expect(scriptText).toContain('quotaflow.dashboard.lane');
     expect(scriptText).toContain('quotaflow.dashboard.review');
+    expect(scriptText).toContain("api('/api/github?limit=500')");
     expect(scriptText).not.toContain('innerHTML');
     expect(() => new Function(scriptText)).not.toThrow();
 
