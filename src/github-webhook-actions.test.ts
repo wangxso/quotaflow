@@ -168,6 +168,14 @@ test('a lost HTTP response followed by the same delivery creates one task', asyn
   const webhookSecret = ['lost', 'response', 'secret'].join('-');
   try {
     const value = snapshot(baseSha, headSha);
+    value.checks = [{
+      name: 'Check and build debug APK',
+      status: 'completed',
+      conclusion: 'failure',
+      headSha,
+      startedAt: '2026-11-28T01:00:00Z',
+      completedAt: '2026-11-28T01:01:00Z',
+    }];
     const rawBody = Buffer.from(JSON.stringify({
       action: 'synchronize',
       repository: { full_name: value.repository },

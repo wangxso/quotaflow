@@ -297,11 +297,14 @@ export function evaluateGitHubPull(
         required: true, passed: false, detailsUrl: null });
       continue;
     }
-    const passed = check.status.toLowerCase() === 'completed' && check.conclusion?.toLowerCase() === 'success';
-    if (!passed) reasons.push({
-      code: 'ci_not_success',
-      message: `${name} is ${check.status}/${check.conclusion ?? 'unknown'} on ${snapshot.headSha}`,
-    });
+    const completed = check.status.toLowerCase() === 'completed';
+    const passed = completed && check.conclusion?.toLowerCase() === 'success';
+    if (!passed) {
+      reasons.push({
+        code: completed ? 'ci_not_success' : 'ci_pending',
+        message: `${name} is ${check.status}/${check.conclusion ?? 'unknown'} on ${snapshot.headSha}`,
+      });
+    }
     checkResults.push({
       name,
       status: check.status,
@@ -401,16 +404,20 @@ export function planGitHubActions(gate: GitHubGateResult): GitHubActionPlan {
         100, true, reasonCodes, null)],
     };
   }
-  const hasCiFailure = codes.has('ci_not_success') || codes.has('ci_missing');
+  const hasCiFailure = codes.has('ci_not_success');
+  const hasCiWaiting = codes.has('ci_pending') || codes.has('ci_missing');
+  const shouldCreateCiFix = hasCiFailure && !hasCiWaiting;
   const hasChangesRequested = codes.has('changes_requested');
-  if (hasCiFailure || hasChangesRequested) {
-    const checkSummary = hasCiFailure
+  if (shouldCreateCiFix || hasChangesRequested) {
+    const checkSummary = shouldCreateCiFix
       ? failedChecks.length
         ? failedChecks.map((check) => `${check.name}: ${check.status}/${check.conclusion ?? 'unknown'}`).join('; ')
         : 'required current-head CI evidence is missing'
-      : 'current-head CI is passing';
+      : hasCiWaiting
+        ? 'current-head CI is still pending'
+        : 'current-head CI is passing';
     const reasonCodes = [...codes].filter((code) =>
-      code === 'ci_not_success' || code === 'ci_missing' || code === 'changes_requested');
+      code === 'changes_requested' || (shouldCreateCiFix && code === 'ci_not_success'));
     actions.push(plannedAction(
       gate,
       hasChangesRequested ? 'review_fix' : 'ci_fix',
@@ -424,7 +431,19 @@ export function planGitHubActions(gate: GitHubGateResult): GitHubActionPlan {
     ));
   }
   const immediateFix = actions.length > 0;
-  if (!immediateFix && codes.has('independent_review_missing')) {
+  if (hasCiWaiting && !hasChangesRequested) {
+    const reasonCodes = [...codes].filter((code) => code === 'ci_pending' || code === 'ci_missing');
+    actions.push(plannedAction(
+      gate,
+      'refresh_evidence',
+      'Wait for current-head CI to finish',
+      80,
+      true,
+      reasonCodes,
+      null,
+    ));
+  }
+  if (!immediateFix && !hasCiFailure && !hasCiWaiting && codes.has('independent_review_missing')) {
     actions.push(plannedAction(
       gate,
       'independent_review',
@@ -446,7 +465,12 @@ export function planGitHubActions(gate: GitHubGateResult): GitHubActionPlan {
       null,
     ));
   }
-  if (codes.has('draft') && !codes.has('independent_review_missing') && !immediateFix) {
+  if (
+    codes.has('draft')
+    && !codes.has('independent_review_missing')
+    && !immediateFix
+    && !hasCiWaiting
+  ) {
     actions.push(plannedAction(
       gate,
       'mark_ready',

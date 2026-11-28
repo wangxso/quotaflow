@@ -165,7 +165,25 @@ test('a newer pending rerun supersedes an older success', () => {
   });
   expect(result.status).toBe('blocked');
   expect(result.checks[0]).toMatchObject({ status: 'in_progress', conclusion: null, passed: false });
-  expect(result.reasons.map((reason) => reason.code)).toContain('ci_not_success');
+  expect(result.reasons.map((reason) => reason.code)).toContain('ci_pending');
+  expect(planGitHubActions(result).actions).toMatchObject([{
+    kind: 'refresh_evidence',
+    requiresHuman: true,
+    reasonCodes: ['ci_pending'],
+  }]);
+});
+
+test('missing checks wait for evidence instead of materializing a code fix', () => {
+  const value = snapshot();
+  value.draft = false;
+  value.checks = [];
+  const result = evaluateGitHubPull(value, { expectedHeadSha: headSha });
+  expect(result.reasons.map((reason) => reason.code)).toContain('ci_missing');
+  expect(planGitHubActions(result).actions).toMatchObject([{
+    kind: 'refresh_evidence',
+    requiresHuman: true,
+    reasonCodes: ['ci_missing'],
+  }]);
 });
 
 test('combines review feedback and CI failures into one fix task', () => {
