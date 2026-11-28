@@ -28,6 +28,7 @@ import { runGitHubCiReruns } from './github-ci-rerun';
 import { startGitHubWebhookServer } from './github-webhook-server';
 import { materializeGitHubWebhookActions } from './github-webhook-actions';
 import { materializeGitHubActions } from './github-materialize';
+import { startDashboardServer } from './dashboard';
 
 const usage = `
 quotaflow config validate [--config <file>]
@@ -43,6 +44,7 @@ quotaflow worker once [--config <file>]
 quotaflow worker recover [--config <file>]
 quotaflow budget status [--config <file>]
 quotaflow budget audit [--limit <n>] [--config <file>]
+quotaflow dashboard [--host <loopback>] [--port <n>] [--config <file>]
 quotaflow github snapshot --repo <owner/repo> --pull-number <n> [--token-env <name>] [--api-url <url>] [--config <file>]
 quotaflow github gate <snapshot.json> [--delivery-id <id>] [--event-type <type>] [--expected-head <sha>] [--expected-base <sha>] [--require-check <name>]... [--required-approvals <n>] [--allow-author-self-approval] [--allow-bot-approvals] [--materialize <repo>] [--config <file>]
 quotaflow github webhook <payload.json> --event <type> --delivery-id <id> --signature <sha256=...> [--secret-env GITHUB_WEBHOOK_SECRET] [--config <file>]
@@ -225,6 +227,33 @@ async function main() {
       const limit = Number(limitText);
       if (!Number.isInteger(limit) || limit <= 0) throw new Error('--limit must be a positive integer');
       console.log(JSON.stringify(store.budgetAudit(config.budgets ?? [], Date.now(), limit), null, 2));
+      return;
+    }
+
+    if (scope === 'dashboard') {
+      if (action && action !== 'serve' && !action.startsWith('--')) {
+        throw new Error(`Unknown dashboard command ${action}`);
+      }
+      if (action?.startsWith('--')) rest.unshift(action);
+      const host = option(rest, '--host') ?? '127.0.0.1';
+      const portText = option(rest, '--port') ?? '8788';
+      const port = Number(portText);
+      if (rest.length > 0) throw new Error(`Unexpected dashboard arguments: ${rest.join(' ')}`);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        throw new Error('--port must be an integer between 1 and 65535');
+      }
+      const server = startDashboardServer(store, config, { host, port });
+      console.log(JSON.stringify({
+        listening: server.url.toString(),
+        mode: 'read-only',
+        health: '/api/health',
+      }, null, 2));
+      const stopped = new Promise<void>((resolve) => {
+        process.once('SIGINT', resolve);
+        process.once('SIGTERM', resolve);
+      });
+      await stopped;
+      server.stop(true);
       return;
     }
 

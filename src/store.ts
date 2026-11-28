@@ -680,6 +680,28 @@ export class TaskStore {
     `).all(repository.toLowerCase(), pullNumber, headSha).map(githubCiRerunFrom);
   }
 
+  listRecentGitHubGates(limit = 100): GitHubGateRecord[] {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+      throw new Error('GitHub gate limit must be an integer between 1 and 500');
+    }
+    return this.db.query<GitHubGateRow, [number]>(`
+      SELECT * FROM github_gate_results
+      ORDER BY updated_at DESC, repository, pull_number
+      LIMIT ?
+    `).all(limit).map(githubGateFrom);
+  }
+
+  listRecentGitHubCiReruns(limit = 100): GitHubCiRerunRecord[] {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+      throw new Error('GitHub CI rerun limit must be an integer between 1 and 500');
+    }
+    return this.db.query<GitHubCiRerunRow, [number]>(`
+      SELECT * FROM github_ci_reruns
+      ORDER BY updated_at DESC, repository, pull_number, run_id
+      LIMIT ?
+    `).all(limit).map(githubCiRerunFrom);
+  }
+
   #recordGitHubDelivery(input: GitHubDeliveryInput): GitHubDeliveryRecord {
     const now = input.now ?? Date.now();
     const byDelivery = this.db.query<GitHubDeliveryRow, [string]>(

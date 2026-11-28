@@ -77,6 +77,19 @@ test('adds and lists a task through the CLI', async () => {
   }
 });
 
+test('dashboard command is local-only and documented in help', async () => {
+  const { root } = setup();
+  try {
+    const help = await cli(root, ['--help']);
+    expect(help.stdout).toContain('quotaflow dashboard');
+    const remote = await cliResult(root, ['dashboard', '--host', '0.0.0.0', '--port', '8788']);
+    expect(remote.exitCode).toBe(1);
+    expect(remote.stderr).toContain('loopback');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('the bundled CLI starts without running the live probe', async () => {
   const { root, config } = setup();
   try {
