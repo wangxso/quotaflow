@@ -1,0 +1,85 @@
+{
+  "recordedOn": "2026-11-28",
+  "baseRevision": "d6301bfe368a8dd8dbca4689e487fa2daaff6790",
+  "publicEndpoint": {
+    "webhookUrl": "https://quotaflow-hooks.wangxso.com/github/webhook",
+    "healthUrl": "https://quotaflow-hooks.wangxso.com/healthz",
+    "httpStatus": 200,
+    "httpVersion": "HTTP/2",
+    "response": {
+      "status": "ok"
+    },
+    "tls": "Cloudflare-managed HTTPS",
+    "origin": "http://127.0.0.1:8787"
+  },
+  "cloudflareTunnel": {
+    "name": "quotaflow-webhook",
+    "id": "47a14564-86f8-47f2-9c04-edbb3c0fc7ed",
+    "cloudflaredVersion": "2026.11.2",
+    "hostname": "quotaflow-hooks.wangxso.com",
+    "dnsRouteCreated": true,
+    "ingressValidation": "passed",
+    "activeEdgeLocations": [
+      "sjc01",
+      "sjc05",
+      "sjc08"
+    ],
+    "configurationMode": "Named Tunnel"
+  },
+  "processSupervision": {
+    "serviceManager": "macOS launchd user agents",
+    "labels": [
+      "com.quotaflow.webhook",
+      "com.quotaflow.cloudflared",
+      "com.quotaflow.healthcheck"
+    ],
+    "keepAlive": true,
+    "runAtLoad": true,
+    "healthcheckIntervalSeconds": 60,
+    "webhookRestartRecovered": true,
+    "cloudflaredRestartRecovered": true,
+    "cloudflaredRecoveryObservedTransient530": true,
+    "logsOutsideRepository": true
+  },
+  "githubApp": {
+    "appId": 5955591,
+    "webhookUrlUpdated": true,
+    "sslVerification": true,
+    "secretConfigured": true,
+    "signedPing": {
+      "httpStatus": 200,
+      "response": "pong"
+    },
+    "githubRedelivery": {
+      "installationDeliveryId": "3856542651744542720",
+      "installationStatus": 200,
+      "checkRunDeliveryId": "3856542814217175040",
+      "checkRunStatus": 200
+    }
+  },
+  "behaviorFix": {
+    "problem": "A check_run without an associated pull request was previously returned as 400.",
+    "resolution": "Return 200 ignored with reason check_run_without_pull_request.",
+    "verifiedWithGitHubRedelivery": true
+  },
+  "verification": {
+    "fullSuite": {
+      "macOS": 161,
+      "linux": 161,
+      "windowsOnlySkipped": 1,
+      "failed": 0,
+      "assertions": 730
+    },
+    "build": "passed",
+    "configurationValidation": "passed",
+    "publicHealthAfterWebhookRestart": "passed",
+    "publicHealthAfterCloudflaredRestart": "passed",
+    "jsonAndDiffChecks": "passed"
+  },
+  "boundary": {
+    "requiresMacAwake": true,
+    "requiresUserLoginSession": true,
+    "systemLaunchDaemon": "not configured",
+    "secretsCommitted": false
+  }
+}
