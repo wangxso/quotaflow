@@ -42,8 +42,8 @@
     "apiNormalizationTests": 4,
     "cliIntegrationTests": 1,
     "fullSuite": {
-      "macOS": 142,
-      "linux": 142,
+      "macOS": 148,
+      "linux": 148,
       "windowsOnlySkipped": 1,
       "failed": 0
     },

@@ -4,6 +4,7 @@ import type {
   AgentKind,
   BudgetPolicy,
   GitHubApprovalConfig,
+  GitHubAppConfig,
   GitHubProjectConfig,
   GitHubWebhookConfig,
   LaneConfig,
@@ -181,6 +182,37 @@ function parseGitHubApproval(value: unknown): GitHubApprovalConfig {
   return { allowBotApprovals: raw.allowBotApprovals };
 }
 
+function parseGitHubApp(value: unknown, root: string): GitHubAppConfig {
+  const raw = object(value, 'githubApp');
+  const appId = number(raw.appId, 'githubApp.appId');
+  const installationId = number(raw.installationId, 'githubApp.installationId');
+  if (!Number.isInteger(appId) || appId <= 0) fail('githubApp.appId must be a positive integer');
+  if (!Number.isInteger(installationId) || installationId <= 0) {
+    fail('githubApp.installationId must be a positive integer');
+  }
+  const apiUrl = raw.apiUrl === undefined ? undefined : text(raw.apiUrl, 'githubApp.apiUrl');
+  if (apiUrl) {
+    let parsed: URL;
+    try {
+      parsed = new URL(apiUrl);
+    } catch {
+      fail('githubApp.apiUrl must be a valid URL');
+    }
+    if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+      fail('githubApp.apiUrl must not contain credentials, query parameters or fragments');
+    }
+    if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && parsed.hostname === '127.0.0.1')) {
+      fail('githubApp.apiUrl must use HTTPS or loopback HTTP');
+    }
+  }
+  return {
+    appId,
+    installationId,
+    privateKeyPath: resolvePath(root, text(raw.privateKeyPath, 'githubApp.privateKeyPath')),
+    ...(apiUrl ? { apiUrl } : {}),
+  };
+}
+
 function parseGitHubProject(value: unknown, index: number, root: string): GitHubProjectConfig {
   const field = `githubProjects[${index}]`;
   const raw = object(value, field);
@@ -274,6 +306,7 @@ export function normalizeConfig(value: unknown, file: string): QuotaFlowConfig {
   }
   const githubWebhook = raw.githubWebhook === undefined ? undefined : parseGitHubWebhook(raw.githubWebhook);
   const githubApproval = raw.githubApproval === undefined ? undefined : parseGitHubApproval(raw.githubApproval);
+  const githubApp = raw.githubApp === undefined ? undefined : parseGitHubApp(raw.githubApp, root);
   let githubProjects: GitHubProjectConfig[] = [];
   if (raw.githubProjects !== undefined) {
     if (!Array.isArray(raw.githubProjects)) fail('githubProjects must be an array');
@@ -293,6 +326,7 @@ export function normalizeConfig(value: unknown, file: string): QuotaFlowConfig {
     routing: { allowedProviders, ...(routedModelApproval ? { routedModelApproval } : {}) },
     ...(githubWebhook ? { githubWebhook } : {}),
     ...(githubApproval ? { githubApproval } : {}),
+    ...(githubApp ? { githubApp } : {}),
     budgets,
     githubProjects,
     lanes,

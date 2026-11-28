@@ -116,14 +116,18 @@ function config(repoPath: string, worktreeRoot: string): QuotaFlowConfig {
   };
 }
 
-test('webhook action materialization fetches the exact head and is idempotent', () => {
+test('webhook action materialization fetches the exact head and is idempotent', async () => {
   const { root, repo, baseSha, headSha } = setupRepository();
   const db = openDatabase(':memory:');
   const store = new TaskStore(db);
   try {
     const value = snapshot(baseSha, headSha);
     const actionContext = context(value);
-    const first = materializeGitHubWebhookActions(store, config(repo, join(root, 'worktrees')), actionContext);
+    const first = await materializeGitHubWebhookActions(
+      store,
+      config(repo, join(root, 'worktrees')),
+      actionContext,
+    );
     expect(first).toMatchObject({
       status: 'materialized',
       repository: 'wangxso/mcarplay',
@@ -137,7 +141,11 @@ test('webhook action materialization fetches the exact head and is idempotent', 
         }],
       },
     });
-    const repeated = materializeGitHubWebhookActions(store, config(repo, join(root, 'worktrees')), actionContext);
+    const repeated = await materializeGitHubWebhookActions(
+      store,
+      config(repo, join(root, 'worktrees')),
+      actionContext,
+    );
     expect(repeated).toMatchObject({
       status: 'materialized',
       materialization: { status: 'task_exists' },
@@ -149,29 +157,72 @@ test('webhook action materialization fetches the exact head and is idempotent', 
   }
 });
 
-test('webhook action materialization ignores unmapped forks and unapproved branches', () => {
+test('webhook action materialization ignores unmapped forks and unapproved branches', async () => {
   const { root, repo, baseSha, headSha } = setupRepository();
   const db = openDatabase(':memory:');
   const store = new TaskStore(db);
   try {
     const value = snapshot(baseSha, headSha);
-    const fork = materializeGitHubWebhookActions(store, config(repo, join(root, 'worktrees')), context({
+    const fork = await materializeGitHubWebhookActions(store, config(repo, join(root, 'worktrees')), context({
       ...value,
       headRepository: 'fork/mcarplay',
     }));
     expect(fork).toMatchObject({ status: 'ignored', reason: 'fork_pull_request' });
 
-    const branch = materializeGitHubWebhookActions(store, config(repo, join(root, 'worktrees')), context({
+    const branch = await materializeGitHubWebhookActions(store, config(repo, join(root, 'worktrees')), context({
       ...value,
       headRef: 'release/not-allowed',
     }));
     expect(branch).toMatchObject({ status: 'ignored', reason: 'branch_not_allowed' });
 
-    const unmapped = materializeGitHubWebhookActions(store, {
+    const unmapped = await materializeGitHubWebhookActions(store, {
       ...config(repo, join(root, 'worktrees')),
       githubProjects: [],
     }, context(value));
     expect(unmapped).toMatchObject({ status: 'not_configured', reason: 'repository_not_mapped' });
+    expect(store.listTasks()).toEqual([]);
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('webhook action materialization leaves infrastructure-only CI failures for humans', async () => {
+  const { root, repo, baseSha, headSha } = setupRepository();
+  const db = openDatabase(':memory:');
+  const store = new TaskStore(db);
+  try {
+    const value = snapshot(baseSha, headSha);
+    const actionContext = context(value);
+    actionContext.plan.actions[0] = {
+      ...actionContext.plan.actions[0]!,
+      kind: 'ci_fix',
+      reasonCodes: ['ci_not_success'],
+      taskPrompt: 'Fix CI.',
+    };
+    const result = await materializeGitHubWebhookActions(
+      store,
+      config(repo, join(root, 'worktrees')),
+      actionContext,
+      {
+        headSha,
+        failures: [{
+          name: 'runner health',
+          jobId: 10,
+          category: 'infrastructure',
+          logBytes: 20,
+          truncated: false,
+          excerpt: 'runner lost communication',
+        }],
+      },
+    );
+    expect(result).toMatchObject({
+      status: 'human_only',
+      reason: 'ci_triage_requires_human',
+      ciTriage: {
+        failures: [{ category: 'infrastructure' }],
+      },
+    });
     expect(store.listTasks()).toEqual([]);
   } finally {
     db.close();

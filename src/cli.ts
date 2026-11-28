@@ -22,6 +22,8 @@ import {
   verifyGitHubWebhookSignature,
 } from './github';
 import { fetchGitHubPullSnapshot } from './github-api';
+import { GitHubAppTokenProvider } from './github-app-auth';
+import { triageGitHubChecks } from './github-ci';
 import { startGitHubWebhookServer } from './github-webhook-server';
 import { materializeGitHubWebhookActions } from './github-webhook-actions';
 import { materializeGitHubActions } from './github-materialize';
@@ -95,6 +97,7 @@ async function main() {
   }
 
   const config = loadConfig(configPath);
+  const githubAppTokens = config.githubApp ? new GitHubAppTokenProvider(config.githubApp) : undefined;
   if (scope === 'config' && action === 'validate') {
     console.log(JSON.stringify({
       config: configPath,
@@ -104,6 +107,7 @@ async function main() {
       routedModelApproval: config.routing.routedModelApproval ?? null,
       githubWebhook: config.githubWebhook ?? null,
       githubApproval: config.githubApproval ?? { allowBotApprovals: false },
+      githubApp: config.githubApp ?? null,
       githubProjects: config.githubProjects ?? [],
       budgets: config.budgets ?? [],
       lanes: config.lanes.map((lane) => ({
@@ -293,8 +297,9 @@ async function main() {
         throw new Error('--pull-number must be a positive integer');
       }
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(tokenName)) throw new Error('--token-env must name an environment variable');
+      const token = process.env[tokenName] ?? await githubAppTokens?.getToken();
       const snapshot = await fetchGitHubPullSnapshot(repository, pullNumber, {
-        token: process.env[tokenName],
+        ...(token ? { token } : {}),
         ...(apiUrl ? { apiUrl } : {}),
       });
       const { repository: normalizedRepository, ...update } = snapshot;
@@ -365,7 +370,8 @@ async function main() {
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(secretName)) throw new Error('--secret-env must name an environment variable');
       const secret = process.env[secretName];
       if (!secret) throw new Error(`GitHub webhook secret is missing from ${secretName}`);
-      const token = tokenName ? process.env[tokenName] : undefined;
+      const accessToken = async () =>
+        (tokenName ? process.env[tokenName] : undefined) ?? await githubAppTokens?.getToken();
       const server = startGitHubWebhookServer({
         host,
         port,
@@ -373,19 +379,24 @@ async function main() {
         secret,
         store,
         ...(fetchGate ? {
-          snapshotFetcher: (repository: string, pullNumber: number) => fetchGitHubPullSnapshot(
-            repository,
-            pullNumber,
-            {
+          snapshotFetcher: async (repository: string, pullNumber: number) => {
+            const token = await accessToken();
+            return fetchGitHubPullSnapshot(repository, pullNumber, {
               ...(token ? { token } : {}),
               ...(apiUrl ? { apiUrl } : {}),
-            },
-          ),
+            });
+          },
         } : {}),
         gatePolicy: {
           allowBotApprovals: Boolean(config.githubApproval?.allowBotApprovals),
         },
-        actionHandler: (context) => materializeGitHubWebhookActions(store, config, context),
+        actionHandler: (context) => materializeGitHubWebhookActions(store, config, context, async () => {
+          const token = await accessToken();
+          return triageGitHubChecks(context.gate.repository, context.gate, {
+            ...(token ? { token } : {}),
+            ...(apiUrl ?? config.githubApp?.apiUrl ? { apiUrl: apiUrl ?? config.githubApp?.apiUrl } : {}),
+          });
+        }),
       });
       console.log(JSON.stringify({ listening: server.url.toString(), path, health: '/healthz' }, null, 2));
       const stopped = new Promise<void>((resolve) => {

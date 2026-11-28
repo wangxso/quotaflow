@@ -1,0 +1,69 @@
+{
+  "recordedOn": "2026-11-28",
+  "baseRevision": "6857e12b87abf4c2890cacb6d36d6f31bdf1bd05",
+  "githubAppAuth": {
+    "appId": 5955591,
+    "installationId": 186560843,
+    "privateKeyStorage": "User config directory outside the repository, mode 0600",
+    "jwtLifetimeSeconds": 540,
+    "installationTokenCaching": "Cached until 60 seconds before expiry",
+    "livePrSnapshotThroughAppToken": "passed"
+  },
+  "logFetch": {
+    "maximumJobsPerGate": 3,
+    "maximumBytesPerLog": 262144,
+    "requestTimeoutMs": 20000,
+    "jobIdSource": "GitHub Actions details URL",
+    "redirects": "GitHub signed log redirect follows after the authenticated API request",
+    "ansiControlSequencesRemoved": true,
+    "maximumExcerptCharacters": 8000
+  },
+  "redaction": [
+    "GitHub personal and installation tokens",
+    "Authorization Bearer values",
+    "api_key, token, secret and password assignments",
+    "PEM private keys"
+  ],
+  "classification": {
+    "categories": [
+      "code_or_test",
+      "infrastructure",
+      "permissions_or_configuration",
+      "cancelled",
+      "unknown"
+    ],
+    "codeFixPromptEnrichment": "implemented",
+    "logsLabeledUntrusted": true,
+    "infrastructureOrPermissionOnly": "human_only with no write task"
+  },
+  "liveBoundary": {
+    "currentAppPermissions": {
+      "checks": "read",
+      "contents": "read",
+      "metadata": "read",
+      "pull_requests": "write"
+    },
+    "actionsReadPermission": "not yet granted",
+    "realActionsJobLogDownload": "pending permission acceptance",
+    "sameShaRerun": "not implemented"
+  },
+  "verification": {
+    "githubAppAuthTests": 2,
+    "ciTriageTests": 3,
+    "webhookCiDecisionTests": 1,
+    "fullSuite": {
+      "macOS": 148,
+      "linux": 148,
+      "windowsOnlySkipped": 1,
+      "failed": 0
+    },
+    "buildAndConfig": "passed on macOS and Linux",
+    "jsonAndDiffChecks": "passed"
+  },
+  "scope": {
+    "jobLogFetching": "implemented against injectable GitHub API",
+    "liveJobLogFetching": "pending Actions read permission",
+    "automaticSameShaRerun": "pending",
+    "automaticPushCommentOrMerge": false
+  }
+}

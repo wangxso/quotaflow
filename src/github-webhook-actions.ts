@@ -1,5 +1,10 @@
 import type { QuotaFlowConfig } from './domain';
 import {
+  ciTriageRequiresHuman,
+  enrichGitHubPlanWithCi,
+  type GitHubCiTriage,
+} from './github-ci';
+import {
   materializeGitHubActions,
   type GitHubPlanMaterialization,
 } from './github-materialize';
@@ -14,13 +19,15 @@ export interface GitHubWebhookActionOutcome {
   headSha: string;
   reason?: string;
   materialization?: GitHubPlanMaterialization;
+  ciTriage?: GitHubCiTriage;
 }
 
-export function materializeGitHubWebhookActions(
+export async function materializeGitHubWebhookActions(
   store: TaskStore,
   config: QuotaFlowConfig,
   context: GitHubWebhookActionContext,
-): GitHubWebhookActionOutcome {
+  ciTriageSource?: GitHubCiTriage | (() => Promise<GitHubCiTriage> | GitHubCiTriage),
+): Promise<GitHubWebhookActionOutcome> {
   const repository = context.snapshot.repository.toLowerCase();
   const project = config.githubProjects?.find((candidate) => candidate.repository === repository);
   if (!project) {
@@ -51,13 +58,37 @@ export function materializeGitHubWebhookActions(
     };
   }
 
-  if (context.plan.actions.some((action) => !action.requiresHuman)) {
+  const agentActions = context.plan.actions.filter((action) => !action.requiresHuman);
+  const needsCiTriage = agentActions.some((action) =>
+    action.kind === 'ci_fix' || action.kind === 'review_fix');
+  const ciTriage = needsCiTriage && ciTriageSource
+    ? typeof ciTriageSource === 'function'
+      ? await ciTriageSource()
+      : ciTriageSource
+    : undefined;
+  if (
+    agentActions.length > 0
+    && agentActions.every((action) => action.kind === 'ci_fix')
+    && ciTriageRequiresHuman(ciTriage)
+  ) {
+    return {
+      status: 'human_only',
+      repository,
+      pullNumber: context.snapshot.number,
+      headSha: context.snapshot.headSha,
+      reason: 'ci_triage_requires_human',
+      ...(ciTriage ? { ciTriage } : {}),
+    };
+  }
+
+  const plan = enrichGitHubPlanWithCi(context.plan, ciTriage);
+  if (agentActions.length > 0) {
     fetchGitHubCommits(project.repoPath, project.remote ?? 'origin', [
       context.snapshot.headSha,
       context.snapshot.baseSha,
     ]);
   }
-  const materialization = materializeGitHubActions(store, context.plan, {
+  const materialization = materializeGitHubActions(store, plan, {
     repository,
     repoPath: project.repoPath,
     worktreeRoot: config.worktreeRoot,
@@ -70,5 +101,6 @@ export function materializeGitHubWebhookActions(
     pullNumber: context.snapshot.number,
     headSha: context.snapshot.headSha,
     materialization,
+    ...(ciTriage ? { ciTriage } : {}),
   };
 }

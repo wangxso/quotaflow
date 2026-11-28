@@ -68,6 +68,13 @@ export interface GitHubApprovalConfig {
   allowBotApprovals: boolean;
 }
 
+export interface GitHubAppConfig {
+  appId: number;
+  installationId: number;
+  privateKeyPath: string;
+  apiUrl?: string;
+}
+
 export interface GitHubProjectConfig {
   repository: string;
   repoPath: string;
@@ -120,6 +127,7 @@ export interface QuotaFlowConfig {
   routing: RoutingConfig;
   githubWebhook?: GitHubWebhookConfig;
   githubApproval?: GitHubApprovalConfig;
+  githubApp?: GitHubAppConfig;
   githubProjects?: GitHubProjectConfig[];
   budgets?: BudgetPolicy[];
   lanes: LaneConfig[];

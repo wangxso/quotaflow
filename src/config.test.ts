@@ -161,6 +161,11 @@ test('parses and validates GitHub webhook configuration', () => {
     githubApproval: {
       allowBotApprovals: true,
     },
+    githubApp: {
+      appId: 123,
+      installationId: 456,
+      privateKeyPath: 'secrets/app.pem',
+    },
     githubProjects: [{
       repository: 'WANGXSO/mcarplay',
       repoPath: 'repos/mcarplay',
@@ -172,6 +177,11 @@ test('parses and validates GitHub webhook configuration', () => {
   const parsed = normalizeConfig(base, configFile);
   expect(parsed.githubWebhook).toEqual(base.githubWebhook);
   expect(parsed.githubApproval).toEqual(base.githubApproval);
+  expect(parsed.githubApp).toEqual({
+    appId: 123,
+    installationId: 456,
+    privateKeyPath: join(dirname(configFile), 'secrets', 'app.pem'),
+  });
   expect(parsed.githubProjects).toEqual([{
     repository: 'wangxso/mcarplay',
     repoPath: join(dirname(configFile), 'repos', 'mcarplay'),
@@ -191,6 +201,10 @@ test('parses and validates GitHub webhook configuration', () => {
     join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubWebhook.apiUrl');
   expect(() => normalizeConfig({ ...base, githubApproval: { allowBotApprovals: 'yes' } },
     join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubApproval.allowBotApprovals');
+  expect(() => normalizeConfig({ ...base, githubApp: { ...base.githubApp, appId: 0 } },
+    join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubApp.appId');
+  expect(() => normalizeConfig({ ...base, githubApp: { ...base.githubApp, apiUrl: 'http://example.test' } },
+    join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubApp.apiUrl');
   expect(() => normalizeConfig({
     ...base,
     githubProjects: [base.githubProjects[0], base.githubProjects[0]],
