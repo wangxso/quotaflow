@@ -21,9 +21,28 @@
       "wangxso/mcarplay"
     ],
     "actualGitHubApprovalExecuted": true,
-    "actualDashboardMergeExecuted": false,
+    "actualDashboardMergeExecuted": true,
     "administratorFallbackMergeExecuted": true,
-    "liveEvidence": "phase3-github-controlled-pr-merge-2026-11-28.json"
+    "successfulDashboardMerges": [
+      {
+        "pullRequest": 153,
+        "mergeCommit": "aa0a2b86c95a117b3fef9a65e01a24d813c781b1"
+      },
+      {
+        "pullRequest": 155,
+        "mergeCommit": "047cbbbafc29835950c78c9109d68c16b0303995"
+      },
+      {
+        "pullRequest": 157,
+        "mergeCommit": "25ea99adcd41bb82125d4f88061e1fa8cf3c2d0c"
+      }
+    ],
+    "liveEvidence": [
+      "phase3-github-controlled-pr-merge-2026-11-28.json",
+      "phase3-github-controlled-pr153-2026-11-28.json",
+      "phase3-github-ci-robolectric-preload-2026-11-28.json",
+      "phase3-github-rgp08-crash-retry-2026-11-28.json"
+    ]
   },
   "confirmation": {
     "targetFormat": "owner/repo#pullNumber@headSha",
@@ -95,11 +114,11 @@
     "githubActionTests": 5,
     "githubActionAssertions": 18,
     "fullSuite": {
-      "macOS": 176,
-      "linux": 176,
+      "macOS": 178,
+      "linuxLastVerified": 176,
       "platformSkips": 1,
       "failed": 0,
-      "assertions": 865
+      "assertions": 870
     },
     "build": "passed",
     "configurationValidation": "passed",

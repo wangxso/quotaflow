@@ -40,5 +40,18 @@
     "result": "contents_write_effective",
     "tokenCacheRefreshedByRestart": true
   },
-  "verificationBoundary": "The requested and effective installation permissions are verified. A second controlled pull request is still required to exercise the Dashboard merge endpoint end to end without an administrator fallback."
+  "endToEndVerification": {
+    "status": "passed",
+    "pullRequest": 153,
+    "headSha": "1e121ecd5d0a132e93c1ff2efc94991e6d6fa66b",
+    "mergeCommit": "aa0a2b86c95a117b3fef9a65e01a24d813c781b1",
+    "mergedBy": "app/quotaflow-review-gate-wangxso",
+    "administratorFallback": false,
+    "followUpMerge": {
+      "pullRequest": 155,
+      "mergeCommit": "047cbbbafc29835950c78c9109d68c16b0303995",
+      "administratorFallback": false
+    }
+  },
+  "verificationBoundary": "The Dashboard App successfully exercised the merge endpoint on two controlled pull requests without administrator fallback. This evidence covers GitHub App permissions and merge execution; project-specific vehicle validation remains outside this record."
 }

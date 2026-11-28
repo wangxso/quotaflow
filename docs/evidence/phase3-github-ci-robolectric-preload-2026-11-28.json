@@ -1,0 +1,148 @@
+{
+  "recordedOn": "2026-11-28",
+  "kind": "phase3-github-ci-robolectric-runtime-preload",
+  "repository": "wangxso/mcarplay",
+  "issue": {
+    "number": 154,
+    "state": "closed",
+    "stateReason": "completed",
+    "url": "https://github.com/wangxso/mcarplay/issues/154"
+  },
+  "pullRequest": {
+    "number": 155,
+    "url": "https://github.com/wangxso/mcarplay/pull/155",
+    "state": "merged",
+    "headSha": "6985739e1588e3a7bdacb5b0adfb4a03da516ee2",
+    "baseSha": "aa0a2b86c95a117b3fef9a65e01a24d813c781b1",
+    "mergeCommit": "047cbbbafc29835950c78c9109d68c16b0303995",
+    "mergedAt": "2026-11-28T11:35:05Z",
+    "mergedBy": {
+      "login": "app/quotaflow-review-gate-wangxso",
+      "isBot": true
+    }
+  },
+  "dashboardActions": {
+    "approval": {
+      "requestId": "510468b7-e6c5-41c9-a0c3-a41c813092a5",
+      "endpointStatus": 202,
+      "githubStatus": 200,
+      "reviewId": 6097528199,
+      "reviewState": "APPROVED"
+    },
+    "merge": {
+      "requestId": "1151d222-4a08-4d93-8983-7df62e0d8bba",
+      "endpointStatus": 202,
+      "githubStatus": 200,
+      "result": "merged",
+      "mergeCommit": "047cbbbafc29835950c78c9109d68c16b0303995"
+    }
+  },
+  "rootCause": {
+    "component": "Robolectric MavenArtifactFetcher",
+    "failure": "Shared GitHub runner egress received HTTP 429 while downloading android-all-instrumented runtimes from Maven Central",
+    "artifacts": [
+      "android-all-instrumented-15-robolectric-12650502-i7.jar",
+      "android-all-instrumented-5.0.2_r3-robolectric-r0-i7.jar"
+    ],
+    "observedRun": {
+      "runId": 46135158544,
+      "headSha": "aa0a2b86c95a117b3fef9a65e01a24d813c781b1",
+      "attempts": 3,
+      "conclusion": "failure"
+    }
+  },
+  "fix": {
+    "sourceCommit": "6985739e1588e3a7bdacb5b0adfb4a03da516ee2",
+    "implementation": [
+      "Create one Gradle configuration per Robolectric Android runtime",
+      "Resolve android-all-instrumented only from the Google-hosted Maven Central mirror",
+      "Sync both runtimes into app/build/robolectric-runtime",
+      "Set robolectric.dependency.dir for all Gradle Test tasks"
+    ],
+    "stagedArtifacts": [
+      {
+        "file": "android-all-instrumented-15-robolectric-12650502-i7.jar",
+        "sha256": "33c2d7cc4186d4605269d5d411fa1818972c5b30a9f70bfbbd3d430b076af52f"
+      },
+      {
+        "file": "android-all-instrumented-5.0.2_r3-robolectric-r0-i7.jar",
+        "sha256": "a75483f03034182858b621164cf84baa9746d83782a3dcfd6bbefde78fd74478"
+      }
+    ]
+  },
+  "localVerification": {
+    "standardDebugUnitTests": {
+      "passed": 1992,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "remoteBridgeUnitTests": {
+      "passed": 25,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "tasks": [
+      "spotlessCheck",
+      ":app:lintStandardDebug",
+      ":app:assembleStandardDebug"
+    ]
+  },
+  "preMergeChecks": {
+    "pullRequestRuns": [
+      {
+        "name": "Android CI",
+        "runId": 46138736037,
+        "conclusion": "success",
+        "url": "https://github.com/wangxso/mcarplay/actions/runs/46138736037"
+      },
+      {
+        "name": "Instrumentation",
+        "runId": 46138736040,
+        "conclusion": "success",
+        "url": "https://github.com/wangxso/mcarplay/actions/runs/46138736040"
+      }
+    ],
+    "branchPushRuns": [
+      {
+        "name": "Android CI",
+        "runId": 46138732141,
+        "conclusion": "success",
+        "url": "https://github.com/wangxso/mcarplay/actions/runs/46138732141"
+      },
+      {
+        "name": "Instrumentation",
+        "runId": 46138732117,
+        "conclusion": "success",
+        "url": "https://github.com/wangxso/mcarplay/actions/runs/46138732117"
+      }
+    ],
+    "gitGuardian": "success"
+  },
+  "postMergeChecks": {
+    "headSha": "047cbbbafc29835950c78c9109d68c16b0303995",
+    "androidCi": {
+      "runId": 46140575562,
+      "status": "completed",
+      "conclusion": "success",
+      "updatedAt": "2026-11-28T11:40:07Z",
+      "url": "https://github.com/wangxso/mcarplay/actions/runs/46140575562"
+    },
+    "instrumentation": {
+      "runId": 46140575657,
+      "attempts": 3,
+      "status": "completed",
+      "conclusion": "failure",
+      "failures": [
+        "RGP08 instrumentation process crashed before reporting a test result",
+        "Android system crashed during RGP07 normal phase2",
+        "RGP08 instrumentation process crashed before reporting a test result"
+      ],
+      "followUpPullRequest": 157,
+      "updatedAt": "2026-11-28T12:13:13Z",
+      "url": "https://github.com/wangxso/mcarplay/actions/runs/46140575657"
+    }
+  },
+  "verificationBoundary": "The Robolectric 429 fix passed both pre-merge Android CI runs and the post-merge Android CI. Post-merge Instrumentation remained blocked by nested-virtualization crashes before test results; PR #157 addresses the crash-only RGP08 retry path separately."
+}

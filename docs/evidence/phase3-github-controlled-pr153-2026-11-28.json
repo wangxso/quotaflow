@@ -1,0 +1,139 @@
+{
+  "recordedOn": "2026-11-28",
+  "kind": "phase3-github-controlled-pr153-dashboard-merge",
+  "repository": "wangxso/mcarplay",
+  "issue": {
+    "number": 81,
+    "state": "open",
+    "relationship": "partial",
+    "url": "https://github.com/wangxso/mcarplay/issues/81"
+  },
+  "pullRequest": {
+    "number": 153,
+    "url": "https://github.com/wangxso/mcarplay/pull/153",
+    "state": "merged",
+    "headSha": "1e121ecd5d0a132e93c1ff2efc94991e6d6fa66b",
+    "baseSha": "d42c69091b7241dd75a65f70244f5a671f3fbf24",
+    "mergeMethod": "merge",
+    "mergeCommit": "aa0a2b86c95a117b3fef9a65e01a24d813c781b1",
+    "mergedAt": "2026-11-28T10:25:57Z",
+    "mergedBy": {
+      "login": "app/quotaflow-review-gate-wangxso",
+      "isBot": true
+    }
+  },
+  "dashboardActions": {
+    "approval": {
+      "requestId": "207b5e6b-158b-407d-b688-a39391e876f9",
+      "endpointStatus": 202,
+      "githubStatus": 200,
+      "reviewId": 6097234663,
+      "reviewState": "APPROVED"
+    },
+    "merge": {
+      "requestId": "bb6899a9-25b4-4687-bb64-aeb86b8997ea",
+      "endpointStatus": 202,
+      "githubStatus": 200,
+      "result": "merged",
+      "mergeCommit": "aa0a2b86c95a117b3fef9a65e01a24d813c781b1"
+    }
+  },
+  "gateAtMerge": {
+    "status": "ready_for_human_merge",
+    "independentApprovals": 1,
+    "checks": [
+      {
+        "name": "Auto-reconnect prefs RGP07 and RGP08",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Check and build debug APK",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "GitGuardian Security Checks",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "preMergeChecks": {
+    "pullRequestRuns": [
+      {
+        "name": "Android CI",
+        "runId": 46133284743,
+        "conclusion": "success",
+        "url": "https://github.com/wangxso/mcarplay/actions/runs/46133284743"
+      },
+      {
+        "name": "Instrumentation",
+        "runId": 46133284705,
+        "conclusion": "success",
+        "url": "https://github.com/wangxso/mcarplay/actions/runs/46133284705"
+      }
+    ],
+    "branchPushRuns": [
+      {
+        "name": "Android CI",
+        "runId": 46133279960,
+        "conclusion": "success",
+        "url": "https://github.com/wangxso/mcarplay/actions/runs/46133279960"
+      },
+      {
+        "name": "Instrumentation",
+        "runId": 46133279973,
+        "conclusion": "success",
+        "url": "https://github.com/wangxso/mcarplay/actions/runs/46133279973"
+      }
+    ],
+    "gitGuardian": "success"
+  },
+  "localVerification": {
+    "standardDebugUnitTests": {
+      "passed": 1992,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "remoteBridgeUnitTests": {
+      "passed": 25,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "tasks": [
+      "spotlessCheck",
+      ":app:lintStandardDebug",
+      ":app:assembleStandardDebug"
+    ]
+  },
+  "postMergeChecks": {
+    "headSha": "aa0a2b86c95a117b3fef9a65e01a24d813c781b1",
+    "androidCi": {
+      "runId": 46135158544,
+      "attempts": 3,
+      "status": "failure",
+      "conclusion": "external_dependency_rate_limit",
+      "initialAttemptFailure": "Robolectric MavenArtifactFetcher download HTTP 429 for android-all-instrumented-15-robolectric-12650502-i7",
+      "otherFailure": "HTTP 429 for android-all-instrumented-5.0.2_r3-robolectric-r0-i7",
+      "followUp": {
+        "issue": 154,
+        "pullRequest": 155,
+        "mergeCommit": "047cbbbafc29835950c78c9109d68c16b0303995"
+      },
+      "updatedAt": "2026-11-28T10:44:37Z",
+      "url": "https://github.com/wangxso/mcarplay/actions/runs/46135158544"
+    },
+    "instrumentation": {
+      "runId": 46135158566,
+      "attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "updatedAt": "2026-11-28T10:51:58Z",
+      "url": "https://github.com/wangxso/mcarplay/actions/runs/46135158566"
+    }
+  },
+  "boundary": "Issue #81 remains open because this pull request only aligns the PROFILE log with the existing Bluetooth MFi storage key. Cross-memory key unification, non-ASCII-safe keying, and legacy-key migration remain follow-up work. Post-merge Instrumentation passed, while Android CI failed three times before test execution because Maven Central rate-limited Robolectric runtime downloads. Issue #154 tracks the build fix."
+}

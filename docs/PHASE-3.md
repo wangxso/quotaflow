@@ -29,6 +29,12 @@ macOS 当前通过 `com.quotaflow.dashboard` LaunchAgent 常驻，并由现有�
 
 受控 PR #152 在 Bot 批准后以精确 HEAD 合并为 `d42c690`。合并后的 `main` 提交通过 [Android CI](https://github.com/wangxso/mcarplay/actions/runs/46128177378) 与 [Instrumentation](https://github.com/wangxso/mcarplay/actions/runs/46128177328)。Dashboard App merge 最初因缺少 `Contents: write` 被 GitHub 拒绝，最终合并使用仓库管理员授权路径。GitHub App 与 installation 的 `contents: write` 权限随后已完成设置、安装侧确认和 API 复核，Dashboard 也已重启刷新令牌。上述结果记录在[受控 PR 合并证据](evidence/phase3-github-controlled-pr-merge-2026-11-28.json)与[权限修复证据](evidence/phase3-github-app-contents-write-resolution-2026-11-28.json)。
 
+第二个受控 PR #153 关联 Issue #81，在本地完整门禁和 current-head CI 通过后由 Dashboard App 于 exact HEAD `1e121ec` 提交 Review `6097234663`。门禁随后进入 `ready_for_human_merge`，同一个 App 通过 `contents: write` 权限以 merge commit `aa0a2b8` 完成合并，`mergedBy` 为 `app/quotaflow-review-gate-wangxso`，没有管理员回退。演练还发现并修复了 pending／missing Check 被错误物化为 `ci_fix` 任务的问题。Issue #81 的跨三条记忆路径统一和旧键迁移仍未完成，因此本 PR 只作为关联而不关闭该 Issue。
+
+`aa0a2b8` 的 post-merge Android CI 随后连续三次收到 Robolectric 下载 Maven Central 429，而 Instrumentation 正常通过。受控 PR #155 将 API 21/35 两个 `android-all-instrumented` 运行时改为 Gradle 预取到 `app/build/robolectric-runtime`，测试 JVM 通过 `robolectric.dependency.dir` 本地加载。修复提交 `6985739` 经 Dashboard App 批准并合并为 `047cbbb`，不再通过机械重跑掩盖依赖下载竞态。证据见 [Robolectric 预取记录](evidence/phase3-github-ci-robolectric-preload-2026-11-28.json)。
+
+随后 `047cbbb` 的 post-merge Instrumentation 暴露 RGP08 启动崩溃缺少内部重试。受控 PR #157 统一了 RGP07/RGP08 的 crash-only 判定，只在 `shortMsg=Process crashed` 且没有任何测试结论时重试一次，断言失败和超时仍立即失败。修复提交 `099ee2c` 经 Dashboard App 批准并合并为 `25ea99a`。证据见 [RGP08 重试记录](evidence/phase3-github-rgp08-crash-retry-2026-11-28.json)。
+
 ## 视觉方向
 
 界面参考 T3 Code 的桌面工作台密度：窄侧栏、最近任务上下文、紧凑状态层、低噪声边框和单一强调色。QuotaFlow 使用自己的信息架构、样式和数据视图，不复制 T3 Code 的界面、品牌素材或组件代码。
@@ -71,5 +77,4 @@ macOS 当前通过 `com.quotaflow.dashboard` LaunchAgent 常驻，并由现有�
 
 ## 下一步
 
-1. 在第二个受控 PR 上完成无管理员回退的 Dashboard merge 实操，验证 `contents: write` 的端到端效果。
-2. 增加桌面发行、备份、恢复和 Linux／Windows + WSL2 启动检查。
+1. 增加桌面发行、备份、恢复和 Linux／Windows + WSL2 启动检查。

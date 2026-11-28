@@ -125,6 +125,8 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
 
 控制面从同一 `detailsUrl` 提取 workflow run ID。只有一次 run 中全部已分类失败都属于 `infrastructure` 或 `cancelled`，并且所有失败 Check 都已完成分类时，才会请求 `POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun`。请求前会重新读取 PR 快照和 workflow run，二者 `head_sha` 都必须仍与 Gate HEAD 相同。`code_or_test`、`permissions_or_configuration`、`unknown` 和 SHA 漂移不会自动复跑。
 
+Gate 不会把“检查尚未开始”或“检查仍在运行”当作失败。`queued`／`in_progress` 记录为 `ci_pending`，当前 HEAD 尚无 Check 记录为 `ci_missing`，两者只生成等待动作。只有状态已完成且结论非 success 的 Check 才允许物化 `ci_fix`，避免 PR 刚创建或刚推送时启动竞争性的修复任务。[Pending Check 修复证据](evidence/phase3-github-pending-check-materialization-2026-11-28.json)
+
 每个仓库可通过 `maxCiRerunsPerHead` 设置同一 HEAD 的复跑上限，默认 1，允许 0–5。占用记录在外部 POST 前通过 SQLite 即时事务写入，键为仓库、PR、HEAD SHA 和 workflow run ID。重复 Webhook、并发请求或进程在应答前退出都不能再次放大同一个 HEAD 的复跑次数。重跑请求成功或失败的记录都会保留，失败记录按保守策略占用额度，由人工审计后处理。
 
 GitHub App installation 已将 Actions 权限从 read 提升为 read and write，并在安装侧完成批准。Webhook 进程重启后，使用临时 Draft PR #146 的受控基础设施失败完成真实复跑：API 返回 `201`，workflow run attempt 从 1 增至 2，新 Check `140869955267` 仍绑定原 HEAD `e25f1da`。随后以另一个 delivery 重放新快照，返回既有 claim 的 `duplicate`，request count 保持 1，run attempt 仍为 2。该临时 PR 和分支已关闭、删除。

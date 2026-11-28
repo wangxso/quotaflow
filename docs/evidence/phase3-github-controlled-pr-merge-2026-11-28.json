@@ -79,8 +79,15 @@
     "existingPermission": "Contents: read",
     "resolution": {
       "status": "resolved",
-      "evidence": "phase3-github-app-contents-write-resolution-2026-11-28.json"
+      "evidence": "phase3-github-app-contents-write-resolution-2026-11-28.json",
+      "endToEnd": {
+        "pullRequest": 153,
+        "headSha": "1e121ecd5d0a132e93c1ff2efc94991e6d6fa66b",
+        "mergeCommit": "aa0a2b86c95a117b3fef9a65e01a24d813c781b1",
+        "mergedBy": "app/quotaflow-review-gate-wangxso",
+        "administratorFallback": false
+      }
     },
-    "nextAction": "Exercise Dashboard merge end to end on a second controlled pull request without an administrator fallback"
+    "nextAction": "No permission follow-up remains. Continue monitoring App merge usage and keep Contents write scoped to the selected repository installation."
   }
 }

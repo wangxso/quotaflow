@@ -1,0 +1,71 @@
+{
+  "recordedOn": "2026-11-28",
+  "kind": "phase3-github-pending-check-materialization-fix",
+  "trigger": {
+    "repository": "wangxso/mcarplay",
+    "pullRequest": 153,
+    "observedOn": [
+      "4f7ec9cad13e530db2c7f04004d5128cefe42104",
+      "1e121ecd5d0a132e93c1ff2efc94991e6d6fa66b"
+    ]
+  },
+  "observedDefect": {
+    "summary": "PR creation and branch updates treated missing or queued check runs as CI failures and materialized ci_fix tasks",
+    "falseTasks": [
+      {
+        "taskId": "gh-981947aaf3c88786357b24cd5a56cbd3",
+        "headSha": "4f7ec9cad13e530db2c7f04004d5128cefe42104",
+        "reason": "ci_not_success",
+        "finalStatus": "cancelled"
+      },
+      {
+        "taskId": "gh-480d20de5e92c7a698575da67cb4d3a6",
+        "headSha": "1e121ecd5d0a132e93c1ff2efc94991e6d6fa66b",
+        "reason": "ci_missing",
+        "finalStatus": "cancelled"
+      },
+      {
+        "taskId": "gh-b4e46cd3d7e62568aa9f33b4f089f3e5",
+        "headSha": "1e121ecd5d0a132e93c1ff2efc94991e6d6fa66b",
+        "reason": "ci_not_success",
+        "finalStatus": "cancelled"
+      }
+    ]
+  },
+  "fix": {
+    "commit": "f25c2c8466ea58a93ff173751e02e9e75a38b5ee",
+    "summary": "queued and in-progress checks become ci_pending, while absent checks remain ci_missing",
+    "behavior": [
+      "ci_pending and ci_missing produce human wait actions",
+      "ci_fix is only available for completed checks whose conclusion is not success",
+      "independent review and Ready actions wait when current-head checks are incomplete"
+    ]
+  },
+  "verification": {
+    "liveValidation": {
+      "repository": "wangxso/mcarplay",
+      "pullRequest": 155,
+      "observedHeads": [
+        "28b66362ece8f085a3fe541d61b6c130ee1ffdcd",
+        "6985739e1588e3a7bdacb5b0adfb4a03da516ee2"
+      ],
+      "ciFixTasksCreatedWhileChecksWerePending": 0
+    },
+    "targetedTests": {
+      "passed": 25,
+      "failed": 0
+    },
+    "fullTests": {
+      "passed": 178,
+      "skipped": 1,
+      "failed": 0,
+      "assertions": 870
+    },
+    "webhookService": {
+      "launchAgent": "com.quotaflow.webhook",
+      "state": "running",
+      "localHealth": "ok",
+      "publicHealth": "ok"
+    }
+  }
+}

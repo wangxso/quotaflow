@@ -1,0 +1,146 @@
+{
+  "recordedOn": "2026-11-28",
+  "kind": "phase3-github-rgp08-crash-retry",
+  "repository": "wangxso/mcarplay",
+  "issue": {
+    "number": 156,
+    "state": "closed",
+    "stateReason": "completed",
+    "url": "https://github.com/wangxso/mcarplay/issues/156"
+  },
+  "pullRequest": {
+    "number": 157,
+    "url": "https://github.com/wangxso/mcarplay/pull/157",
+    "state": "merged",
+    "headSha": "099ee2cd26df357722d1d12eafa8155105bc4b85",
+    "baseSha": "047cbbbafc29835950c78c9109d68c16b0303995",
+    "mergeCommit": "25ea99adcd41bb82125d4f88061e1fa8cf3c2d0c",
+    "mergedAt": "2026-11-28T13:48:15Z",
+    "mergedBy": {
+      "login": "app/quotaflow-review-gate-wangxso",
+      "isBot": true
+    }
+  },
+  "dashboardActions": {
+    "approval": {
+      "requestId": "a8de6b68-049c-4a08-b1b0-eb67861a0e9e",
+      "endpointStatus": 202,
+      "githubStatus": 200,
+      "reviewId": 6098131698,
+      "reviewState": "APPROVED"
+    },
+    "merge": {
+      "requestId": "5eb24eb4-a1c6-4130-8535-9f1a02f59388",
+      "endpointStatus": 202,
+      "githubStatus": 200,
+      "result": "merged",
+      "mergeCommit": "25ea99adcd41bb82125d4f88061e1fa8cf3c2d0c"
+    }
+  },
+  "rootCause": {
+    "component": ".github/scripts/run-rgp07-rgp08.sh",
+    "failure": "RGP08 lacked the existing crash-only retry used by RGP07",
+    "postMergeFailuresOnAa0a2b8": [
+      {
+        "attempt": 1,
+        "stage": "RGP08 startup",
+        "result": "INSTRUMENTATION_RESULT: shortMsg=Process crashed."
+      },
+      {
+        "attempt": 2,
+        "stage": "RGP07 normal phase2",
+        "result": "INSTRUMENTATION_ABORTED: System has crashed."
+      },
+      {
+        "attempt": 3,
+        "stage": "RGP08 startup",
+        "result": "INSTRUMENTATION_RESULT: shortMsg=Process crashed."
+      }
+    ]
+  },
+  "fix": {
+    "sourceCommit": "099ee2cd26df357722d1d12eafa8155105bc4b85",
+    "behavior": [
+      "RGP07 and RGP08 share instrumentation_crashed_without_result",
+      "Retry only when shortMsg=Process crashed is present",
+      "Do not retry when OK or FAILURES already appears",
+      "RGP08 preserves separate instrument output and logcat per attempt",
+      "Android system crash remains a job-level same-SHA rerun case"
+    ]
+  },
+  "localVerification": {
+    "pythonTools": {
+      "passed": 92,
+      "failed": 0
+    },
+    "standardDebugUnitTests": {
+      "passed": 1992,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "remoteBridgeUnitTests": {
+      "passed": 25,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "tasks": [
+      "bash -n .github/scripts/run-rgp07-rgp08.sh",
+      "spotlessCheck",
+      ":app:lintStandardDebug",
+      ":app:assembleStandardDebug"
+    ]
+  },
+  "preMergeChecks": {
+    "pullRequestRuns": [
+      {
+        "name": "Android CI",
+        "runId": 46145843903,
+        "conclusion": "success",
+        "url": "https://github.com/wangxso/mcarplay/actions/runs/46145843903"
+      },
+      {
+        "name": "Instrumentation",
+        "runId": 46145843989,
+        "conclusion": "success",
+        "url": "https://github.com/wangxso/mcarplay/actions/runs/46145843989"
+      }
+    ],
+    "branchPushRuns": [
+      {
+        "name": "Android CI",
+        "runId": 46145811335,
+        "conclusion": "success",
+        "url": "https://github.com/wangxso/mcarplay/actions/runs/46145811335"
+      },
+      {
+        "name": "Instrumentation",
+        "runId": 46145811259,
+        "conclusion": "success",
+        "url": "https://github.com/wangxso/mcarplay/actions/runs/46145811259"
+      }
+    ],
+    "gitGuardian": "success"
+  },
+  "postMergeChecks": {
+    "headSha": "25ea99adcd41bb82125d4f88061e1fa8cf3c2d0c",
+    "androidCi": {
+      "runId": 46151427629,
+      "status": "completed",
+      "conclusion": "success",
+      "updatedAt": "2026-11-28T13:53:21Z",
+      "url": "https://github.com/wangxso/mcarplay/actions/runs/46151427629"
+    },
+    "instrumentation": {
+      "runId": 46151427668,
+      "attempt": 1,
+      "status": "completed",
+      "conclusion": "failure",
+      "failure": "Android system crashed during RGP08 startup; RGP07 normal/legacy/corrupt/partial all passed",
+      "retryNotApplied": "The crash was INSTRUMENTATION_ABORTED: System has crashed., not shortMsg=Process crashed.",
+      "url": "https://github.com/wangxso/mcarplay/actions/runs/46151427668"
+    }
+  },
+  "verificationBoundary": "The crash-only process-crash retry was validated by both pre-merge Instrumentation runs and static tests. The final post-merge Android CI passed. Its Instrumentation attempt hit a guest Android system crash, which requires a fresh runner and remains a job-level retry case."
+}
