@@ -1,6 +1,6 @@
 {
   "recordedOn": "2026-11-28",
-  "baseRevision": "66b29f661f15b540d72b9de2043ede1b37f47099",
+  "baseRevision": "77104a1f03c0d127b570c196f31566826c05f614",
   "policy": {
     "sameRepositoryOnly": true,
     "branchPrefixes": [
@@ -51,10 +51,36 @@
   "githubApp": {
     "appId": 5955591,
     "installationId": 186560843,
-    "actionsPermissionAtCodeCompletion": "read",
+    "actionsPermission": "read_and_write",
     "actionsReadAndWriteRequiredForLiveRerun": true,
-    "installationApprovalAccepted": false,
-    "liveRerun": "not executed"
+    "installationApprovalAccepted": true,
+    "webhookProcessRestartedAfterPermissionChange": true
+  },
+  "liveVerification": {
+    "repository": "wangxso/mcarplay",
+    "temporaryPullRequest": 146,
+    "temporaryPullRequestClosed": true,
+    "temporaryBranchDeleted": true,
+    "headSha": "e25f1da87f9e633bdfbcc96a4e34553b29cabe3c",
+    "workflowRunId": 46109547179,
+    "initialJobId": 140869780560,
+    "category": "infrastructure",
+    "allFailedChecksTriaged": true,
+    "rerunApiHttpStatus": 201,
+    "runAttemptBefore": 1,
+    "runAttemptAfter": 2,
+    "rerunHeadSha": "e25f1da87f9e633bdfbcc96a4e34553b29cabe3c",
+    "newCheckId": 140869955267,
+    "newCheckHeadSha": "e25f1da87f9e633bdfbcc96a4e34553b29cabe3c",
+    "newCheckDetailsUrl": "https://github.com/wangxso/mcarplay/actions/runs/46109547179/job/140869955267",
+    "duplicateDeliveryResult": "duplicate",
+    "duplicateDeliveryHttpStatus": 202,
+    "runAttemptAfterDuplicate": 2,
+    "persistedRecord": {
+      "state": "requested",
+      "requestCount": 1,
+      "httpStatus": 201
+    }
   },
   "verification": {
     "rerunTests": 9,
@@ -81,8 +107,8 @@
   "scope": {
     "automaticSameShaRerunCode": "implemented",
     "automaticPushCommentApproveOrMerge": false,
-    "liveRerunAfterActionsWrite": "pending",
-    "newCheckSameShaObservation": "pending",
+    "liveRerunAfterActionsWrite": "verified",
+    "newCheckSameShaObservation": "verified",
     "durablePublicWebhook": "pending"
   }
 }

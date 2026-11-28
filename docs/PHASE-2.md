@@ -125,20 +125,18 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
 
 每个仓库可通过 `maxCiRerunsPerHead` 设置同一 HEAD 的复跑上限，默认 1，允许 0–5。占用记录在外部 POST 前通过 SQLite 即时事务写入，键为仓库、PR、HEAD SHA 和 workflow run ID。重复 Webhook、并发请求或进程在应答前退出都不能再次放大同一个 HEAD 的复跑次数。重跑请求成功或失败的记录都会保留，失败记录按保守策略占用额度，由人工审计后处理。
 
-当前 App installation 只接受 Actions read 时，代码会把权限错误记录为人工处理。实时复跑要求安装权限提升为 Actions read and write，在安装侧批准后重启 Webhook 进程以丢弃旧 installation token，然后验证新 Check 仍绑定原 HEAD。该真实权限与运行时验证尚未完成。
+GitHub App installation 已将 Actions 权限从 read 提升为 read and write，并在安装侧完成批准。Webhook 进程重启后，使用临时 Draft PR #146 的受控基础设施失败完成真实复跑：API 返回 `201`，workflow run attempt 从 1 增至 2，新 Check `140869955267` 仍绑定原 HEAD `e25f1da`。随后以另一个 delivery 重放新快照，返回既有 claim 的 `duplicate`，request count 保持 1，run attempt 仍为 2。该临时 PR 和分支已关闭、删除。
 
-代码级验收覆盖成功复跑、PR HEAD 漂移、workflow run HEAD 漂移、次数耗尽、并发重复投递、代码/测试同 run 禁止复跑、分类不完整、显式零限额、API 失败和 v9→v10 迁移；macOS 与 Linux 均为 161 通过、1 个平台性 skip、0 失败。 [复跑闭环证据](evidence/phase2-github-ci-rerun-2026-11-28.json)
+代码级验收覆盖成功复跑、PR HEAD 漂移、workflow run HEAD 漂移、次数耗尽、并发重复投递、代码/测试同 run 禁止复跑、分类不完整、显式零限额、API 失败和 v9→v10 迁移；macOS 与 Linux 均为 161 通过、1 个平台性 skip、0 失败。真实 Actions read/write 与同 HEAD 复跑结果见[复跑闭环证据](evidence/phase2-github-ci-rerun-2026-11-28.json)。
 
 ## 尚未完成
 
 - 将临时公网 SSH 隧道替换为带稳定域名、TLS、进程监督和故障恢复的持久部署。
-- 提升 GitHub App 的 Actions 权限并完成同 SHA 实时复跑、新 Check 绑定和失败回写验证。
 - 写入应答丢失、重复 Webhook、越权请求和凭据轮换演练。
 - 后续 Review–Fix／CI 修复任务的完整执行、复跑和门禁闭环。
 
 ## 下一里程碑
 
 1. 将监听器部署到稳定公网地址和受控反向代理。
-2. 在 Actions write 授权后完成同 SHA 实时复跑并核对新 Check 绑定。
-3. 对后续 Review–Fix／CI 修复任务重复执行和门禁闭环。
-4. Phase 2 核心验收完成后进入 Phase 3 Dashboard 与部署。
+2. 对后续 Review–Fix／CI 修复任务重复执行和门禁闭环。
+3. Phase 2 核心验收完成后进入 Phase 3 Dashboard 与部署。

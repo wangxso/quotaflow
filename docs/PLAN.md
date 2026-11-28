@@ -30,7 +30,7 @@ PR #141 随后由有权限的操作者转为 Ready。重新拉取快照后，Dra
 
 随后完成 Webhook 到任务的代码闭环。`githubProjects` 必须显式配置仓库路径、分支前缀白名单和 remote，fork PR 默认拒绝。命中映射后，控制面按事件中的 base/head SHA 拉取缺失提交，再复用稳定动作键任务物化。人工合并、Ready、冲突与证据刷新继续返回 `human_required`。PR #136 分支未命中 `quotaflow/*` 白名单，公网签名事件返回 202 且 `taskMaterialization.status=ignored`，没有创建任务。临时 Git 仓库测试验证了精确 HEAD 拉取、只读 Review 任务创建、重复事件返回 `task_exists`、fork 与未授权分支拒绝。详见 [Webhook 任务物化证据](evidence/phase2-github-webhook-materialization-2026-11-28.json)。
 
-随后接入 GitHub App 短时安装令牌和 Actions 日志分流。控制面从失败 Check 的 details URL 提取 job 和 workflow run ID，最多读取 3 个 job 的日志并限制为 256 KiB，清理 ANSI、脱敏令牌、Authorization、凭据赋值和 PEM 后分类为代码/测试、基础设施、权限配置、取消或未知。代码类失败的脱敏摘要会追加到当前 HEAD 的 Fix 任务提示。纯基础设施或取消 run 只有在 PR 与 run 的 HEAD 再次核验一致且每 HEAD 原子限额可用时才复跑；权限、代码/测试、未知、未完整分类和 SHA 漂移不会自动复跑。App installation 已接受 Actions read，真实 job `140707721837` 的 164144 字节日志成功下载并分类为 `code_or_test`。Actions write 授权后的实时复跑仍待验证。详见 [CI 分流证据](evidence/phase2-github-ci-triage-2026-11-28.json)。
+随后接入 GitHub App 短时安装令牌和 Actions 日志分流。控制面从失败 Check 的 details URL 提取 job 和 workflow run ID，最多读取 3 个 job 的日志并限制为 256 KiB，清理 ANSI、脱敏令牌、Authorization、凭据赋值和 PEM 后分类为代码/测试、基础设施、权限配置、取消或未知。代码类失败的脱敏摘要会追加到当前 HEAD 的 Fix 任务提示。纯基础设施或取消 run 只有在 PR 与 run 的 HEAD 再次核验一致且每 HEAD 原子限额可用时才复跑；权限、代码/测试、未知、未完整分类和 SHA 漂移不会自动复跑。App installation 已接受 Actions read/write。真实 job `140707721837` 的 164144 字节日志成功下载并分类为 `code_or_test`；临时 Draft PR #146 的受控基础设施失败完成同 SHA 复跑，API 返回 201，run attempt 从 1 增至 2，新 Check 保持同一 HEAD，重复 delivery 未再次复跑。详见 [CI 分流证据](evidence/phase2-github-ci-triage-2026-11-28.json) 与[复跑闭环证据](evidence/phase2-github-ci-rerun-2026-11-28.json)。
 
 ## Phase 0 · 调研与可行性验证
 
