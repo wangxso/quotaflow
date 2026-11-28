@@ -142,6 +142,16 @@ export interface GitHubWebhookEvent {
   payloadHash: string;
 }
 
+export class GitHubWebhookIgnoredError extends Error {
+  constructor(
+    readonly reason: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'GitHubWebhookIgnoredError';
+  }
+}
+
 function record(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
   return value as Record<string, unknown>;
@@ -519,7 +529,13 @@ export function normalizeGitHubWebhook(
   if (event === 'check_run') {
     const check = record(root.check_run, 'check_run');
     const pulls = check.pull_requests;
-    if (!Array.isArray(pulls) || pulls.length === 0) throw new Error('check_run.pull_requests must contain a PR');
+    if (!Array.isArray(pulls)) throw new Error('check_run.pull_requests must be an array');
+    if (pulls.length === 0) {
+      throw new GitHubWebhookIgnoredError(
+        'check_run_without_pull_request',
+        'Check run is not associated with a pull request',
+      );
+    }
     const pull = record(pulls[0], 'check_run.pull_requests[0]');
     return {
       eventType: event,

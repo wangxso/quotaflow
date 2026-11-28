@@ -1,4 +1,5 @@
 import {
+  GitHubWebhookIgnoredError,
   githubEventKey,
   normalizeGitHubWebhook,
   planGitHubActions,
@@ -105,6 +106,14 @@ export function createGitHubWebhookHandler(options: GitHubWebhookHandlerOptions)
     try {
       event = normalizeGitHubWebhook(eventType, payload, rawBody);
     } catch (error) {
+      if (error instanceof GitHubWebhookIgnoredError) {
+        return json({
+          status: 'ignored',
+          eventType,
+          deliveryId,
+          reason: error.reason,
+        }, 200);
+      }
       const unsupported = error instanceof Error && error.message.includes('Unsupported GitHub webhook event');
       return json({ error: unsupported ? 'unsupported_event' : 'invalid_payload' }, unsupported ? 422 : 400);
     }

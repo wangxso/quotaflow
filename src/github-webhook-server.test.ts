@@ -104,6 +104,24 @@ test('HTTP webhook handler accepts, deduplicates and rejects signed events', asy
       eventType: 'installation',
       deliveryId: 'installation-delivery',
     });
+    const branchCheck = await handle(request(Buffer.from(JSON.stringify({
+      action: 'completed',
+      repository: { full_name: 'wangxso/mcarplay' },
+      check_run: {
+        head_sha: headSha,
+        pull_requests: [],
+      },
+    })), {
+      'x-github-event': 'check_run',
+      'x-github-delivery': 'branch-check-delivery',
+    }));
+    expect(branchCheck.status).toBe(200);
+    expect(await branchCheck.json()).toEqual({
+      status: 'ignored',
+      eventType: 'check_run',
+      deliveryId: 'branch-check-delivery',
+      reason: 'check_run_without_pull_request',
+    });
     expect(db.query<{ n: number }, []>('SELECT count(*) AS n FROM github_deliveries').get()?.n).toBe(1);
   } finally {
     db.close();
