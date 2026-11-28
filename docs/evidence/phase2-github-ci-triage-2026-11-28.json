@@ -38,13 +38,24 @@
   },
   "liveBoundary": {
     "currentAppPermissions": {
+      "actions": "read",
       "checks": "read",
       "contents": "read",
       "metadata": "read",
       "pull_requests": "write"
     },
-    "actionsReadPermission": "not yet granted",
-    "realActionsJobLogDownload": "pending permission acceptance",
+    "actionsReadPermission": "granted and accepted by the installation",
+    "realActionsJobLogDownload": {
+      "repository": "wangxso/mcarplay",
+      "workflowRunId": 46058792675,
+      "jobId": 140707721837,
+      "headSha": "b84ce9bf3286adfe573820059bb41190600fc755",
+      "logBytes": 164144,
+      "truncated": false,
+      "excerptLength": 6403,
+      "category": "code_or_test",
+      "error": null
+    },
     "sameShaRerun": "not implemented"
   },
   "verification": {
@@ -62,7 +73,7 @@
   },
   "scope": {
     "jobLogFetching": "implemented against injectable GitHub API",
-    "liveJobLogFetching": "pending Actions read permission",
+    "liveJobLogFetching": "verified with a real failed GitHub Actions job",
     "automaticSameShaRerun": "pending",
     "automaticPushCommentOrMerge": false
   }

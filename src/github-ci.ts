@@ -47,7 +47,7 @@ const categoryRules: Array<{
   },
   {
     category: 'code_or_test',
-    pattern: /\b(?:build failed|compilation error|lint failed|test failed|tests failed|assertionerror|failed [1-9]\d* tests?|exception in thread)\b/i,
+    pattern: /(?:##\[error\]|\b(?:build failed|compilation error|lint failed|test failed|tests failed|assertionerror|failed [1-9]\d* tests?|exception in thread)\b|process completed with exit code [1-9]\d*)/i,
   },
 ];
 
