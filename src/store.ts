@@ -7,7 +7,11 @@ import type {
   BudgetLease,
   BudgetPolicy,
   BudgetStatus,
+  ClaimGitHubCiRerunInput,
+  CompleteGitHubCiRerunInput,
   EventRecord,
+  GitHubCiRerunClaim,
+  GitHubCiRerunRecord,
   HandoffOptions,
   LaneConfig,
   LaneFilter,
@@ -175,6 +179,19 @@ type GitHubGateRow = {
   updated_at: number;
 };
 
+type GitHubCiRerunRow = {
+  repository: string;
+  pull_number: number;
+  head_sha: string;
+  run_id: number;
+  state: GitHubCiRerunRecord['state'];
+  request_count: number;
+  http_status: number | null;
+  error: string | null;
+  created_at: number;
+  updated_at: number;
+};
+
 function taskFrom(row: TaskRow): Task {
   return {
     id: row.id,
@@ -291,6 +308,21 @@ function githubGateFrom(row: GitHubGateRow): GitHubGateRecord {
     snapshotHash: row.snapshot_hash,
     deliveryId: row.delivery_id,
     evaluation: JSON.parse(row.detail) as GitHubGateResult,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function githubCiRerunFrom(row: GitHubCiRerunRow): GitHubCiRerunRecord {
+  return {
+    repository: row.repository,
+    pullNumber: row.pull_number,
+    headSha: row.head_sha,
+    runId: row.run_id,
+    state: row.state,
+    requestCount: row.request_count,
+    httpStatus: row.http_status,
+    error: row.error,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -556,6 +588,96 @@ export class TaskStore {
       WHERE repository = ? AND pull_number = ? AND head_sha = ? AND policy_hash = ?
     `).get(repository, pullNumber, headSha, policyHash);
     return row ? githubGateFrom(row) : null;
+  }
+
+  claimGitHubCiRerun(input: ClaimGitHubCiRerunInput): GitHubCiRerunClaim {
+    return this.db.transaction(() => {
+      const now = input.now ?? Date.now();
+      if (!Number.isInteger(input.maxPerHead) || input.maxPerHead < 0 || input.maxPerHead > 5) {
+        throw new Error('GitHub CI rerun limit must be an integer between 0 and 5');
+      }
+      if (!Number.isInteger(input.runId) || input.runId <= 0) {
+        throw new Error('GitHub Actions run ID must be a positive integer');
+      }
+      const repository = input.repository.toLowerCase();
+      const existing = this.db.query<GitHubCiRerunRow, [string, number, string, number]>(`
+        SELECT * FROM github_ci_reruns
+        WHERE repository = ? AND pull_number = ? AND head_sha = ? AND run_id = ?
+      `).get(repository, input.pullNumber, input.headSha, input.runId);
+      const used = this.db.query<{ used: number }, [string, number, string]>(`
+        SELECT COALESCE(SUM(request_count), 0) AS used
+        FROM github_ci_reruns
+        WHERE repository = ? AND pull_number = ? AND head_sha = ?
+      `).get(repository, input.pullNumber, input.headSha)?.used ?? 0;
+      if (existing) {
+        return {
+          claimed: false,
+          reason: 'duplicate',
+          record: githubCiRerunFrom(existing),
+          usedBefore: used,
+          limit: input.maxPerHead,
+        };
+      }
+      if (used >= input.maxPerHead) {
+        return {
+          claimed: false,
+          reason: 'limit_reached',
+          record: null,
+          usedBefore: used,
+          limit: input.maxPerHead,
+        };
+      }
+      this.db.run(
+        `INSERT INTO github_ci_reruns
+          (repository, pull_number, head_sha, run_id, state, request_count, http_status, error, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'claimed', 1, NULL, NULL, ?, ?)`,
+        [repository, input.pullNumber, input.headSha, input.runId, now, now],
+      );
+      const record = this.getGitHubCiRerun(repository, input.pullNumber, input.headSha, input.runId)!;
+      return {
+        claimed: true,
+        reason: 'claimed',
+        record,
+        usedBefore: used,
+        limit: input.maxPerHead,
+      };
+    }).immediate();
+  }
+
+  completeGitHubCiRerun(input: CompleteGitHubCiRerunInput): GitHubCiRerunRecord {
+    const now = input.now ?? Date.now();
+    const repository = input.repository.toLowerCase();
+    this.db.run(
+      `UPDATE github_ci_reruns
+       SET state = ?, http_status = ?, error = ?, updated_at = ?
+       WHERE repository = ? AND pull_number = ? AND head_sha = ? AND run_id = ? AND state = 'claimed'`,
+      [input.state, input.httpStatus ?? null, input.error?.slice(0, 500) ?? null, now,
+        repository, input.pullNumber, input.headSha, input.runId],
+    );
+    const record = this.getGitHubCiRerun(repository, input.pullNumber, input.headSha, input.runId);
+    if (!record) throw new Error(`Unknown GitHub CI rerun ${repository}#${input.pullNumber} run ${input.runId}`);
+    return record;
+  }
+
+  getGitHubCiRerun(
+    repository: string,
+    pullNumber: number,
+    headSha: string,
+    runId: number,
+  ): GitHubCiRerunRecord | null {
+    const row = this.db.query<GitHubCiRerunRow, [string, number, string, number]>(`
+      SELECT * FROM github_ci_reruns
+      WHERE repository = ? AND pull_number = ? AND head_sha = ? AND run_id = ?
+    `).get(repository.toLowerCase(), pullNumber, headSha, runId);
+    return row ? githubCiRerunFrom(row) : null;
+  }
+
+  listGitHubCiReruns(repository: string, pullNumber: number, headSha: string): GitHubCiRerunRecord[] {
+    return this.db.query<GitHubCiRerunRow, [string, number, string]>(`
+      SELECT * FROM github_ci_reruns
+      WHERE repository = ? AND pull_number = ? AND head_sha = ?
+      ORDER BY created_at, run_id
+    `).all(repository.toLowerCase(), pullNumber, headSha).map(githubCiRerunFrom);
   }
 
   #recordGitHubDelivery(input: GitHubDeliveryInput): GitHubDeliveryRecord {

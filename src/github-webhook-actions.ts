@@ -4,6 +4,7 @@ import {
   enrichGitHubPlanWithCi,
   type GitHubCiTriage,
 } from './github-ci';
+import type { GitHubCiRerunSummary } from './github-ci-rerun';
 import {
   materializeGitHubActions,
   type GitHubPlanMaterialization,
@@ -20,13 +21,20 @@ export interface GitHubWebhookActionOutcome {
   reason?: string;
   materialization?: GitHubPlanMaterialization;
   ciTriage?: GitHubCiTriage;
+  ciRerun?: GitHubCiRerunSummary;
+}
+
+export interface GitHubCiAssessment {
+  triage: GitHubCiTriage;
+  rerun?: GitHubCiRerunSummary;
 }
 
 export async function materializeGitHubWebhookActions(
   store: TaskStore,
   config: QuotaFlowConfig,
   context: GitHubWebhookActionContext,
-  ciTriageSource?: GitHubCiTriage | (() => Promise<GitHubCiTriage> | GitHubCiTriage),
+  ciAssessmentSource?: GitHubCiAssessment | (() =>
+    Promise<GitHubCiAssessment> | GitHubCiAssessment),
 ): Promise<GitHubWebhookActionOutcome> {
   const repository = context.snapshot.repository.toLowerCase();
   const project = config.githubProjects?.find((candidate) => candidate.repository === repository);
@@ -61,15 +69,64 @@ export async function materializeGitHubWebhookActions(
   const agentActions = context.plan.actions.filter((action) => !action.requiresHuman);
   const needsCiTriage = agentActions.some((action) =>
     action.kind === 'ci_fix' || action.kind === 'review_fix');
-  const ciTriage = needsCiTriage && ciTriageSource
-    ? typeof ciTriageSource === 'function'
-      ? await ciTriageSource()
-      : ciTriageSource
+  const ciAssessment = needsCiTriage && ciAssessmentSource
+    ? typeof ciAssessmentSource === 'function'
+      ? await ciAssessmentSource()
+      : ciAssessmentSource
     : undefined;
+  const ciTriage = ciAssessment?.triage;
+  const ciRerun = ciAssessment?.rerun;
+  const remainingCiTriage = ciRerun?.remainingTriage ?? ciTriage;
+  const allAgentActionsAreCiFixes = agentActions.length > 0
+    && agentActions.every((action) => action.kind === 'ci_fix');
+  const agentActionableCiFailure = Boolean(remainingCiTriage?.failures.some((failure) =>
+    failure.category === 'code_or_test' || failure.category === 'unknown'));
+  if (agentActions.length > 0 && ciRerun?.staleHead) {
+    return {
+      status: 'human_only',
+      repository,
+      pullNumber: context.snapshot.number,
+      headSha: context.snapshot.headSha,
+      reason: 'ci_rerun_stale_head',
+      ...(ciTriage ? { ciTriage } : {}),
+      ...(ciRerun ? { ciRerun } : {}),
+    };
+  }
+  if (
+    allAgentActionsAreCiFixes
+    && ciRerun
+    && ciRerun.candidates.length > 0
+    && remainingCiTriage?.failures.length === 0
+  ) {
+    return {
+      status: 'human_only',
+      repository,
+      pullNumber: context.snapshot.number,
+      headSha: context.snapshot.headSha,
+      reason: ciRerun.status === 'requested' ? 'ci_rerun_requested' : 'ci_rerun_requires_human',
+      ...(ciTriage ? { ciTriage } : {}),
+      ...(ciRerun ? { ciRerun } : {}),
+    };
+  }
+  if (
+    allAgentActionsAreCiFixes
+    && ciRerun?.status === 'human_only'
+    && !agentActionableCiFailure
+  ) {
+    return {
+      status: 'human_only',
+      repository,
+      pullNumber: context.snapshot.number,
+      headSha: context.snapshot.headSha,
+      reason: 'ci_rerun_requires_human',
+      ...(ciTriage ? { ciTriage } : {}),
+      ...(ciRerun ? { ciRerun } : {}),
+    };
+  }
   if (
     agentActions.length > 0
     && agentActions.every((action) => action.kind === 'ci_fix')
-    && ciTriageRequiresHuman(ciTriage)
+    && ciTriageRequiresHuman(remainingCiTriage)
   ) {
     return {
       status: 'human_only',
@@ -78,10 +135,11 @@ export async function materializeGitHubWebhookActions(
       headSha: context.snapshot.headSha,
       reason: 'ci_triage_requires_human',
       ...(ciTriage ? { ciTriage } : {}),
+      ...(ciRerun ? { ciRerun } : {}),
     };
   }
 
-  const plan = enrichGitHubPlanWithCi(context.plan, ciTriage);
+  const plan = enrichGitHubPlanWithCi(context.plan, remainingCiTriage);
   if (agentActions.length > 0) {
     fetchGitHubCommits(project.repoPath, project.remote ?? 'origin', [
       context.snapshot.headSha,
@@ -102,5 +160,6 @@ export async function materializeGitHubWebhookActions(
     headSha: context.snapshot.headSha,
     materialization,
     ...(ciTriage ? { ciTriage } : {}),
+    ...(ciRerun ? { ciRerun } : {}),
   };
 }

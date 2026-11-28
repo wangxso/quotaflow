@@ -81,6 +81,50 @@ export interface GitHubProjectConfig {
   branchPrefixes: string[];
   remote?: string;
   allowForks?: boolean;
+  maxCiRerunsPerHead?: number;
+}
+
+export type GitHubCiRerunState = 'claimed' | 'requested' | 'failed';
+
+export interface GitHubCiRerunRecord {
+  repository: string;
+  pullNumber: number;
+  headSha: string;
+  runId: number;
+  state: GitHubCiRerunState;
+  requestCount: number;
+  httpStatus: number | null;
+  error: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ClaimGitHubCiRerunInput {
+  repository: string;
+  pullNumber: number;
+  headSha: string;
+  runId: number;
+  maxPerHead: number;
+  now?: number;
+}
+
+export interface GitHubCiRerunClaim {
+  claimed: boolean;
+  reason: 'claimed' | 'duplicate' | 'limit_reached';
+  record: GitHubCiRerunRecord | null;
+  usedBefore: number;
+  limit: number;
+}
+
+export interface CompleteGitHubCiRerunInput {
+  repository: string;
+  pullNumber: number;
+  headSha: string;
+  runId: number;
+  state: Exclude<GitHubCiRerunState, 'claimed'>;
+  httpStatus?: number;
+  error?: string;
+  now?: number;
 }
 
 export interface BudgetPolicy {

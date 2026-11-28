@@ -20,7 +20,7 @@ QuotaFlow 已在 `wangxso/mcarplay` Issue #82 上创建独立 Worktree，由 Cod
 
 `github gate` 还会输出下一步动作计划。动作按当前阻断阶段排序，避免同时派出多个写任务。CI 失败和 `CHANGES_REQUESTED` 会合并成一个 Review–Fix 任务提示，修复完成后再次运行门禁才会生成独立审查动作。Draft、冲突、HEAD／base 变化和最终合并保留为人工动作。计划包含稳定的 `actionKey`、优先级、原因和可直接交给 Agent 的任务提示。
 
-`--materialize <repo>` 只会为 `independent_review`、`review_fix` 或 `ci_fix` 创建任务。任务 ID 由 `actionKey` 稳定派生，因此 Webhook 重放或重复执行门禁不会创建重复任务。任务初始检查点固定为 PR HEAD，仓库中必须已经存在当前 base／head 提交，否则命令会在写库前失败。执行沿用 QuotaFlow 的每任务最多 3 次尝试和配置预算，任务提示禁止 Agent push、评论、批准、合并或修改仓库权限。`independent_review` 使用 SQLite v9 的任务级只读模式，Agent 不能写入 worktree，其他 Adapter 如果无法保证只读会被 Worker 拒绝，完成后还会再次校验 HEAD 和工作树。Draft、冲突、刷新证据和人工合并只作为 `human_required` 返回，不会派发。 [物化与执行证据](evidence/phase2-github-materialization-2026-11-28.json)
+`--materialize <repo>` 只会为 `independent_review`、`review_fix` 或 `ci_fix` 创建任务。任务 ID 由 `actionKey` 稳定派生，因此 Webhook 重放或重复执行门禁不会创建重复任务。任务初始检查点固定为 PR HEAD，仓库中必须已经存在当前 base／head 提交，否则命令会在写库前失败。执行沿用 QuotaFlow 的每任务最多 3 次尝试和配置预算，任务提示禁止 Agent push、评论、批准、合并或修改仓库权限。`independent_review` 使用 v9 引入的任务级只读模式，Agent 不能写入 worktree，其他 Adapter 如果无法保证只读会被 Worker 拒绝，完成后还会再次校验 HEAD 和工作树。Draft、冲突、刷新证据和人工合并只作为 `human_required` 返回，不会派发。 [物化与执行证据](evidence/phase2-github-materialization-2026-11-28.json)
 
 Webhook 自动物化必须通过 `githubProjects` 显式映射。未映射仓库返回 `not_configured`，fork PR 和未命中 `branchPrefixes` 的分支返回 `ignored`，这些情况不会创建任务。命中映射后，服务会从配置 remote 拉取缺失的 base/head 提交并复用 CLI 的幂等任务物化。
 
@@ -30,7 +30,8 @@ Webhook 自动物化必须通过 `githubProjects` 显式映射。未映射仓库
     "repository": "wangxso/mcarplay",
     "repoPath": "/path/to/local/mcarplay",
     "branchPrefixes": ["quotaflow/"],
-    "remote": "origin"
+    "remote": "origin",
+    "maxCiRerunsPerHead": 1
   }]
 }
 ```
@@ -77,7 +78,7 @@ bun run src/cli.ts github gate pr.json \
 
 ## 幂等与审计
 
-SQLite v8 新增 `github_deliveries` 和 `github_gate_results`，v9 为任务增加 `access_mode`。同一 GitHub delivery 重放只返回原结果，不会重复处理。相同事件内容即使换用另一个 delivery ID，也通过逻辑事件键去重。同一 delivery ID 携带不同内容会被拒绝。Gate 结果按仓库、PR、HEAD SHA 和策略哈希保存，变更 HEAD 会生成独立记录。
+SQLite v8 新增 `github_deliveries` 和 `github_gate_results`，v9 为任务增加 `access_mode`，v10 新增按仓库、PR、HEAD SHA 和 workflow run 键控的 `github_ci_reruns`。同一 GitHub delivery 重放只返回原结果，不会重复处理。相同事件内容即使换用另一个 delivery ID，也通过逻辑事件键去重。同一 delivery ID 携带不同内容会被拒绝。Gate 结果按仓库、PR、HEAD SHA 和策略哈希保存，变更 HEAD 会生成独立记录。
 
 实时快照验证中，PR #141 的三项当前 HEAD 检查均成功。2026-11-28 使用 `opencode-go/hy4-flash-free` 对同一 HEAD 完成 QuotaFlow 内部只读审查，报告为 `P1×0, P2×0, P3×0`；源仓库与审查 worktree 均保持干净。PR 随后转为 Ready，HEAD／base 未变，`mergeable=mergeable`。
 
@@ -118,18 +119,26 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
 - `cancelled`：检查被取消。
 - `unknown`：证据不足或日志接口不可用。
 
-`ci_fix` 或 `review_fix` 任务提示会附上当前 HEAD 的脱敏分类摘要，并把日志明确标记为不可信诊断数据。全部为基础设施、权限或取消时，门禁只返回人工处理，不创建写任务。GitHub App token 按 installation 缓存，在过期前自动刷新。App installation 已接受 Actions read，真实 job `140707721837` 的 164144 字节日志成功下载并分类为 `code_or_test`。同 SHA 复跑仍未实现。 [CI 分流证据](evidence/phase2-github-ci-triage-2026-11-28.json)
+`ci_fix` 或 `review_fix` 任务提示会附上当前 HEAD 的脱敏分类摘要，并把日志明确标记为不可信诊断数据。GitHub App token 按 installation 缓存，在过期前自动刷新。真实 job `140707721837` 的 164144 字节日志已成功下载并分类为 `code_or_test`。 [CI 分流证据](evidence/phase2-github-ci-triage-2026-11-28.json)
+
+控制面从同一 `detailsUrl` 提取 workflow run ID。只有一次 run 中全部已分类失败都属于 `infrastructure` 或 `cancelled`，并且所有失败 Check 都已完成分类时，才会请求 `POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun`。请求前会重新读取 PR 快照和 workflow run，二者 `head_sha` 都必须仍与 Gate HEAD 相同。`code_or_test`、`permissions_or_configuration`、`unknown` 和 SHA 漂移不会自动复跑。
+
+每个仓库可通过 `maxCiRerunsPerHead` 设置同一 HEAD 的复跑上限，默认 1，允许 0–5。占用记录在外部 POST 前通过 SQLite 即时事务写入，键为仓库、PR、HEAD SHA 和 workflow run ID。重复 Webhook、并发请求或进程在应答前退出都不能再次放大同一个 HEAD 的复跑次数。重跑请求成功或失败的记录都会保留，失败记录按保守策略占用额度，由人工审计后处理。
+
+当前 App installation 只接受 Actions read 时，代码会把权限错误记录为人工处理。实时复跑要求安装权限提升为 Actions read and write，在安装侧批准后重启 Webhook 进程以丢弃旧 installation token，然后验证新 Check 仍绑定原 HEAD。该真实权限与运行时验证尚未完成。
+
+代码级验收覆盖成功复跑、PR HEAD 漂移、workflow run HEAD 漂移、次数耗尽、并发重复投递、代码/测试同 run 禁止复跑、分类不完整、显式零限额、API 失败和 v9→v10 迁移；macOS 与 Linux 均为 161 通过、1 个平台性 skip、0 失败。 [复跑闭环证据](evidence/phase2-github-ci-rerun-2026-11-28.json)
 
 ## 尚未完成
 
 - 将临时公网 SSH 隧道替换为带稳定域名、TLS、进程监督和故障恢复的持久部署。
-- 同 SHA 失败复跑绑定、次数限制和结果回写。
+- 提升 GitHub App 的 Actions 权限并完成同 SHA 实时复跑、新 Check 绑定和失败回写验证。
 - 写入应答丢失、重复 Webhook、越权请求和凭据轮换演练。
 - 后续 Review–Fix／CI 修复任务的完整执行、复跑和门禁闭环。
 
 ## 下一里程碑
 
 1. 将监听器部署到稳定公网地址和受控反向代理。
-2. 实现同 SHA 失败复跑并核对新 Check 绑定。
+2. 在 Actions write 授权后完成同 SHA 实时复跑并核对新 Check 绑定。
 3. 对后续 Review–Fix／CI 修复任务重复执行和门禁闭环。
 4. Phase 2 核心验收完成后进入 Phase 3 Dashboard 与部署。

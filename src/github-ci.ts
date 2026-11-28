@@ -10,6 +10,7 @@ export type GitHubCiFailureCategory =
 export interface GitHubCiFailure {
   name: string;
   jobId: number | null;
+  runId: number | null;
   category: GitHubCiFailureCategory;
   logBytes: number;
   truncated: boolean;
@@ -20,6 +21,7 @@ export interface GitHubCiFailure {
 export interface GitHubCiTriage {
   headSha: string;
   failures: GitHubCiFailure[];
+  complete: boolean;
 }
 
 type GitHubCiFetcher = typeof fetch;
@@ -65,9 +67,13 @@ function apiBase(value: string | undefined): string {
   return url.toString().replace(/\/+$/, '');
 }
 
-function jobId(check: GitHubCheckResult): number | null {
-  const match = check.detailsUrl && /\/actions\/runs\/\d+\/job\/(\d+)(?:\/|$)/.exec(check.detailsUrl);
-  return match ? Number(match[1]) : null;
+function actionIds(check: GitHubCheckResult): { runId: number | null; jobId: number | null } {
+  const match = check.detailsUrl
+    && /\/actions\/runs\/(\d+)\/job\/(\d+)(?:\/|$)/.exec(check.detailsUrl);
+  return {
+    runId: match ? Number(match[1]) : null,
+    jobId: match ? Number(match[2]) : null,
+  };
 }
 
 function classify(conclusion: string | null, log: string): GitHubCiFailureCategory {
@@ -130,6 +136,7 @@ async function fetchFailure(
     return {
       name: check.name,
       jobId: null,
+      runId: null,
       category: 'unknown',
       logBytes: 0,
       truncated: false,
@@ -157,6 +164,7 @@ async function fetchFailure(
       return {
         name: check.name,
         jobId: id,
+        runId: null,
         category: 'unknown',
         logBytes: 0,
         truncated: false,
@@ -169,6 +177,7 @@ async function fetchFailure(
     return {
       name: check.name,
       jobId: id,
+      runId: null,
       category: classify(check.conclusion, log),
       logBytes: limited.bytes,
       truncated: limited.truncated,
@@ -178,6 +187,7 @@ async function fetchFailure(
     return {
       name: check.name,
       jobId: id,
+      runId: null,
       category: 'unknown',
       logBytes: 0,
       truncated: false,
@@ -196,12 +206,17 @@ export async function triageGitHubChecks(
   if (!Number.isInteger(maxJobs) || maxJobs < 1 || maxJobs > 10) {
     throw new Error('GitHub CI triage maxJobs must be an integer between 1 and 10');
   }
-  const failed = gate.checks.filter((check) => !check.passed).slice(0, maxJobs);
-  const failures = await Promise.all(failed.map((check) =>
-    fetchFailure(repository, check, jobId(check), options)));
+  const failedChecks = gate.checks.filter((check) => !check.passed);
+  const inspectedChecks = failedChecks.slice(0, maxJobs);
+  const failures = await Promise.all(inspectedChecks.map(async (check) => {
+    const ids = actionIds(check);
+    const failure = await fetchFailure(repository, check, ids.jobId, options);
+    return { ...failure, runId: ids.runId };
+  }));
   return {
     headSha: gate.headSha,
     failures,
+    complete: inspectedChecks.length === failedChecks.length,
   };
 }
 

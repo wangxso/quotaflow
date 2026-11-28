@@ -16,7 +16,7 @@
 
 方案获审后已执行 Phase 0 并提交 [验证报告](PHASE-0.md)、[PoC](../poc/README.md) 和[许可证审查](LICENSING-REVIEW.md)。确定性故障恢复用例通过。2026-11-27 已完成真实 Codex Agent 写入、检查点恢复和 OpenCode 接续，技术门禁有条件通过；Codex 实际经 Magpie 路由到第三方模型，原生 ChatGPT 路径、商用路由组和服务商账单仍未验证。Phase 1 已形成三平台监督、预算审计和恢复闭环。Phase 2 已启动，QuotaFlow 在 `mcarplay` Issue #82 上生成 Draft PR #141，完整 CI 通过，Pull Request 门禁、本地签名 Webhook 服务、Review–Fix／CI 动作计划和受限任务物化已接入。详见 [Phase 1](PHASE-1.md)、[Phase 2](PHASE-2.md) 与[门禁收口记录](PHASE-0-GATE-CLOSURE.md)。
 
-2026-11-28 将 GitHub 动作计划接入 QuotaFlow 任务创建。只有独立审查、Review–Fix 和 CI 修复可物化为 Agent 任务；任务绑定 PR HEAD，按稳定动作键幂等，沿用每任务最多 3 次尝试和配置预算。独立审查使用 SQLite v9 的任务级只读模式，禁止不能保证只读的 Adapter，并在结束后拒绝任何工作树变化。人工 Ready、冲突处理、证据刷新与合并仍不派发给 Agent。PR #141 的内部只读审查已由免费 Magpie 路由完成，未发现阻断问题，源仓库和审查 worktree 均无改动；GitHub 官方 Review 仍为 0。详见 [Phase 2 证据](evidence/phase2-github-materialization-2026-11-28.json)。
+2026-11-28 将 GitHub 动作计划接入 QuotaFlow 任务创建。只有独立审查、Review–Fix 和 CI 修复可物化为 Agent 任务；任务绑定 PR HEAD，按稳定动作键幂等，沿用每任务最多 3 次尝试和配置预算。独立审查使用 v9 引入的任务级只读模式，禁止不能保证只读的 Adapter，并在结束后拒绝任何工作树变化。人工 Ready、冲突处理、证据刷新与合并仍不派发给 Agent。PR #141 的内部只读审查已由免费 Magpie 路由完成，未发现阻断问题，源仓库和审查 worktree 均无改动；GitHub 官方 Review 仍为 0。详见 [Phase 2 证据](evidence/phase2-github-materialization-2026-11-28.json)。
 
 同日增加 `github snapshot`，通过 GitHub REST 读取 Pull Request、当前 HEAD 的 check-runs 和正式 Reviews，并处理 `mergeable=null` 的计算延迟。公开 PR 可使用无认证读取，私有仓库或更高限流可通过 `--token-env` 注入凭据。PR #141 的自动快照得到当前 HEAD、3 条成功检查、`mergeable=mergeable` 和 0 条正式 Review，门禁结果与手工快照一致。详见 [REST 快照证据](evidence/phase2-github-api-snapshot-2026-11-28.json)。
 
@@ -30,7 +30,7 @@ PR #141 随后由有权限的操作者转为 Ready。重新拉取快照后，Dra
 
 随后完成 Webhook 到任务的代码闭环。`githubProjects` 必须显式配置仓库路径、分支前缀白名单和 remote，fork PR 默认拒绝。命中映射后，控制面按事件中的 base/head SHA 拉取缺失提交，再复用稳定动作键任务物化。人工合并、Ready、冲突与证据刷新继续返回 `human_required`。PR #136 分支未命中 `quotaflow/*` 白名单，公网签名事件返回 202 且 `taskMaterialization.status=ignored`，没有创建任务。临时 Git 仓库测试验证了精确 HEAD 拉取、只读 Review 任务创建、重复事件返回 `task_exists`、fork 与未授权分支拒绝。详见 [Webhook 任务物化证据](evidence/phase2-github-webhook-materialization-2026-11-28.json)。
 
-随后接入 GitHub App 短时安装令牌和 Actions 日志分流。控制面从失败 Check 的 details URL 提取 job ID，最多读取 3 个 job 的日志并限制为 256 KiB，清理 ANSI、脱敏令牌、Authorization、凭据赋值和 PEM 后分类为代码/测试、基础设施、权限配置、取消或未知。代码类失败的脱敏摘要会追加到当前 HEAD 的 Fix 任务提示；全部为基础设施、权限或取消时保留人工处理，不创建写任务。App installation 已接受 Actions read，真实 job `140707721837` 的 164144 字节日志成功下载并分类为 `code_or_test`。同 SHA 复跑尚未执行。详见 [CI 分流证据](evidence/phase2-github-ci-triage-2026-11-28.json)。
+随后接入 GitHub App 短时安装令牌和 Actions 日志分流。控制面从失败 Check 的 details URL 提取 job 和 workflow run ID，最多读取 3 个 job 的日志并限制为 256 KiB，清理 ANSI、脱敏令牌、Authorization、凭据赋值和 PEM 后分类为代码/测试、基础设施、权限配置、取消或未知。代码类失败的脱敏摘要会追加到当前 HEAD 的 Fix 任务提示。纯基础设施或取消 run 只有在 PR 与 run 的 HEAD 再次核验一致且每 HEAD 原子限额可用时才复跑；权限、代码/测试、未知、未完整分类和 SHA 漂移不会自动复跑。App installation 已接受 Actions read，真实 job `140707721837` 的 164144 字节日志成功下载并分类为 `code_or_test`。Actions write 授权后的实时复跑仍待验证。详见 [CI 分流证据](evidence/phase2-github-ci-triage-2026-11-28.json)。
 
 ## Phase 0 · 调研与可行性验证
 

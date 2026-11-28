@@ -1,0 +1,88 @@
+{
+  "recordedOn": "2026-11-28",
+  "baseRevision": "66b29f661f15b540d72b9de2043ede1b37f47099",
+  "policy": {
+    "sameRepositoryOnly": true,
+    "branchPrefixes": [
+      "quotaflow/"
+    ],
+    "eligibleFailureCategories": [
+      "infrastructure",
+      "cancelled"
+    ],
+    "excludedFailureCategories": [
+      "code_or_test",
+      "permissions_or_configuration",
+      "unknown"
+    ],
+    "allFailedChecksMustBeTriaged": true,
+    "allFailuresInWorkflowRunMustBeEligible": true,
+    "refreshPullRequestBeforeRerun": true,
+    "refreshWorkflowRunBeforeRerun": true,
+    "requiredHeadBinding": "Pull request head SHA and workflow run head_sha must both equal the Gate head SHA",
+    "defaultRerunsPerHead": 1,
+    "maximumConfiguredRerunsPerHead": 5,
+    "rerunKey": [
+      "repository",
+      "pullNumber",
+      "headSha",
+      "workflowRunId"
+    ]
+  },
+  "persistence": {
+    "databaseVersion": 10,
+    "table": "github_ci_reruns",
+    "claimBeforeExternalRequest": true,
+    "states": [
+      "claimed",
+      "requested",
+      "failed"
+    ],
+    "concurrentDuplicateDeliveries": "One atomic claim and one external POST",
+    "failedApiResponse": "Recorded as failed while retaining the consumed per-head slot",
+    "zeroLimit": "Disables automatic reruns before any GitHub API request"
+  },
+  "taskRouting": {
+    "rerunOnlyFailures": "human_only while the same-head rerun is pending",
+    "mixedInfrastructureAndCode": "Rerun the eligible workflow run and materialize a CI fix task for the remaining code or test evidence",
+    "staleHead": "human_only without creating a task at the old head",
+    "reviewFix": "Review fixes continue when only CI evidence was rerun, but a stale head blocks all task materialization"
+  },
+  "githubApp": {
+    "appId": 5955591,
+    "installationId": 186560843,
+    "actionsPermissionAtCodeCompletion": "read",
+    "actionsReadAndWriteRequiredForLiveRerun": true,
+    "installationApprovalAccepted": false,
+    "liveRerun": "not executed"
+  },
+  "verification": {
+    "rerunTests": 9,
+    "webhookActionTests": 6,
+    "ciTriageTests": 3,
+    "migrationTests": 9,
+    "fullSuite": {
+      "macOS": 161,
+      "linux": 161,
+      "windowsOnlySkipped": 1,
+      "failed": 0,
+      "assertions": 728
+    },
+    "build": "passed on macOS",
+    "configurationValidation": "passed on macOS",
+    "linuxEnvironment": {
+      "containerBase": "oven/bun:1.4.5",
+      "distribution": "Debian 13",
+      "git": "2.47.3",
+      "gcc": "14.2.0"
+    },
+    "jsonAndDiffChecks": "passed"
+  },
+  "scope": {
+    "automaticSameShaRerunCode": "implemented",
+    "automaticPushCommentApproveOrMerge": false,
+    "liveRerunAfterActionsWrite": "pending",
+    "newCheckSameShaObservation": "pending",
+    "durablePublicWebhook": "pending"
+  }
+}

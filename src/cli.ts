@@ -24,6 +24,7 @@ import {
 import { fetchGitHubPullSnapshot } from './github-api';
 import { GitHubAppTokenProvider } from './github-app-auth';
 import { triageGitHubChecks } from './github-ci';
+import { runGitHubCiReruns } from './github-ci-rerun';
 import { startGitHubWebhookServer } from './github-webhook-server';
 import { materializeGitHubWebhookActions } from './github-webhook-actions';
 import { materializeGitHubActions } from './github-materialize';
@@ -360,6 +361,7 @@ async function main() {
       const fetchGate = defaults.fetchGate ?? true;
       const tokenName = defaults.tokenEnv;
       const apiUrl = defaults.apiUrl;
+      const effectiveApiUrl = apiUrl ?? config.githubApp?.apiUrl;
       if (rest.length > 0) throw new Error(`Unexpected github serve-webhook arguments: ${rest.join(' ')}`);
       if (!Number.isInteger(port) || port < 1 || port > 65535) {
         throw new Error('--port must be an integer between 1 and 65535');
@@ -372,6 +374,13 @@ async function main() {
       if (!secret) throw new Error(`GitHub webhook secret is missing from ${secretName}`);
       const accessToken = async () =>
         (tokenName ? process.env[tokenName] : undefined) ?? await githubAppTokens?.getToken();
+      const fetchCurrentSnapshot = async (repository: string, pullNumber: number) => {
+        const token = await accessToken();
+        return fetchGitHubPullSnapshot(repository, pullNumber, {
+          ...(token ? { token } : {}),
+          ...(effectiveApiUrl ? { apiUrl: effectiveApiUrl } : {}),
+        });
+      };
       const server = startGitHubWebhookServer({
         host,
         port,
@@ -379,23 +388,32 @@ async function main() {
         secret,
         store,
         ...(fetchGate ? {
-          snapshotFetcher: async (repository: string, pullNumber: number) => {
-            const token = await accessToken();
-            return fetchGitHubPullSnapshot(repository, pullNumber, {
-              ...(token ? { token } : {}),
-              ...(apiUrl ? { apiUrl } : {}),
-            });
-          },
+          snapshotFetcher: fetchCurrentSnapshot,
         } : {}),
         gatePolicy: {
           allowBotApprovals: Boolean(config.githubApproval?.allowBotApprovals),
         },
         actionHandler: (context) => materializeGitHubWebhookActions(store, config, context, async () => {
           const token = await accessToken();
-          return triageGitHubChecks(context.gate.repository, context.gate, {
+          const triage = await triageGitHubChecks(context.gate.repository, context.gate, {
             ...(token ? { token } : {}),
-            ...(apiUrl ?? config.githubApp?.apiUrl ? { apiUrl: apiUrl ?? config.githubApp?.apiUrl } : {}),
+            ...(effectiveApiUrl ? { apiUrl: effectiveApiUrl } : {}),
           });
+          const project = config.githubProjects?.find((candidate) =>
+            candidate.repository === context.gate.repository);
+          const rerun = await runGitHubCiReruns({
+            store,
+            repository: context.gate.repository,
+            pullNumber: context.gate.pullNumber,
+            triage,
+            refreshSnapshot: fetchCurrentSnapshot,
+            ...(token ? { token } : {}),
+            ...(effectiveApiUrl ? { apiUrl: effectiveApiUrl } : {}),
+            ...(project?.maxCiRerunsPerHead === undefined
+              ? {}
+              : { maxPerHead: project.maxCiRerunsPerHead }),
+          });
+          return { triage, rerun };
         }),
       });
       console.log(JSON.stringify({ listening: server.url.toString(), path, health: '/healthz' }, null, 2));

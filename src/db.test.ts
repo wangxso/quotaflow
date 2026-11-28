@@ -82,11 +82,11 @@ function createLegacyDatabase(version: 1 | 2 | 3 | 4 | 5 | 6 | 7): { root: strin
 }
 
 for (const version of [1, 2, 3, 4, 5, 6, 7] as const) {
-  test(`migrates schema v${version} to v9 without losing task data`, () => {
+  test(`migrates schema v${version} to v10 without losing task data`, () => {
     const { root, file } = createLegacyDatabase(version);
     const db = openDatabase(file);
     try {
-      expect(db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version).toBe(9);
+      expect(db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version).toBe(10);
       expect(db.query("SELECT prompt, access_mode, handoff_config FROM tasks WHERE id = 'legacy'").get())
         .toEqual({ prompt: version === 1 ? '' : 'kept prompt', access_mode: 'write', handoff_config: null });
       expect(db.query("SELECT actual_model, handoff_note FROM attempts WHERE task_id = 'legacy'").get())
@@ -103,6 +103,9 @@ for (const version of [1, 2, 3, 4, 5, 6, 7] as const) {
       expect(db.query<{ name: string }, []>(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'github_gate_results'",
       ).get()?.name).toBe('github_gate_results');
+      expect(db.query<{ name: string }, []>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'github_ci_reruns'",
+      ).get()?.name).toBe('github_ci_reruns');
       if (version >= 5) expect(db.query('SELECT state, expired_at FROM budget_leases').get())
         .toEqual({ state: 'pending', expired_at: null });
     } finally {
@@ -112,7 +115,7 @@ for (const version of [1, 2, 3, 4, 5, 6, 7] as const) {
   });
 }
 
-test('migrates schema v8 to v9 and defaults existing tasks to writable', () => {
+test('migrates schema v8 to v10 and defaults existing tasks to writable', () => {
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-db-v8-'));
   const file = join(root, 'state.sqlite');
   const legacy = new Database(file);
@@ -141,9 +144,78 @@ test('migrates schema v8 to v9 and defaults existing tasks to writable', () => {
 
   const db = openDatabase(file);
   try {
-    expect(db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version).toBe(9);
+    expect(db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version).toBe(10);
     expect(db.query("SELECT prompt, access_mode FROM tasks WHERE id = 'v8'").get())
       .toEqual({ prompt: 'keep me', access_mode: 'write' });
+    expect(db.query<{ name: string }, []>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'github_ci_reruns'",
+    ).get()?.name).toBe('github_ci_reruns');
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('migrates schema v9 to v10 and preserves existing GitHub gate data', () => {
+  const root = mkdtempSync(join(tmpdir(), 'quotaflow-db-v9-'));
+  const file = join(root, 'state.sqlite');
+  const legacy = new Database(file);
+  legacy.exec(`
+    CREATE TABLE tasks (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      prompt TEXT NOT NULL DEFAULT '',
+      repo_path TEXT NOT NULL,
+      workspace_path TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL,
+      priority INTEGER NOT NULL,
+      critical INTEGER NOT NULL,
+      handoff_config TEXT,
+      checkpoint TEXT,
+      next_wake_at INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      access_mode TEXT NOT NULL DEFAULT 'write'
+    );
+    CREATE TABLE github_deliveries (
+      delivery_id TEXT PRIMARY KEY,
+      event_key TEXT NOT NULL UNIQUE,
+      event_type TEXT NOT NULL,
+      repository TEXT NOT NULL,
+      pull_number INTEGER NOT NULL,
+      head_sha TEXT NOT NULL,
+      payload_hash TEXT NOT NULL,
+      received_at INTEGER NOT NULL,
+      outcome TEXT
+    );
+    CREATE TABLE github_gate_results (
+      repository TEXT NOT NULL,
+      pull_number INTEGER NOT NULL,
+      head_sha TEXT NOT NULL,
+      policy_hash TEXT NOT NULL,
+      status TEXT NOT NULL,
+      snapshot_hash TEXT NOT NULL,
+      delivery_id TEXT NOT NULL REFERENCES github_deliveries(delivery_id),
+      detail TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY(repository, pull_number, head_sha, policy_hash)
+    );
+    INSERT INTO tasks
+      (id, title, prompt, repo_path, workspace_path, status, priority, critical, created_at, updated_at)
+    VALUES ('v9', 'v9 task', 'keep me', 'repo', 'workspace', 'queued', 0, 0, 1, 1);
+    PRAGMA user_version = 9;
+  `);
+  legacy.close();
+
+  const db = openDatabase(file);
+  try {
+    expect(db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version).toBe(10);
+    expect(db.query("SELECT id, prompt FROM tasks WHERE id = 'v9'").get())
+      .toEqual({ id: 'v9', prompt: 'keep me' });
+    expect(db.query<{ name: string }, []>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'github_ci_reruns'",
+    ).get()?.name).toBe('github_ci_reruns');
   } finally {
     db.close();
     rmSync(root, { recursive: true, force: true });

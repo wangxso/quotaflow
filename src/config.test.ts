@@ -170,6 +170,7 @@ test('parses and validates GitHub webhook configuration', () => {
       repository: 'WANGXSO/mcarplay',
       repoPath: 'repos/mcarplay',
       branchPrefixes: ['quotaflow/'],
+      maxCiRerunsPerHead: 2,
     }],
     lanes: [],
   };
@@ -186,6 +187,7 @@ test('parses and validates GitHub webhook configuration', () => {
     repository: 'wangxso/mcarplay',
     repoPath: join(dirname(configFile), 'repos', 'mcarplay'),
     branchPrefixes: ['quotaflow/'],
+    maxCiRerunsPerHead: 2,
   }]);
   expect(() => normalizeConfig({ ...base, githubWebhook: { ...base.githubWebhook, port: 0 } },
     join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubWebhook.port');
@@ -213,4 +215,8 @@ test('parses and validates GitHub webhook configuration', () => {
     ...base,
     githubProjects: [{ ...base.githubProjects[0], branchPrefixes: [] }],
   }, join(tmpdir(), 'quotaflow.config.json'))).toThrow('branchPrefixes');
+  expect(() => normalizeConfig({
+    ...base,
+    githubProjects: [{ ...base.githubProjects[0], maxCiRerunsPerHead: 6 }],
+  }, join(tmpdir(), 'quotaflow.config.json'))).toThrow('maxCiRerunsPerHead');
 });

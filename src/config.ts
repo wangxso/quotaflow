@@ -244,12 +244,20 @@ function parseGitHubProject(value: unknown, index: number, root: string): GitHub
   if (raw.allowForks !== undefined && typeof raw.allowForks !== 'boolean') {
     fail(`${field}.allowForks must be boolean`);
   }
+  let maxCiRerunsPerHead: number | undefined;
+  if (raw.maxCiRerunsPerHead !== undefined) {
+    maxCiRerunsPerHead = number(raw.maxCiRerunsPerHead, `${field}.maxCiRerunsPerHead`);
+    if (!Number.isInteger(maxCiRerunsPerHead) || maxCiRerunsPerHead < 0 || maxCiRerunsPerHead > 5) {
+      fail(`${field}.maxCiRerunsPerHead must be an integer between 0 and 5`);
+    }
+  }
   return {
     repository,
     repoPath: resolvePath(root, text(raw.repoPath, `${field}.repoPath`)),
     branchPrefixes,
     ...(remote ? { remote } : {}),
     ...(raw.allowForks === undefined ? {} : { allowForks: raw.allowForks }),
+    ...(maxCiRerunsPerHead === undefined ? {} : { maxCiRerunsPerHead }),
   };
 }
 

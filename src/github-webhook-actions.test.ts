@@ -205,15 +205,19 @@ test('webhook action materialization leaves infrastructure-only CI failures for 
       config(repo, join(root, 'worktrees')),
       actionContext,
       {
-        headSha,
-        failures: [{
-          name: 'runner health',
-          jobId: 10,
-          category: 'infrastructure',
-          logBytes: 20,
-          truncated: false,
-          excerpt: 'runner lost communication',
-        }],
+        triage: {
+          headSha,
+          complete: true,
+          failures: [{
+            name: 'runner health',
+            jobId: 10,
+            runId: 1,
+            category: 'infrastructure',
+            logBytes: 20,
+            truncated: false,
+            excerpt: 'runner lost communication',
+          }],
+        },
       },
     );
     expect(result).toMatchObject({
@@ -222,6 +226,208 @@ test('webhook action materialization leaves infrastructure-only CI failures for 
       ciTriage: {
         failures: [{ category: 'infrastructure' }],
       },
+    });
+    expect(store.listTasks()).toEqual([]);
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('webhook action materialization waits for an exact-head CI rerun without creating a task', async () => {
+  const { root, repo, baseSha, headSha } = setupRepository();
+  const db = openDatabase(':memory:');
+  const store = new TaskStore(db);
+  try {
+    const value = snapshot(baseSha, headSha);
+    const actionContext = context(value);
+    actionContext.plan.actions[0] = {
+      ...actionContext.plan.actions[0]!,
+      kind: 'ci_fix',
+      reasonCodes: ['ci_not_success'],
+      taskPrompt: 'Fix CI.',
+    };
+    const ciTriage = {
+      headSha,
+      complete: true,
+      failures: [{
+        name: 'runner health',
+        jobId: 10,
+        runId: 100,
+        category: 'infrastructure' as const,
+        logBytes: 20,
+        truncated: false,
+        excerpt: 'runner lost communication',
+      }],
+    };
+    const result = await materializeGitHubWebhookActions(
+      store,
+      config(repo, join(root, 'worktrees')),
+      actionContext,
+      {
+        triage: ciTriage,
+        rerun: {
+          status: 'requested',
+          incomplete: false,
+          candidates: [100],
+          outcomes: [{
+            runId: 100,
+            outcomes: 'requested',
+            failedChecks: ['runner health'],
+            categories: ['infrastructure'],
+            httpStatus: 201,
+            message: 'requested',
+          }],
+          remainingTriage: { ...ciTriage, failures: [] },
+          staleHead: false,
+        },
+      },
+    );
+    expect(result).toMatchObject({
+      status: 'human_only',
+      reason: 'ci_rerun_requested',
+      ciRerun: { candidates: [100], outcomes: [{ runId: 100 }] },
+    });
+    expect(store.listTasks()).toEqual([]);
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('webhook action materialization reruns infrastructure and still repairs code failures', async () => {
+  const { root, repo, baseSha, headSha } = setupRepository();
+  const db = openDatabase(':memory:');
+  const store = new TaskStore(db);
+  try {
+    const value = snapshot(baseSha, headSha);
+    const actionContext = context(value);
+    actionContext.plan.actions[0] = {
+      ...actionContext.plan.actions[0]!,
+      kind: 'ci_fix',
+      reasonCodes: ['ci_not_success'],
+      taskPrompt: 'Fix CI.',
+    };
+    const codeFailure = {
+      name: 'unit tests',
+      jobId: 11,
+      runId: 101,
+      category: 'code_or_test' as const,
+      logBytes: 30,
+      truncated: false,
+      excerpt: 'AssertionError: expected 42',
+    };
+    const infrastructureFailure = {
+      name: 'runner health',
+      jobId: 10,
+      runId: 100,
+      category: 'infrastructure' as const,
+      logBytes: 20,
+      truncated: false,
+      excerpt: 'runner lost communication',
+    };
+    const result = await materializeGitHubWebhookActions(
+      store,
+      config(repo, join(root, 'worktrees')),
+      actionContext,
+      {
+        triage: {
+          headSha,
+          complete: true,
+          failures: [infrastructureFailure, codeFailure],
+        },
+        rerun: {
+          status: 'requested',
+          incomplete: false,
+          candidates: [100],
+          outcomes: [{
+            runId: 100,
+            outcomes: 'requested',
+            failedChecks: ['runner health'],
+            categories: ['infrastructure'],
+            httpStatus: 201,
+            message: 'requested',
+          }],
+          remainingTriage: {
+            headSha,
+            complete: true,
+            failures: [codeFailure],
+          },
+          staleHead: false,
+        },
+      },
+    );
+    expect(result).toMatchObject({
+      status: 'materialized',
+      materialization: {
+        actions: [{
+          kind: 'ci_fix',
+          outcome: 'task_created',
+          task: { accessMode: 'write' },
+        }],
+      },
+    });
+    const prompt = result.materialization!.actions[0]!.task!.prompt;
+    expect(prompt).toContain('Category: code_or_test');
+    expect(prompt).toContain('AssertionError: expected 42');
+    expect(prompt).not.toContain('runner lost communication');
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('webhook action materialization blocks review fixes when rerun detects a stale head', async () => {
+  const { root, repo, baseSha, headSha } = setupRepository();
+  const db = openDatabase(':memory:');
+  const store = new TaskStore(db);
+  try {
+    const value = snapshot(baseSha, headSha);
+    const actionContext = context(value);
+    actionContext.plan.actions[0] = {
+      ...actionContext.plan.actions[0]!,
+      kind: 'review_fix',
+      reasonCodes: ['ci_not_success', 'changes_requested'],
+      taskPrompt: 'Address review feedback and CI.',
+    };
+    const ciTriage = {
+      headSha,
+      complete: true,
+      failures: [{
+        name: 'runner health',
+        jobId: 10,
+        runId: 100,
+        category: 'infrastructure' as const,
+        logBytes: 20,
+        truncated: false,
+        excerpt: 'runner lost communication',
+      }],
+    };
+    const result = await materializeGitHubWebhookActions(
+      store,
+      config(repo, join(root, 'worktrees')),
+      actionContext,
+      {
+        triage: ciTriage,
+        rerun: {
+          status: 'human_only',
+          incomplete: false,
+          candidates: [100],
+          outcomes: [{
+            runId: 100,
+            outcomes: 'stale_head',
+            failedChecks: ['runner health'],
+            categories: ['infrastructure'],
+            message: 'stale',
+          }],
+          remainingTriage: ciTriage,
+          staleHead: true,
+        },
+      },
+    );
+    expect(result).toMatchObject({
+      status: 'human_only',
+      reason: 'ci_rerun_stale_head',
     });
     expect(store.listTasks()).toEqual([]);
   } finally {

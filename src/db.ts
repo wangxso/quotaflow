@@ -81,6 +81,24 @@ const githubSchema = `
   );
 `;
 
+const githubCiRerunSchema = `
+  CREATE TABLE IF NOT EXISTS github_ci_reruns (
+    repository TEXT NOT NULL,
+    pull_number INTEGER NOT NULL,
+    head_sha TEXT NOT NULL,
+    run_id INTEGER NOT NULL,
+    state TEXT NOT NULL,
+    request_count INTEGER NOT NULL,
+    http_status INTEGER,
+    error TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY(repository, pull_number, head_sha, run_id)
+  );
+  CREATE INDEX IF NOT EXISTS github_ci_reruns_head
+    ON github_ci_reruns(repository, pull_number, head_sha);
+`;
+
 const schema = `
   CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
@@ -138,6 +156,7 @@ const schema = `
   ${usageSchema}
   ${budgetSchema}
   ${githubSchema}
+  ${githubCiRerunSchema}
 `;
 
 function migrate(db: Database, action: () => void): void {
@@ -166,12 +185,12 @@ export function openDatabase(file: string): Database {
   `);
   const version = db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version ?? 0;
   try {
-    if (version > 9) throw new Error(`Unsupported QuotaFlow database version ${version}`);
-    if (version < 9) {
+    if (version > 10) throw new Error(`Unsupported QuotaFlow database version ${version}`);
+    if (version < 10) {
       migrate(db, () => {
         const current = db.query<{ user_version: number }, []>('PRAGMA user_version').get()!.user_version;
-        if (current > 9) throw new Error(`Unsupported QuotaFlow database version ${current}`);
-        if (current === 9) return;
+        if (current > 10) throw new Error(`Unsupported QuotaFlow database version ${current}`);
+        if (current === 10) return;
         if (current < 1) {
           db.exec(schema);
         } else {
@@ -186,8 +205,9 @@ export function openDatabase(file: string): Database {
           if (current >= 5 && current < 7) db.run('ALTER TABLE budget_leases ADD COLUMN expired_at INTEGER');
           if (current < 8) db.exec(githubSchema);
           if (current < 9) db.run("ALTER TABLE tasks ADD COLUMN access_mode TEXT NOT NULL DEFAULT 'write'");
+          if (current < 10) db.exec(githubCiRerunSchema);
         }
-        db.run('PRAGMA user_version = 9');
+        db.run('PRAGMA user_version = 10');
       });
     }
     return db;

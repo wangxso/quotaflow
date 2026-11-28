@@ -88,11 +88,13 @@ test('fetches failed job logs, classifies failures and redacts secrets', async (
   expect(triage.failures).toMatchObject([
     {
       name: 'unit tests',
+      runId: 1,
       jobId: 101,
       category: 'code_or_test',
     },
     {
       name: 'runner health',
+      runId: 1,
       jobId: 102,
       category: 'infrastructure',
     },
@@ -103,6 +105,7 @@ test('fetches failed job logs, classifies failures and redacts secrets', async (
       error: 'No GitHub Actions job ID in details URL',
     },
   ]);
+  expect(triage.complete).toBe(true);
   expect(triage.failures[0]!.excerpt).toContain('TOKEN=[REDACTED]');
   expect(triage.failures[0]!.excerpt).toContain('Bearer [REDACTED]');
   expect(requested).toHaveLength(2);
