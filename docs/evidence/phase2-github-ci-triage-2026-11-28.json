@@ -38,7 +38,7 @@
   },
   "liveBoundary": {
     "currentAppPermissions": {
-      "actions": "read",
+      "actions": "read_and_write",
       "checks": "read",
       "contents": "read",
       "metadata": "read",
@@ -56,7 +56,7 @@
       "category": "code_or_test",
       "error": null
     },
-    "sameShaRerun": "not implemented"
+    "sameShaRerun": "verified with controlled PR #146; see phase2-github-ci-rerun-2026-11-28.json"
   },
   "verification": {
     "githubAppAuthTests": 2,
@@ -74,7 +74,7 @@
   "scope": {
     "jobLogFetching": "implemented against injectable GitHub API",
     "liveJobLogFetching": "verified with a real failed GitHub Actions job",
-    "automaticSameShaRerun": "pending",
+    "automaticSameShaRerun": "verified after Actions read/write installation approval",
     "automaticPushCommentOrMerge": false
   }
 }
