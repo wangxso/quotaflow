@@ -4,7 +4,7 @@
 
 QuotaFlow 是一个额度感知的 AI 软件研发调度工具。它按账户额度、并发和预算安排 Codex 或 OpenCode 执行任务，将改动保存在独立的 Git 工作树和检查点中，供中断后恢复。
 
-**当前状态（2026-11-28）**　Phase 0 技术门禁有条件通过。Phase 1 单机 CLI 已具备三平台监督、检查点恢复、预算审计和可选交接笔记。Phase 2 核心闭环完成：同 HEAD CI、独立审查、Draft 与人工合并门禁、签名 Webhook、双层幂等、受限任务物化、只读审查、Bot 批准、CI 日志分类、同 SHA 限次复跑和真实 CI 修复均已验证。稳定入口为 `https://quotaflow-hooks.wangxso.com/github/webhook`，由 macOS launchd 监督。Phase 3 Dashboard 已提供实时任务视图、组合筛选、Worker Run 与受限日志，以及受控任务和 GitHub App 写操作。受控 PR [#152](https://github.com/wangxso/mcarplay/pull/152) 已完成 current-head Bot 批准，并以精确 HEAD 合并为 `d42c690`。Dashboard App merge 暴露 `Contents: write` 权限缺口，最终由管理员授权完成 merge commit。 [Phase 1](docs/PHASE-1.md) · [Phase 2](docs/PHASE-2.md) · [Phase 3](docs/PHASE-3.md) · [受控 PR 合并证据](docs/evidence/phase3-github-controlled-pr-merge-2026-11-28.json)
+**当前状态（2026-11-28）**　Phase 0 技术门禁有条件通过。Phase 1 单机 CLI 已具备三平台监督、检查点恢复、预算审计和可选交接笔记。Phase 2 核心闭环完成：同 HEAD CI、独立审查、Draft 与人工合并门禁、签名 Webhook、双层幂等、受限任务物化、只读审查、Bot 批准、CI 日志分类、同 SHA 限次复跑和真实 CI 修复均已验证。稳定入口为 `https://quotaflow-hooks.wangxso.com/github/webhook`，由 macOS launchd 监督。Phase 3 Dashboard 已提供实时任务视图、组合筛选、Worker Run 与受限日志，以及受控任务和 GitHub App 写操作。受控 PR [#152](https://github.com/wangxso/mcarplay/pull/152) 已完成 current-head Bot 批准，并以精确 HEAD 合并为 `d42c690`。Dashboard App merge 暴露 `Contents: write` 权限缺口，最终由管理员授权完成 merge commit；合并后 `main` 的 Android CI 与 Instrumentation 均通过。 [Phase 1](docs/PHASE-1.md) · [Phase 2](docs/PHASE-2.md) · [Phase 3](docs/PHASE-3.md) · [受控 PR 合并证据](docs/evidence/phase3-github-controlled-pr-merge-2026-11-28.json)
 
 ## 当前功能
 

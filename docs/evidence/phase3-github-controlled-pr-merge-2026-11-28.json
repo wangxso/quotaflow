@@ -37,6 +37,32 @@
   "postMerge": {
     "originMain": "d42c69091b7241dd75a65f70244f5a671f3fbf24",
     "localMainFastForwarded": true,
+    "postMergeChecks": {
+      "headSha": "d42c69091b7241dd75a65f70244f5a671f3fbf24",
+      "status": "success",
+      "checks": [
+        {
+          "name": "Android CI",
+          "event": "push",
+          "headBranch": "main",
+          "runId": 46128177378,
+          "conclusion": "success",
+          "createdAt": "2026-11-28T08:57:14Z",
+          "completedAt": "2026-11-28T09:04:10Z",
+          "url": "https://github.com/wangxso/mcarplay/actions/runs/46128177378"
+        },
+        {
+          "name": "Instrumentation",
+          "event": "push",
+          "headBranch": "main",
+          "runId": 46128177328,
+          "conclusion": "success",
+          "createdAt": "2026-11-28T08:57:13Z",
+          "completedAt": "2026-11-28T09:24:26Z",
+          "url": "https://github.com/wangxso/mcarplay/actions/runs/46128177328"
+        }
+      ]
+    },
     "dashboardGateRefresh": {
       "status": "blocked",
       "reasons": [

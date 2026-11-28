@@ -23,9 +23,11 @@ bun run src/cli.ts dashboard --config quotaflow.config.json
 - 受控任务操作：支持 `start`、`cancel` 和 `retry`，均要求明确确认；动作请求写入 `dashboard_action`，Worker 启动和退出写入独立生命周期事件。
 - 受控 GitHub 操作：配置 GitHub App、显式允许 Bot 批准并映射仓库后，可对 current-head 门禁执行 `approve` 或 `merge`。操作前重新拉取 PR，HEAD、分支或 fork 变化会中止；合并还会重新检查 CI、审查和 mergeable 状态。
 
-服务默认绑定 `127.0.0.1:8788`，不能通过 `--host` 绑定非回环地址。Dashboard 本身不执行模型。`start` 只为已到期且没有活跃 attempt 的 `queued` 或 `waiting_quota` 任务派生一次性 Worker 子进程。子进程通过 `worker once --task-id` 定向领取该任务，并重新检查 Lane、额度、预算和调度状态；条件不满足时停在 `waiting_quota`，不会绕过现有调度器。Dashboard 仍不批准 Review、合并 PR 或修改配置。
+服务默认绑定 `127.0.0.1:8788`，不能通过 `--host` 绑定非回环地址。Dashboard 本身不执行模型。`start` 只为已到期且没有活跃 attempt 的 `queued` 或 `waiting_quota` 任务派生一次性 Worker 子进程。子进程通过 `worker once --task-id` 定向领取该任务，并重新检查 Lane、额度、预算和调度状态；条件不满足时停在 `waiting_quota`，不会绕过现有调度器。Dashboard 仅通过受控 GitHub 接口处理 Review 批准与 PR 合并，不开放配置修改。
 
 macOS 当前通过 `com.quotaflow.dashboard` LaunchAgent 常驻，并由现有健康检查每分钟确认 `/api/health`。Dashboard 不经过 Cloudflare Named Tunnel，也不会暴露到公网。
+
+受控 PR #152 在 Bot 批准后以精确 HEAD 合并为 `d42c690`。合并后的 `main` 提交通过 [Android CI](https://github.com/wangxso/mcarplay/actions/runs/46128177378) 与 [Instrumentation](https://github.com/wangxso/mcarplay/actions/runs/46128177328)；Dashboard App merge 因缺少 `Contents: write` 被 GitHub 拒绝，最终合并使用仓库管理员授权路径。上述结果同时记录在[受控 PR 合并证据](evidence/phase3-github-controlled-pr-merge-2026-11-28.json)。
 
 ## 视觉方向
 
@@ -50,7 +52,7 @@ macOS 当前通过 `com.quotaflow.dashboard` LaunchAgent 常驻，并由现有�
 - Worker 日志只对同一任务、同一 `requestId` 的 `start` 审计事件开放。读取上限为最后 64 KiB，拒绝符号链接，并清理 ANSI、控制字符和常见令牌、密码、私钥格式。
 - Task/Event/PR 文本作为不可信内容展示。
 
-审批、合并和设置修改仍需各自独立的权限、确认和审计设计，不能直接复用任务动作接口。
+审批和合并使用独立于任务动作的权限、确认和持久幂等审计接口；设置修改仍不开放。
 
 ## 主要 API
 
