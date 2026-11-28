@@ -186,6 +186,38 @@ test('missing checks wait for evidence instead of materializing a code fix', () 
   }]);
 });
 
+test('a pending check prevents a code fix even when another check already failed', () => {
+  const value = snapshot();
+  value.draft = false;
+  value.checks = [
+    {
+      name: 'Android CI',
+      status: 'completed',
+      conclusion: 'failure',
+      headSha,
+      startedAt: '2026-11-27T14:00:00Z',
+      completedAt: '2026-11-27T14:01:00Z',
+    },
+    {
+      name: 'Instrumentation',
+      status: 'in_progress',
+      conclusion: null,
+      headSha,
+      startedAt: '2026-11-27T14:00:10Z',
+      completedAt: null,
+    },
+  ];
+  const result = evaluateGitHubPull(value, { expectedHeadSha: headSha });
+  expect(result.reasons.map((reason) => reason.code)).toEqual(
+    expect.arrayContaining(['ci_not_success', 'ci_pending']),
+  );
+  expect(planGitHubActions(result).actions).toMatchObject([{
+    kind: 'refresh_evidence',
+    requiresHuman: true,
+    reasonCodes: ['ci_pending'],
+  }]);
+});
+
 test('combines review feedback and CI failures into one fix task', () => {
   const value = snapshot();
   value.draft = false;
