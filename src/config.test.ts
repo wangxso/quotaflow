@@ -157,6 +157,7 @@ test('parses and validates GitHub webhook configuration', () => {
       fetchGate: true,
       tokenEnv: 'GITHUB_TOKEN',
       apiUrl: 'https://api.github.com',
+      requiredChecks: ['Check and build debug APK', 'GitGuardian Security Checks'],
     },
     githubApproval: {
       allowBotApprovals: true,
@@ -201,6 +202,12 @@ test('parses and validates GitHub webhook configuration', () => {
     join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubWebhook.tokenEnv');
   expect(() => normalizeConfig({ ...base, githubWebhook: { ...base.githubWebhook, apiUrl: 'http://example.test' } },
     join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubWebhook.apiUrl');
+  expect(() => normalizeConfig({ ...base, githubWebhook: { ...base.githubWebhook, requiredChecks: [] } },
+    join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubWebhook.requiredChecks');
+  expect(() => normalizeConfig({
+    ...base,
+    githubWebhook: { ...base.githubWebhook, requiredChecks: ['test', 'test'] },
+  }, join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubWebhook.requiredChecks');
   expect(() => normalizeConfig({ ...base, githubApproval: { allowBotApprovals: 'yes' } },
     join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubApproval.allowBotApprovals');
   expect(() => normalizeConfig({ ...base, githubApp: { ...base.githubApp, appId: 0 } },

@@ -62,6 +62,7 @@ export interface GitHubWebhookConfig {
   fetchGate?: boolean;
   tokenEnv?: string;
   apiUrl?: string;
+  requiredChecks?: string[];
 }
 
 export interface GitHubApprovalConfig {

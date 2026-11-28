@@ -163,6 +163,17 @@ function parseGitHubWebhook(value: unknown): GitHubWebhookConfig {
       fail('githubWebhook.apiUrl must use HTTPS or loopback HTTP');
     }
   }
+  let requiredChecks: string[] | undefined;
+  if (raw.requiredChecks !== undefined) {
+    if (!Array.isArray(raw.requiredChecks) || raw.requiredChecks.length === 0) {
+      fail('githubWebhook.requiredChecks must be a non-empty array');
+    }
+    requiredChecks = raw.requiredChecks.map((check, index) =>
+      text(check, `githubWebhook.requiredChecks[${index}]`));
+    if (new Set(requiredChecks).size !== requiredChecks.length) {
+      fail('githubWebhook.requiredChecks contains duplicates');
+    }
+  }
   return {
     host: text(raw.host, 'githubWebhook.host'),
     port,
@@ -171,6 +182,7 @@ function parseGitHubWebhook(value: unknown): GitHubWebhookConfig {
     ...(raw.fetchGate === undefined ? {} : { fetchGate: raw.fetchGate }),
     ...(tokenEnv ? { tokenEnv } : {}),
     ...(apiUrl ? { apiUrl } : {}),
+    ...(requiredChecks ? { requiredChecks } : {}),
   };
 }
 

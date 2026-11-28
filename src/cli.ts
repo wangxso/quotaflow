@@ -392,6 +392,9 @@ async function main() {
         } : {}),
         gatePolicy: {
           allowBotApprovals: Boolean(config.githubApproval?.allowBotApprovals),
+          ...(config.githubWebhook?.requiredChecks
+            ? { requiredChecks: config.githubWebhook.requiredChecks }
+            : {}),
         },
         actionHandler: (context) => materializeGitHubWebhookActions(store, config, context, async () => {
           const token = await accessToken();
