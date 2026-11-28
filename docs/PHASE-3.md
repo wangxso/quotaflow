@@ -69,5 +69,5 @@ macOS 当前通过 `com.quotaflow.dashboard` LaunchAgent 常驻，并由现有�
 
 ## 下一步
 
-1. 使用一个受控 PR 完成真实 Dashboard Bot 批准与合并演练，保留 current-head 和审计证据。
+1. 对已批准的受控 PR #152 完成最终合并授权与合并审计。
 2. 增加桌面发行、备份、恢复和 Linux／Windows + WSL2 启动检查。

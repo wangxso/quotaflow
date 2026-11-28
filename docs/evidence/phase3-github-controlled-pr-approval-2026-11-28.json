@@ -1,0 +1,105 @@
+{
+  "recordedOn": "2026-11-28",
+  "kind": "phase3-github-controlled-pr-approval",
+  "baseRevision": "f0ad0c4",
+  "repository": "wangxso/mcarplay",
+  "issue": {
+    "number": 80,
+    "url": "https://github.com/wangxso/mcarplay/issues/80"
+  },
+  "pullRequest": {
+    "number": 152,
+    "url": "https://github.com/wangxso/mcarplay/pull/152",
+    "title": "Fix AirPlay tunnel MFi hard rejection and completion guards",
+    "branch": "quotaflow/issue-80-mfi-tunnel-guards-20261128",
+    "commit": "d35e0430bafa39b5d0811287e1e946882647f678",
+    "base": "main",
+    "baseSha": "f4af92b7b82b94224fc421253125fb83ec20fa2e",
+    "initialState": "draft",
+    "readyAt": "2026-11-28T08:52:46Z",
+    "mergeable": "CLEAN"
+  },
+  "implementation": {
+    "changedFiles": 4,
+    "additions": 119,
+    "deletions": 3,
+    "changes": [
+      "Hard-reject the pending tunnel MFi length when the link dies",
+      "Ignore duplicate MFI responses after completion",
+      "Train only the first tunnel challenge position",
+      "Reject zero or negative success lengths",
+      "Stop MFi timeout progression after engine death"
+    ]
+  },
+  "ci": {
+    "checks": [
+      {
+        "name": "Auto-reconnect prefs RGP07 and RGP08",
+        "conclusion": "success",
+        "note": "PR run succeeded after one same-SHA rerun"
+      },
+      {
+        "name": "Check and build debug APK",
+        "conclusion": "success"
+      },
+      {
+        "name": "GitGuardian Security Checks",
+        "conclusion": "success"
+      }
+    ],
+    "initialInstrumentationFailure": {
+      "test": "Rgp08CrossProcessPrefsTest.verifiesColdProductionReadAfterCrossProcessCommit",
+      "failure": "expected warm service PID 6073 but observed 6170",
+      "classification": "slow emulator process-lifecycle flake",
+      "supportingResult": "the push run for the same SHA passed Instrumentation",
+      "recovery": "manual same-SHA rerun passed in 16m36s"
+    }
+  },
+  "localGate": {
+    "command": "Gradle full gate plus targeted JVM, lint and APK assembly",
+    "standardTests": {
+      "passed": 1991,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "remoteBridgeTests": {
+      "passed": 25,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "spotlessCheck": "passed",
+    "lintStandardDebug": "passed",
+    "assembleStandardDebug": "passed"
+  },
+  "botApproval": {
+    "dashboardRequestId": "6dc51e6a-4dc3-4784-bef4-822a8cae6ae9",
+    "actor": "quotaflow-review-gate-wangxso",
+    "reviewDatabaseId": 6096845383,
+    "reviewGraphqlId": "PRR_kwDOVW_Udc8AAAABa2Z6Rw",
+    "state": "APPROVED",
+    "commit": "d35e0430bafa39b5d0811287e1e946882647f678",
+    "submittedAt": "2026-11-28T08:53:58Z",
+    "httpStatus": 200,
+    "auditStatus": "succeeded"
+  },
+  "finalGate": {
+    "status": "ready_for_human_merge",
+    "headSha": "d35e0430bafa39b5d0811287e1e946882647f678",
+    "independentApprovals": 1,
+    "reasons": [],
+    "checks": [
+      "Auto-reconnect prefs RGP07 and RGP08: success",
+      "Check and build debug APK: success",
+      "GitGuardian Security Checks: success"
+    ],
+    "nextAction": "human_merge"
+  },
+  "boundary": {
+    "realBotApprovalExecuted": true,
+    "mergeExecuted": false,
+    "physicalReceiverValidation": "pending",
+    "note": "The PR remains unmerged pending explicit final merge authorization and technical evidence boundaries described in the PR."
+  }
+}

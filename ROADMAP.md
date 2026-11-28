@@ -11,7 +11,7 @@
 | Phase 0 · 可行性 | 有条件通过 | 已在临时仓库完成 Codex 写入、Git 检查点和 OpenCode 接续。原生 ChatGPT 执行通道、商业路由组和服务商账单归属仍待验证。 [验收记录](docs/PHASE-0-GATE-CLOSURE.md) |
 | Phase 1 · 单机核心 | 进行中 | 已实现 CLI、SQLite v10 状态、预算到期审计、恢复后冷却、Git 工作树、三平台进程监督、重启恢复、取消升级及可选交接笔记。真实 `mcarplay` Issue 已通过 QuotaFlow 生成 Draft PR，剩余 Worktree 生命周期与 Provider 账单验证。 [当前实现与证据](docs/PHASE-1.md) |
 | Phase 2 · GitHub 开发闭环 | 核心完成 | PR #141 已完成 CI、mergeable、只读审查、最小权限 GitHub App 批准和仓库管理员人工合并，合并提交为 `23033142`。REST 快照、自动 Gate Webhook、两层幂等、仓库与分支白名单、动作任务物化、CI 日志分类、同 SHA 复跑、Cloudflare Named Tunnel、真实 CI 修复、应答丢失、越权及隔离 secret 轮换均验证通过。 |
-| Phase 3 · 界面与部署 | 进行中 | Dashboard 已交付实时任务、GitHub、Budget、组合筛选、Worker Run 与受限日志，以及带 session／CSRF／精确目标／幂等／审计的受控任务操作和 GitHub App 批准／合并。后续完成受控 PR 实操、三平台部署与备份恢复。 |
+| Phase 3 · 界面与部署 | 进行中 | Dashboard 已交付实时任务、GitHub、Budget、组合筛选、Worker Run 与受限日志，以及带 session／CSRF／精确目标／幂等／审计的受控任务操作和 GitHub App 批准／合并。受控 PR #152 已完成真实 current-head Bot 批准，门禁进入 `ready_for_human_merge`；后续完成最终合并、三平台部署与备份恢复。 |
 | Phase 4 · 基于运行证据的改进 | 计划中 | 用历史任务回放和影子评估验证调度、知识库、测试或审查规则提案，保留版本和回滚路径。 |
 | Phase 5 · 长期运行 | 计划中 | 验证多仓库调度、预算公平性和连续运行，安排至少七天运行演练和一次备份恢复演练。低风险自动合并需单独授权。 |
 
@@ -24,7 +24,7 @@
 ### Phase 3 当前切片
 
 1. 使用真实 SQLite 数据提供工作台、任务详情和受控任务操作。
-2. 在一个受控 PR 上完成 Dashboard Bot 批准与合并实操。
+2. 对已批准的受控 PR #152 完成最终合并。
 3. 随后完成桌面发行、Linux／Windows + WSL2 启动检查和备份恢复演练。
 
 ## English
