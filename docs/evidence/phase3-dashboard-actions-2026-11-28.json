@@ -1,0 +1,87 @@
+{
+  "recordedOn": "2026-11-28",
+  "baseRevision": "18fb681e2c0de01a0ee20fedfde1acd2c303dd1c",
+  "actions": {
+    "allowed": [
+      "cancel",
+      "retry"
+    ],
+    "notEnabled": [
+      "start_worker",
+      "github_approve",
+      "github_merge",
+      "configuration_write"
+    ],
+    "confirmation": "Exact task ID in both UI confirmation and request body",
+    "retrySemantics": "Requeue only; no Worker or model is started directly",
+    "cancelSemantics": "Queued task becomes cancelled; active task becomes cancelling and is stopped by the supervised Worker"
+  },
+  "security": {
+    "networkBoundary": "loopback only",
+    "sessionCookie": {
+      "name": "quotaflow_dashboard_session",
+      "httpOnly": true,
+      "sameSite": "Strict",
+      "ttlSeconds": 28800,
+      "serverMemoryOnly": true
+    },
+    "csrf": {
+      "algorithm": "32 random bytes, timing-safe comparison",
+      "transport": "X-QuotaFlow-CSRF header",
+      "tokenExposedInHtml": false
+    },
+    "originRequired": true,
+    "jsonContentTypeRequired": true,
+    "maximumBodyBytes": 4096,
+    "idempotencyKey": "client requestId persisted in dashboard_action event",
+    "requestReuseWithDifferentContent": "rejected"
+  },
+  "audit": {
+    "eventKind": "dashboard_action",
+    "atomicWithStatusMutation": true,
+    "fields": [
+      "action",
+      "actor",
+      "requestId",
+      "previousStatus",
+      "resultingStatus",
+      "outcome",
+      "createdAt"
+    ],
+    "actor": "local-dashboard"
+  },
+  "liveCancellation": {
+    "taskId": "dashboard-action-smoke",
+    "initialStatus": "queued",
+    "resultingStatus": "cancelled",
+    "attemptsStarted": 0,
+    "requestId": "84b45d0d-245f-4583-b161-13a9848d067d",
+    "auditEvents": 1,
+    "duplicateAuditEvents": 0,
+    "taskRetainedForAudit": true
+  },
+  "verification": {
+    "dashboardTests": 2,
+    "dashboardAssertions": 48,
+    "fullSuite": {
+      "macOS": 167,
+      "linux": 167,
+      "windowsOnlySkipped": 1,
+      "failed": 0,
+      "assertions": 794
+    },
+    "build": "passed",
+    "browserCancellation": "passed",
+    "invalidSession": 401,
+    "invalidCsrf": 403,
+    "invalidOrigin": 403,
+    "invalidConfirmation": 403,
+    "replayedMutation": "returned replayed without a second audit event"
+  },
+  "scope": {
+    "readOnlyDashboard": false,
+    "guardedTaskActions": true,
+    "modelExecutionFromDashboard": false,
+    "githubWriteFromDashboard": false
+  }
+}

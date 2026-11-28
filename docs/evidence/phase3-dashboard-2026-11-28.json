@@ -94,7 +94,7 @@
     "readOnly": true,
     "authentication": "loopback-only network boundary",
     "sse": "implemented",
-    "writeActions": "planned with CSRF and explicit permission design",
+    "writeActions": "guarded cancel and retry implemented; see phase3-dashboard-actions-2026-11-28.json",
     "multiProjectFilters": "implemented in Dashboard and API"
   }
 }

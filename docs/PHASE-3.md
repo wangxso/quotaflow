@@ -2,7 +2,7 @@
 
 **状态** 已启动 · 2026-11-28
 
-## 首个只读切片
+## 首个本地控制切片
 
 CLI 新增本地 Dashboard：
 
@@ -20,8 +20,9 @@ bun run src/cli.ts dashboard --config quotaflow.config.json
 - Budgets：预算使用、余额、活跃租约和 Lane 配置。
 - 项目筛选：Overview、Tasks、GitHub 和最近任务共享同一个 repository 过滤上下文。
 - 实时事件：`/api/events/stream` 通过 SSE 从 SQLite event cursor 增量推送任务和运行状态，断线后自动重连。
+- 受控任务操作：支持 `cancel` 和 `retry`，均要求明确确认并写入 `dashboard_action` 审计事件。
 
-服务默认绑定 `127.0.0.1:8788`，不能通过 `--host` 绑定非回环地址。Dashboard 当前没有写操作，只读取现有 SQLite 和配置。
+服务默认绑定 `127.0.0.1:8788`，不能通过 `--host` 绑定非回环地址。Dashboard 只开放取消和重新入队，暂不直接启动 Worker、提交模型调用、批准 Review 或合并 PR。
 
 macOS 当前通过 `com.quotaflow.dashboard` LaunchAgent 常驻，并由现有健康检查每分钟确认 `/api/health`。Dashboard 不经过 Cloudflare Named Tunnel，也不会暴露到公网。
 
@@ -37,25 +38,30 @@ macOS 当前通过 `com.quotaflow.dashboard` LaunchAgent 常驻，并由现有�
 - 页面使用严格 CSP，禁止第三方脚本、样式、frame 和表单提交。
 - API 设置 `nosniff`、`DENY` frame 和 `no-referrer`。
 - 配置 API 不返回 GitHub App private key 路径、Webhook secret 或令牌。
-- 当前只接受 GET，其他方法返回 `405`。
+- 读接口只接受 GET。写操作只接受带同源 Origin、HttpOnly 会话 Cookie 和 CSRF header 的 JSON POST。
+- Session TTL 为 8 小时，Cookie 为 `SameSite=Strict`，session 与 CSRF token 只保存在 Dashboard 进程内存。
+- 写操作要求 `confirmTaskId` 与目标任务完全一致，并用客户端 `requestId` 做持久幂等。
+- 状态修改与 `dashboard_action` 审计事件在同一 SQLite 事务提交。
 - Task/Event/PR 文本作为不可信内容展示。
 
-Dashboard 当前仍是只读控制面。提交、取消、审批、合并和设置修改必须经过独立的权限、CSRF 与人工确认设计，不能直接复用只读 API。
+开始 Worker、审批、合并和设置修改仍需后续设计，不能直接复用当前任务操作接口。
 
 ## 主要 API
 
 - `GET /api/health`
 - `GET /api/overview`
 - `GET /api/events/stream`
+- `GET /api/session`
 - `GET /api/tasks`
 - `GET /api/tasks/:id`
 - `GET /api/github`
 - `GET /api/budgets`
 - `GET /api/config`
+- `POST /api/tasks/:id/actions`
 
 ## 下一步
 
-1. 在独立权限与 CSRF 设计下增加受控写操作。
-2. 增加时间范围、Lane 和审查状态组合筛选。
-3. 增加部署、备份、恢复和 Linux／Windows + WSL2 启动检查。
-4. 用 CLI 与 Dashboard 的同状态 fixture 做更完整的分页和一致性验证。
+1. 增加时间范围、Lane 和审查状态组合筛选。
+2. 在独立执行确认流程下增加启动 Worker。
+3. 在 GitHub 写权限和人工确认流程下增加批准／合并。
+4. 增加部署、备份、恢复和 Linux／Windows + WSL2 启动检查。
