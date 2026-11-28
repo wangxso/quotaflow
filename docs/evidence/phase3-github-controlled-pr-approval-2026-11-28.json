@@ -98,8 +98,9 @@
   },
   "boundary": {
     "realBotApprovalExecuted": true,
-    "mergeExecuted": false,
+    "mergeExecuted": true,
+    "mergeEvidence": "phase3-github-controlled-pr-merge-2026-11-28.json",
     "physicalReceiverValidation": "pending",
-    "note": "The PR remains unmerged pending explicit final merge authorization and technical evidence boundaries described in the PR."
+    "note": "The PR was later merged at the same approved head. Physical receiver validation remains pending."
   }
 }

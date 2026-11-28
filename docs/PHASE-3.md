@@ -69,5 +69,5 @@ macOS 当前通过 `com.quotaflow.dashboard` LaunchAgent 常驻，并由现有�
 
 ## 下一步
 
-1. 对已批准的受控 PR #152 完成最终合并授权与合并审计。
+1. 为 GitHub App 授予并验证 `Contents: write`，在第二个受控 PR 上完成 Dashboard merge 实操。
 2. 增加桌面发行、备份、恢复和 Linux／Windows + WSL2 启动检查。

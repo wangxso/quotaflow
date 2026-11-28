@@ -1,0 +1,56 @@
+{
+  "recordedOn": "2026-11-28",
+  "kind": "phase3-github-controlled-pr-merge",
+  "baseRevision": "6d9af8b",
+  "repository": "wangxso/mcarplay",
+  "issue": {
+    "number": 80,
+    "state": "closed",
+    "stateReason": "completed",
+    "closedAt": "2026-11-28T08:57:12Z",
+    "url": "https://github.com/wangxso/mcarplay/issues/80"
+  },
+  "pullRequest": {
+    "number": 152,
+    "state": "merged",
+    "url": "https://github.com/wangxso/mcarplay/pull/152",
+    "headSha": "d35e0430bafa39b5d0811287e1e946882647f678",
+    "baseSha": "f4af92b7b82b94224fc421253125fb83ec20fa2e",
+    "mergedAt": "2026-11-28T08:57:10Z",
+    "mergedBy": "wangxso",
+    "mergeCommit": "d42c69091b7241dd75a65f70244f5a671f3fbf24"
+  },
+  "dashboardMergeAttempt": {
+    "requestId": "6c0bce92-f8fe-4308-8b4f-d715b203e2fc",
+    "httpStatus": 403,
+    "outcome": "failed",
+    "error": "Resource not accessible by integration",
+    "headShaSent": "d35e0430bafa39b5d0811287e1e946882647f678",
+    "auditPersisted": true
+  },
+  "administratorFallback": {
+    "authorizedByUser": true,
+    "command": "gh pr merge 152 --repo wangxso/mcarplay --merge --match-head-commit d35e0430bafa39b5d0811287e1e946882647f678",
+    "result": "merged",
+    "reason": "The GitHub App currently has Contents read and Pull requests write; GitHub requires Contents write for the merge endpoint"
+  },
+  "postMerge": {
+    "originMain": "d42c69091b7241dd75a65f70244f5a671f3fbf24",
+    "localMainFastForwarded": true,
+    "dashboardGateRefresh": {
+      "status": "blocked",
+      "reasons": [
+        "pull_not_open",
+        "not_mergeable"
+      ],
+      "expectedAfterMerge": true
+    }
+  },
+  "capabilityGap": {
+    "botApproval": "passed",
+    "dashboardMerge": "failed due to GitHub App repository permission",
+    "requiredPermission": "Contents: write",
+    "existingPermission": "Contents: read",
+    "nextAction": "Grant and verify Contents write before using Dashboard merge without an administrator fallback"
+  }
+}

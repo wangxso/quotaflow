@@ -20,7 +20,10 @@
     "mappedRepositories": [
       "wangxso/mcarplay"
     ],
-    "actualGitHubWritesExecuted": false
+    "actualGitHubApprovalExecuted": true,
+    "actualDashboardMergeExecuted": false,
+    "administratorFallbackMergeExecuted": true,
+    "liveEvidence": "phase3-github-controlled-pr-merge-2026-11-28.json"
   },
   "confirmation": {
     "targetFormat": "owner/repo#pullNumber@headSha",
