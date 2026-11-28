@@ -245,13 +245,14 @@ async function main() {
       }
       const absoluteConfigPath = resolve(configPath);
       const cliEntrypoint = fileURLToPath(import.meta.url);
+      const workerLogDirectory = join(dirname(config.database), 'dashboard-workers');
       const server = startDashboardServer(store, config, {
         host,
         port,
+        workerLogDirectory,
         workerStarter: async ({ taskId, requestId }) => {
-          const logDirectory = join(dirname(config.database), 'dashboard-workers');
-          mkdirSync(logDirectory, { recursive: true });
-          const logFd = openSync(join(logDirectory, `${requestId}.log`), 'a', 0o600);
+          mkdirSync(workerLogDirectory, { recursive: true });
+          const logFd = openSync(join(workerLogDirectory, `${requestId}.log`), 'a', 0o600);
           try {
             const child = Bun.spawn([
               process.execPath,

@@ -66,6 +66,8 @@ function gate(): GitHubGateResult {
 test('fetches failed job logs, classifies failures and redacts secrets', async () => {
   const requested: string[] = [];
   const fakeToken = ['top', 'secret', 'value'].join('-');
+  const queryFixture = ['query', 'fixture'].join('-');
+  const jsonFixture = ['json', 'fixture'].join('-');
   const triage = await triageGitHubChecks('wangxso/mcarplay', gate(), {
     token: 'installation-token',
     fetcher: async (input) => {
@@ -77,6 +79,9 @@ test('fetches failed job logs, classifies failures and redacts secrets', async (
           'AssertionError: expected 41 but was 42',
           `TOKEN=${fakeToken}`,
           'Authorization: Bearer top-secret-value',
+          'Authorization: Basic top-secret-value',
+          `https://example.test/run?token=${queryFixture}&job=101`,
+          `{"secret":"${jsonFixture}"}`,
         ].join('\n'));
       }
       if (url.endsWith('/jobs/102/logs')) {
@@ -108,6 +113,11 @@ test('fetches failed job logs, classifies failures and redacts secrets', async (
   expect(triage.complete).toBe(true);
   expect(triage.failures[0]!.excerpt).toContain('TOKEN=[REDACTED]');
   expect(triage.failures[0]!.excerpt).toContain('Bearer [REDACTED]');
+  expect(triage.failures[0]!.excerpt).toContain('Basic [REDACTED]');
+  expect(triage.failures[0]!.excerpt).toContain('token=[REDACTED]&job=101');
+  expect(triage.failures[0]!.excerpt).toContain('"secret":"[REDACTED]"');
+  expect(triage.failures[0]!.excerpt).not.toContain(queryFixture);
+  expect(triage.failures[0]!.excerpt).not.toContain(jsonFixture);
   expect(requested).toHaveLength(2);
 });
 

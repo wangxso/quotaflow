@@ -1,4 +1,7 @@
 import { expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { openDatabase } from './db';
 import type { QuotaFlowConfig } from './domain';
 import { startDashboardServer } from './dashboard';
@@ -53,10 +56,13 @@ function config(): QuotaFlowConfig {
 test('dashboard serves a guarded local API, SSE and project filters', async () => {
   const db = openDatabase(':memory:');
   const store = new TaskStore(db);
+  const root = mkdtempSync(join(tmpdir(), 'quotaflow-dashboard-'));
+  const workerLogDirectory = join(root, 'dashboard-workers');
   const workerStarts: string[] = [];
   const server = startDashboardServer(store, config(), {
     host: '127.0.0.1',
     port: 0,
+    workerLogDirectory,
     workerStarter: ({ taskId, requestId }) => {
       workerStarts.push(`${taskId}:${requestId}`);
       return { pid: 4242, exited: Promise.resolve(0) };
@@ -88,7 +94,9 @@ test('dashboard serves a guarded local API, SSE and project filters', async () =
     expect(script.headers.get('content-type')).toContain('text/javascript');
     const scriptText = await script.text();
     expect(scriptText).toContain("$('#sidebar-recents')");
+    expect(scriptText).toContain("detailBlock('Worker runs'");
     expect(scriptText).not.toContain('innerHTML');
+    expect(() => new Function(scriptText)).not.toThrow();
 
     const health = await fetch(new URL('/api/health', server.url));
     expect(await health.json()).toEqual(expect.objectContaining({
@@ -274,6 +282,42 @@ test('dashboard serves a guarded local API, SSE and project filters', async () =
     expect(store.events(other.id).map((event) => event.kind))
       .toEqual(expect.arrayContaining(['dashboard_worker_started', 'dashboard_worker_exited']));
 
+    mkdirSync(workerLogDirectory, { recursive: true });
+    writeFileSync(
+      join(workerLogDirectory, 'request-start-1.log'),
+      '\x1b[31mstarting token=supersecret\x1b[0m\n{"secret":"json-secret"}\nready\n',
+      { mode: 0o600 },
+    );
+    writeFileSync(join(workerLogDirectory, 'unrelated-request.log'), 'not associated\n');
+    const workerDetail = await fetch(new URL(`/api/tasks/${other.id}`, server.url));
+    const workerDetailBody = await workerDetail.json();
+    expect(workerDetailBody.workerRuns).toEqual([
+      expect.objectContaining({
+        requestId: 'request-start-1',
+        state: 'exited',
+        pid: 4242,
+        exitCode: 0,
+        logAvailable: true,
+      }),
+    ]);
+    const workerLog = await fetch(new URL(
+      `/api/tasks/${other.id}/workers/request-start-1/log`,
+      server.url,
+    ));
+    expect(workerLog.status).toBe(200);
+    const workerLogBody = await workerLog.json() as { text: string; bytes: number };
+    expect(workerLogBody.bytes).toBeGreaterThan(0);
+    expect(workerLogBody.text).toContain('starting token=[REDACTED]');
+    expect(workerLogBody.text).toContain('"secret":"[REDACTED]"');
+    expect(workerLogBody.text).not.toContain('supersecret');
+    expect(workerLogBody.text).not.toContain('\x1b');
+    const unrelatedLog = await fetch(new URL(
+      `/api/tasks/${other.id}/workers/unrelated-request/log`,
+      server.url,
+    ));
+    expect(unrelatedLog.status).toBe(404);
+    expect(await unrelatedLog.json()).toEqual({ error: 'worker_log_not_found' });
+
     store.block(other.id, 'fixture_blocked', 300);
     const retried = await action(other.id, 'request-retry-1', {
       action: 'retry',
@@ -288,6 +332,7 @@ test('dashboard serves a guarded local API, SSE and project filters', async () =
   } finally {
     server.stop(true);
     db.close();
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

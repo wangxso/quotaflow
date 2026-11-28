@@ -84,14 +84,21 @@ function classify(conclusion: string | null, log: string): GitHubCiFailureCatego
   return 'unknown';
 }
 
-export function redactGitHubLog(value: string): string {
+export function redactSensitiveText(value: string): string {
   return value
     .replace(/gh[pousr]_[A-Za-z0-9_]{20,}/g, '[REDACTED_GITHUB_TOKEN]')
     .replace(/github_pat_[A-Za-z0-9_]{20,}/g, '[REDACTED_GITHUB_TOKEN]')
-    .replace(/(authorization\s*:\s*bearer\s+)[^\s]+/gi, '$1[REDACTED]')
-    .replace(/(\b(?:api[_-]?key|token|secret|password)\b\s*[:=]\s*)[^\s]+/gi, '$1[REDACTED]')
+    .replace(/(authorization\s*:\s*(?:bearer|basic)\s+)[^\s]+/gi, '$1[REDACTED]')
+    .replace(/([?&](?:api[_-]?key|token|secret|password)=)[^&\s]+/gi, '$1[REDACTED]')
+    .replace(/("(?:api[_-]?key|token|secret|password)"\s*:\s*")[^"]*(")/gi, '$1[REDACTED]$2')
+    .replace(/(\b(?:api[_-]?key|token|secret|password)\b\s*[:=]\s*)[^\s&]+/gi, '$1[REDACTED]')
+    .replace(/\b(?:sk|rk|pk)-[A-Za-z0-9_-]{20,}/g, '[REDACTED_API_TOKEN]')
     .replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?-----END [^-]*PRIVATE KEY-----/g,
       '[REDACTED_PRIVATE_KEY]');
+}
+
+export function redactGitHubLog(value: string): string {
+  return redactSensitiveText(value);
 }
 
 async function readLimited(response: Response, limit: number): Promise<{ text: string; bytes: number; truncated: boolean }> {

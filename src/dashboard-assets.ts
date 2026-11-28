@@ -459,6 +459,14 @@ h3 { margin-bottom: 5px; font-size: 14px; }
 .timeline-item { padding-left: 13px; border-left: 1px solid var(--line); }
 .timeline-item strong { display: block; font: 10px/1.4 var(--mono); }
 .timeline-item small { color: var(--faint); font-size: 10px; }
+.worker-runs { display: grid; gap: 10px; }
+.worker-run { padding: 11px 0 0; border-top: 1px solid var(--line-soft); }
+.worker-run:first-child { padding-top: 0; border-top: 0; }
+.worker-run-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.worker-run-head strong { font: 10px/1.4 var(--mono); }
+.worker-run small { display: block; margin-top: 5px; color: var(--faint); font: 9px/1.5 var(--mono); overflow-wrap: anywhere; }
+.worker-run .secondary-button { margin-top: 9px; }
+.worker-log { margin-top: 9px; padding: 10px; border: 1px solid var(--line-soft); background: #080d10; }
 .action-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 .primary-button, .secondary-button, .danger-button {
   min-height: 34px; padding: 0 13px; border: 1px solid var(--line);
@@ -583,6 +591,10 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
+function formatOptionalDate(value) {
+  return value ? formatDate(value) : '—';
+}
+
 function formatRelative(value) {
   if (!value) return '—';
   const seconds = Math.round((Date.now() - new Date(value).getTime()) / 1000);
@@ -599,8 +611,20 @@ function shortSha(value) {
   return value ? value.slice(0, 8) : '—';
 }
 
-function statusNode(status) {
-  return element('span', 'status status-' + String(status || 'unknown').replaceAll('_', '-'), String(status || 'unknown').replaceAll('_', ' '));
+function formatBytes(value) {
+  if (!Number.isFinite(Number(value))) return '—';
+  const bytes = Number(value);
+  if (bytes < 1024) return bytes + ' B';
+  return (bytes / 1024).toFixed(bytes < 10240 ? 1 : 0) + ' KiB';
+}
+
+function statusNode(status, label) {
+  const normalized = String(status || 'unknown');
+  return element(
+    'span',
+    'status status-' + normalized.replaceAll('_', '-'),
+    label || normalized.replaceAll('_', ' '),
+  );
 }
 
 function setError(error) {
@@ -1101,6 +1125,77 @@ async function openTask(taskId) {
     });
     if (!attempts.children.length) attempts.append(element('small', null, '尚无尝试'));
     grid.append(detailBlock('Attempts', attempts));
+
+    const workerRuns = element('div', 'worker-runs');
+    (detail.workerRuns || []).forEach((run) => {
+      const item = element('article', 'worker-run');
+      const head = element('div', 'worker-run-head');
+      head.append(element('strong', null, run.state));
+      head.append(statusNode(
+        run.state === 'exited'
+          ? 'completed'
+          : run.state === 'started'
+            ? 'running'
+            : run.state === 'failed'
+              ? 'failed'
+              : 'queued',
+        run.state,
+      ));
+      item.append(head);
+      item.append(element(
+        'small',
+        null,
+        run.requestId
+          + ' · PID ' + (run.pid ?? '—')
+          + ' · exit ' + (run.exitCode ?? '—'),
+      ));
+      item.append(element(
+        'small',
+        null,
+        'requested ' + formatOptionalDate(run.requestedAt)
+          + ' · started ' + formatOptionalDate(run.startedAt)
+          + ' · ended ' + formatOptionalDate(run.exitedAt),
+      ));
+      if (run.error) item.append(element('div', 'error-banner', run.error));
+      if (run.logAvailable) {
+        const log = element('pre', 'prompt-box worker-log');
+        log.hidden = true;
+        const button = element(
+          'button',
+          'secondary-button',
+          '查看日志 · ' + formatBytes(run.logBytes),
+        );
+        button.type = 'button';
+        button.addEventListener('click', async () => {
+          button.disabled = true;
+          try {
+            const response = await api(
+              '/api/tasks/' + encodeURIComponent(detail.task.id)
+                + '/workers/' + encodeURIComponent(run.requestId) + '/log',
+            );
+            log.textContent = response.truncated
+              ? '仅显示最后 ' + formatBytes(response.bytes) + '（源文件 '
+                + formatBytes(response.sourceBytes) + '）\\n\\n' + response.text
+              : response.text || '（日志为空）';
+            log.hidden = false;
+            button.textContent = '刷新日志 · ' + formatBytes(response.bytes);
+          } catch (error) {
+            log.textContent = error instanceof Error ? error.message : '日志读取失败';
+            log.hidden = false;
+          } finally {
+            button.disabled = false;
+          }
+        });
+        item.append(button, log);
+      } else {
+        item.append(element('small', null, '日志尚未写入或文件不可用'));
+      }
+      workerRuns.append(item);
+    });
+    if (!workerRuns.children.length) {
+      workerRuns.append(element('small', null, '尚无 Dashboard Worker 运行'));
+    }
+    grid.append(detailBlock('Worker runs', workerRuns));
 
     const actions = element('div', 'action-bar');
     if (!['completed', 'cancelled'].includes(detail.task.status)) {

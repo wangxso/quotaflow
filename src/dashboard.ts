@@ -2,12 +2,18 @@ import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { TASK_STATUSES, type QuotaFlowConfig, type Task } from './domain';
 import type { TaskStore } from './store';
 import { dashboardCss, dashboardHtml, dashboardJs } from './dashboard-assets';
+import {
+  dashboardRequestIdPattern,
+  dashboardWorkerRuns,
+  readDashboardWorkerLog,
+} from './dashboard-worker-logs';
 
 export interface DashboardServerOptions {
   host?: string;
   port?: number;
   sessionTtlMs?: number;
   workerStarter?: DashboardWorkerStarter;
+  workerLogDirectory?: string;
 }
 
 export interface DashboardWorkerStart {
@@ -464,7 +470,7 @@ async function dashboardTaskAction(
     return json({ error: 'invalid_action' }, 400);
   }
   if (body.confirmTaskId !== taskId) return json({ error: 'confirmation_rejected' }, 403);
-  if (typeof body.requestId !== 'string' || !/^[A-Za-z0-9._:-]{8,100}$/.test(body.requestId)) {
+  if (typeof body.requestId !== 'string' || !dashboardRequestIdPattern.test(body.requestId)) {
     return json({ error: 'invalid_request_id' }, 400);
   }
   if (!store.findTask(taskId)) return json({ error: 'task_not_found' }, 404);
@@ -546,6 +552,7 @@ function dashboardHandler(
   config: QuotaFlowConfig,
   sessions: DashboardSessions,
   workerStarter: DashboardWorkerStarter | undefined,
+  workerLogDirectory: string | undefined,
 ) {
   const writeActions = ['cancel', 'retry', ...(workerStarter ? ['start'] : [])];
   const route = async function route(request: Request): Promise<Response> {
@@ -586,6 +593,33 @@ function dashboardHandler(
         .map((task) => taskSummary(task, config));
       return json({ generatedAt: Date.now(), items });
     }
+    const workerLogMatch = /^\/api\/tasks\/([^/]+)\/workers\/([^/]+)\/log$/.exec(url.pathname);
+    if (workerLogMatch) {
+      let taskId: string;
+      let requestId: string;
+      try {
+        taskId = decodeURIComponent(workerLogMatch[1]!);
+        requestId = decodeURIComponent(workerLogMatch[2]!);
+      } catch {
+        return json({ error: 'invalid_worker_log_path' }, 400);
+      }
+      if (!dashboardRequestIdPattern.test(requestId)) {
+        return json({ error: 'invalid_request_id' }, 400);
+      }
+      const task = store.findTask(taskId);
+      if (!task || !workerLogDirectory) return json({ error: 'worker_log_not_found' }, 404);
+      const run = dashboardWorkerRuns(store.events(task.id), workerLogDirectory)
+        .find((candidate) => candidate.requestId === requestId);
+      if (!run || !run.logAvailable) return json({ error: 'worker_log_not_found' }, 404);
+      const log = readDashboardWorkerLog(workerLogDirectory, requestId);
+      if (!log) return json({ error: 'worker_log_not_found' }, 404);
+      return json({
+        generatedAt: Date.now(),
+        taskId: task.id,
+        requestId,
+        ...log,
+      });
+    }
     const taskMatch = /^\/api\/tasks\/([^/]+)$/.exec(url.pathname);
     if (taskMatch) {
       let taskId: string;
@@ -596,11 +630,13 @@ function dashboardHandler(
       }
       const task = store.findTask(taskId);
       if (!task) return json({ error: 'task_not_found' }, 404);
+      const events = store.events(task.id);
       return json({
         generatedAt: Date.now(),
         task,
         attempts: store.attempts(task.id),
-        events: store.events(task.id),
+        events,
+        workerRuns: dashboardWorkerRuns(events, workerLogDirectory),
         usage: store.usageForTask(task.id),
         budgetLeases: store.budgetLeasesForTask(task.id),
         handoffNote: task.handoff ? store.handoffForCheckpoint(task.id, task.checkpoint) : null,
@@ -655,6 +691,12 @@ export function startDashboardServer(
   return Bun.serve({
     hostname: host,
     port,
-    fetch: dashboardHandler(store, config, sessions, options.workerStarter),
+    fetch: dashboardHandler(
+      store,
+      config,
+      sessions,
+      options.workerStarter,
+      options.workerLogDirectory,
+    ),
   });
 }
