@@ -50,7 +50,7 @@ function config(): QuotaFlowConfig {
   };
 }
 
-test('dashboard serves a read-only local API and security headers', async () => {
+test('dashboard serves a guarded local API, SSE and project filters', async () => {
   const db = openDatabase(':memory:');
   const store = new TaskStore(db);
   const server = startDashboardServer(store, config(), { host: '127.0.0.1', port: 0 });
@@ -83,7 +83,11 @@ test('dashboard serves a read-only local API and security headers', async () => 
     expect(scriptText).not.toContain('innerHTML');
 
     const health = await fetch(new URL('/api/health', server.url));
-    expect(await health.json()).toEqual(expect.objectContaining({ status: 'ok', readOnly: true }));
+    expect(await health.json()).toEqual(expect.objectContaining({
+      status: 'ok',
+      readOnly: false,
+      writeActions: ['cancel', 'retry'],
+    }));
 
     const overview = await fetch(new URL('/api/overview', server.url));
     const overviewBody = await overview.json();
@@ -166,6 +170,85 @@ test('dashboard serves a read-only local API and security headers', async () => 
     expect(await invalidLimit.json()).toEqual({ error: 'invalid_query' });
     const method = await fetch(new URL('/api/tasks', server.url), { method: 'POST' });
     expect(method.status).toBe(405);
+
+    const sessionResponse = await fetch(new URL('/api/session', server.url));
+    expect(sessionResponse.status).toBe(200);
+    const sessionCookie = sessionResponse.headers.get('set-cookie');
+    expect(sessionCookie).toContain('HttpOnly');
+    expect(sessionCookie).toContain('SameSite=Strict');
+    const session = await sessionResponse.json() as { csrfToken: string };
+    expect(session.csrfToken).toHaveLength(64);
+    const cookie = sessionCookie!.split(';')[0]!;
+    const action = async (
+      taskId: string,
+      requestId: string,
+      overrides: {
+        action?: string;
+        confirmTaskId?: string;
+        origin?: string;
+        csrf?: string;
+        cookie?: string;
+      } = {},
+    ) => fetch(new URL(`/api/tasks/${taskId}/actions`, server.url), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: overrides.origin ?? server.url.origin,
+        cookie: overrides.cookie ?? cookie,
+        'x-quotaflow-csrf': overrides.csrf ?? session.csrfToken,
+      },
+      body: JSON.stringify({
+        action: overrides.action ?? 'cancel',
+        confirmTaskId: overrides.confirmTaskId ?? taskId,
+        requestId,
+      }),
+    });
+
+    const unauthorized = await fetch(new URL(`/api/tasks/${task.id}/actions`, server.url), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: server.url.origin,
+      },
+      body: JSON.stringify({ action: 'cancel', confirmTaskId: task.id, requestId: 'request-no-session' }),
+    });
+    expect(unauthorized.status).toBe(401);
+    const badCsrf = await action(task.id, 'request-bad-csrf', { csrf: 'b'.repeat(64) });
+    expect(badCsrf.status).toBe(403);
+    expect(await badCsrf.json()).toEqual({ error: 'csrf_rejected' });
+    const badOrigin = await action(task.id, 'request-bad-origin', { origin: 'https://example.test' });
+    expect(badOrigin.status).toBe(403);
+    expect(await badOrigin.json()).toEqual({ error: 'origin_rejected' });
+    const badConfirmation = await action(task.id, 'request-bad-confirm', { confirmTaskId: 'other-task' });
+    expect(badConfirmation.status).toBe(403);
+    expect(await badConfirmation.json()).toEqual({ error: 'confirmation_rejected' });
+
+    const cancelled = await action(task.id, 'request-cancel-1');
+    expect(cancelled.status).toBe(202);
+    expect(await cancelled.json()).toMatchObject({
+      status: 'accepted',
+      action: 'cancel',
+      task: { id: task.id, status: 'cancelled' },
+    });
+    const replayed = await action(task.id, 'request-cancel-1');
+    expect(replayed.status).toBe(200);
+    expect(await replayed.json()).toMatchObject({
+      status: 'replayed',
+      task: { id: task.id, status: 'cancelled' },
+    });
+    expect(store.events(task.id).filter((event) => event.kind === 'dashboard_action')).toHaveLength(1);
+
+    store.block(other.id, 'fixture_blocked', 300);
+    const retried = await action(other.id, 'request-retry-1', {
+      action: 'retry',
+      confirmTaskId: other.id,
+    });
+    expect(retried.status).toBe(202);
+    expect(await retried.json()).toMatchObject({
+      status: 'accepted',
+      action: 'retry',
+      task: { id: other.id, status: 'queued' },
+    });
   } finally {
     server.stop(true);
     db.close();

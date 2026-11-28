@@ -1,3 +1,4 @@
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { TASK_STATUSES, type QuotaFlowConfig, type Task } from './domain';
 import type { TaskStore } from './store';
 import { dashboardCss, dashboardHtml, dashboardJs } from './dashboard-assets';
@@ -5,6 +6,7 @@ import { dashboardCss, dashboardHtml, dashboardJs } from './dashboard-assets';
 export interface DashboardServerOptions {
   host?: string;
   port?: number;
+  sessionTtlMs?: number;
 }
 
 const securityHeaders = {
@@ -16,14 +18,87 @@ const securityHeaders = {
   'Cache-Control': 'no-store',
 };
 
-function json(value: unknown, status = 200): Response {
+function json(value: unknown, status = 200, extraHeaders: Record<string, string> = {}): Response {
   return Response.json(value, {
     status,
     headers: {
       ...securityHeaders,
       'Content-Type': 'application/json; charset=utf-8',
+      ...extraHeaders,
     },
   });
+}
+
+interface DashboardSession {
+  csrfToken: string;
+  expiresAt: number;
+}
+
+class DashboardSessions {
+  readonly #ttlMs: number;
+  readonly #now: () => number;
+  readonly #sessions = new Map<string, DashboardSession>();
+
+  constructor(ttlMs: number, now: () => number) {
+    if (!Number.isInteger(ttlMs) || ttlMs < 60_000 || ttlMs > 86_400_000) {
+      throw new Error('Dashboard session TTL must be between 1 minute and 24 hours');
+    }
+    this.#ttlMs = ttlMs;
+    this.#now = now;
+  }
+
+  get ttlMs(): number {
+    return this.#ttlMs;
+  }
+
+  create(): { id: string; session: DashboardSession } {
+    this.cleanup();
+    const id = randomBytes(32).toString('hex');
+    const session = {
+      csrfToken: randomBytes(32).toString('hex'),
+      expiresAt: this.#now() + this.#ttlMs,
+    };
+    this.#sessions.set(id, session);
+    return { id, session };
+  }
+
+  get(id: string | null): DashboardSession | null {
+    this.cleanup();
+    if (!id) return null;
+    const session = this.#sessions.get(id);
+    if (!session || session.expiresAt <= this.#now()) {
+      this.#sessions.delete(id);
+      return null;
+    }
+    return session;
+  }
+
+  cleanup(): void {
+    const now = this.#now();
+    for (const [id, session] of this.#sessions) {
+      if (session.expiresAt <= now) this.#sessions.delete(id);
+    }
+  }
+}
+
+const sessionCookie = 'quotaflow_dashboard_session';
+
+function cookies(request: Request): Map<string, string> {
+  const result = new Map<string, string>();
+  const value = request.headers.get('cookie');
+  if (!value) return result;
+  for (const part of value.split(';')) {
+    const separator = part.indexOf('=');
+    if (separator < 1) continue;
+    result.set(part.slice(0, separator).trim(), part.slice(separator + 1).trim());
+  }
+  return result;
+}
+
+function sameSecret(left: string, right: string): boolean {
+  const leftBytes = Buffer.from(left);
+  const rightBytes = Buffer.from(right);
+  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
 }
 
 function asset(value: string, contentType: string): Response {
@@ -308,16 +383,122 @@ function eventStream(
   });
 }
 
-function dashboardHandler(store: TaskStore, config: QuotaFlowConfig) {
+function sessionResponse(
+  request: Request,
+  sessions: DashboardSessions,
+): Response {
+  const currentId = cookies(request).get(sessionCookie) ?? null;
+  let id = currentId;
+  let session = sessions.get(id);
+  let setCookie: Record<string, string> = {};
+  if (!session) {
+    const created = sessions.create();
+    id = created.id;
+    session = created.session;
+    setCookie = {
+      'Set-Cookie': [
+        `${sessionCookie}=${id}`,
+        'Path=/',
+        'HttpOnly',
+        'SameSite=Strict',
+        `Max-Age=${Math.floor(sessions.ttlMs / 1000)}`,
+      ].join('; '),
+    };
+  }
+  return json({
+    csrfToken: session.csrfToken,
+    expiresAt: session.expiresAt,
+    actor: 'local-dashboard',
+  }, 200, setCookie);
+}
+
+async function dashboardTaskAction(
+  store: TaskStore,
+  config: QuotaFlowConfig,
+  request: Request,
+  url: URL,
+  sessions: DashboardSessions,
+): Promise<Response> {
+  if (request.headers.get('origin') !== url.origin) return json({ error: 'origin_rejected' }, 403);
+  const session = sessions.get(cookies(request).get(sessionCookie) ?? null);
+  if (!session) return json({ error: 'session_required' }, 401);
+  const csrf = request.headers.get('x-quotaflow-csrf');
+  if (!csrf || !sameSecret(session.csrfToken, csrf)) return json({ error: 'csrf_rejected' }, 403);
+  if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) {
+    return json({ error: 'content_type_required' }, 415);
+  }
+  const bodyText = await request.text();
+  if (bodyText.length > 4096) return json({ error: 'payload_too_large' }, 413);
+  let body: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(bodyText) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
+    body = parsed as Record<string, unknown>;
+  } catch {
+    return json({ error: 'invalid_json' }, 400);
+  }
+  const match = /^\/api\/tasks\/([^/]+)\/actions$/.exec(url.pathname);
+  if (!match) return json({ error: 'not_found' }, 404);
+  let taskId: string;
+  try {
+    taskId = decodeURIComponent(match[1]!);
+  } catch {
+    return json({ error: 'invalid_task_id' }, 400);
+  }
+  const action = body.action;
+  if (action !== 'cancel' && action !== 'retry') return json({ error: 'invalid_action' }, 400);
+  if (body.confirmTaskId !== taskId) return json({ error: 'confirmation_rejected' }, 403);
+  if (typeof body.requestId !== 'string' || !/^[A-Za-z0-9._:-]{8,100}$/.test(body.requestId)) {
+    return json({ error: 'invalid_request_id' }, 400);
+  }
+  if (!store.findTask(taskId)) return json({ error: 'task_not_found' }, 404);
+  try {
+    const result = store.performDashboardTaskAction({
+      taskId,
+      action,
+      actor: 'local-dashboard',
+      requestId: body.requestId,
+    });
+    return json({
+      status: result.replayed ? 'replayed' : 'accepted',
+      action,
+      task: taskSummary(result.task, config),
+      requestId: body.requestId,
+    }, result.replayed ? 200 : 202);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Dashboard action failed';
+    if (
+      message.includes('cannot be retried')
+      || message.includes('cannot be cancelled')
+      || message.includes('active attempt')
+      || message.includes('attempt limit')
+      || message.includes('reused with different content')
+    ) {
+      return json({ error: 'action_conflict', message }, 409);
+    }
+    return json({ error: 'action_failed' }, 500);
+  }
+}
+
+function dashboardHandler(store: TaskStore, config: QuotaFlowConfig, sessions: DashboardSessions) {
   const route = async function route(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    if (request.method === 'POST' && url.pathname.startsWith('/api/tasks/')) {
+      return dashboardTaskAction(store, config, request, url, sessions);
+    }
     if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405);
     if (url.pathname === '/') return asset(dashboardHtml, 'text/html; charset=utf-8');
     if (url.pathname === '/assets/app.css') return asset(dashboardCss, 'text/css; charset=utf-8');
     if (url.pathname === '/assets/app.js') return asset(dashboardJs, 'text/javascript; charset=utf-8');
     if (url.pathname === '/api/health') {
-      return json({ status: 'ok', generatedAt: Date.now(), readOnly: true });
+      return json({
+        status: 'ok',
+        generatedAt: Date.now(),
+        readOnly: false,
+        writeActions: ['cancel', 'retry'],
+      });
     }
+    if (url.pathname === '/api/session') return sessionResponse(request, sessions);
     if (url.pathname === '/api/overview') {
       return json(overview(store, config, repositoryFilter(url)));
     }
@@ -403,9 +584,10 @@ export function startDashboardServer(
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     throw new Error('Dashboard port must be an integer between 0 and 65535');
   }
+  const sessions = new DashboardSessions(options.sessionTtlMs ?? 28_800_000, Date.now);
   return Bun.serve({
     hostname: host,
     port,
-    fetch: dashboardHandler(store, config),
+    fetch: dashboardHandler(store, config, sessions),
   });
 }

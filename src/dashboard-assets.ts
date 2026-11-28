@@ -42,8 +42,8 @@ export const dashboardHtml = `<!doctype html>
       <div class="sidebar-note">
         <span class="local-dot" aria-hidden="true"></span>
         <div>
-          <strong>Local only</strong>
-          <small>Read-only control surface</small>
+          <strong>Local control</strong>
+          <small>Guarded cancel and retry</small>
         </div>
       </div>
     </aside>
@@ -213,6 +213,18 @@ export const dashboardHtml = `<!doctype html>
       </header>
       <div id="dialog-content" class="dialog-content"></div>
     </div>
+  </dialog>
+
+  <dialog id="action-dialog" class="action-dialog" aria-labelledby="action-dialog-title">
+    <form method="dialog" class="action-dialog-shell">
+      <h2 id="action-dialog-title">确认操作</h2>
+      <p id="action-dialog-message"></p>
+      <div id="action-dialog-error" class="action-dialog-error" hidden></div>
+      <div class="action-dialog-buttons">
+        <button id="action-dialog-cancel" class="secondary-button" type="button">取消</button>
+        <button id="action-dialog-confirm" class="danger-button" type="button">确认</button>
+      </div>
+    </form>
   </dialog>
 
   <script src="/assets/app.js" defer></script>
@@ -447,6 +459,25 @@ h3 { margin-bottom: 5px; font-size: 14px; }
 .timeline-item { padding-left: 13px; border-left: 1px solid var(--line); }
 .timeline-item strong { display: block; font: 10px/1.4 var(--mono); }
 .timeline-item small { color: var(--faint); font-size: 10px; }
+.action-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.primary-button, .secondary-button, .danger-button {
+  min-height: 34px; padding: 0 13px; border: 1px solid var(--line);
+  background: var(--bg-raised); color: var(--text); cursor: pointer; font-size: 11px;
+}
+.primary-button { border-color: rgba(142,183,255,0.45); background: var(--mint-dim); color: var(--mint); }
+.secondary-button:hover { border-color: var(--muted); }
+.danger-button { border-color: rgba(239,127,120,0.45); color: var(--red); background: rgba(239,127,120,0.07); }
+.primary-button:disabled, .secondary-button:disabled, .danger-button:disabled { opacity: 0.45; cursor: wait; }
+.action-dialog {
+  width: min(430px, calc(100vw - 32px)); padding: 0; color: var(--text);
+  border: 1px solid var(--line); background: #0c1216; box-shadow: var(--shadow);
+}
+.action-dialog::backdrop { background: rgba(2,5,7,0.76); backdrop-filter: blur(4px); }
+.action-dialog-shell { padding: 22px; }
+.action-dialog-shell h2 { margin-bottom: 10px; }
+.action-dialog-shell p { color: var(--muted); font-size: 12px; line-height: 1.6; }
+.action-dialog-error { margin-bottom: 12px; padding: 9px 10px; border: 1px solid rgba(239,127,120,0.35); color: var(--red); font-size: 11px; }
+.action-dialog-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 @media (max-width: 1100px) {
   .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .overview-grid { grid-template-columns: 1fr; }
@@ -488,8 +519,10 @@ const state = {
   github: { gates: [], reruns: [] },
   budgets: { policies: [], lanes: [] },
   config: null,
+  session: null,
   lastEventId: null,
   eventSource: null,
+  pendingAction: null,
   error: null,
 };
 
@@ -584,22 +617,91 @@ async function api(path) {
   return body;
 }
 
+function requestId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+}
+
+function showActionConfirmation(task, action) {
+  const cancel = action === 'cancel';
+  state.pendingAction = {
+    task,
+    action,
+    requestId: requestId(),
+  };
+  $('#action-dialog-title').textContent = cancel ? '取消任务' : '重试任务';
+  $('#action-dialog-message').textContent = cancel
+    ? '将请求停止“' + task.title + '”。运行中的任务会先进入 cancelling，由 Worker 完成受监督停止。'
+    : '将把“' + task.title + '”重新加入队列。该操作不会直接启动 Agent。';
+  $('#action-dialog-confirm').textContent = cancel ? '确认取消' : '确认重试';
+  $('#action-dialog-confirm').disabled = false;
+  $('#action-dialog-cancel').disabled = false;
+  $('#action-dialog-error').hidden = true;
+  $('#action-dialog-error').textContent = '';
+  $('#action-dialog').showModal();
+}
+
+async function executePendingAction() {
+  const pending = state.pendingAction;
+  const session = state.session;
+  if (!pending || !session) {
+    setError('Dashboard 会话不可用，请刷新后重试');
+    return;
+  }
+  const confirm = $('#action-dialog-confirm');
+  const cancel = $('#action-dialog-cancel');
+  const errorBox = $('#action-dialog-error');
+  confirm.disabled = true;
+  cancel.disabled = true;
+  errorBox.hidden = true;
+  try {
+    const response = await fetch('/api/tasks/' + encodeURIComponent(pending.task.id) + '/actions', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'content-type': 'application/json',
+        'x-quotaflow-csrf': session.csrfToken,
+      },
+      body: JSON.stringify({
+        action: pending.action,
+        requestId: pending.requestId,
+        confirmTaskId: pending.task.id,
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.message || body.error || '操作失败');
+    const taskDialogOpen = $('#task-dialog').open;
+    $('#action-dialog').close();
+    state.pendingAction = null;
+    await refresh();
+    if (taskDialogOpen) openTask(pending.task.id);
+  } catch (error) {
+    errorBox.textContent = error instanceof Error ? error.message : '操作失败';
+    errorBox.hidden = false;
+  } finally {
+    confirm.disabled = false;
+    cancel.disabled = false;
+  }
+}
+
 async function refresh() {
   const button = $('#refresh-button');
   button.disabled = true;
   try {
-    const [overview, tasks, github, budgets, config] = await Promise.all([
+    const [overview, tasks, github, budgets, config, session] = await Promise.all([
       api('/api/overview'),
       api('/api/tasks'),
       api('/api/github'),
       api('/api/budgets'),
       api('/api/config'),
+      api('/api/session'),
     ]);
     state.overview = overview;
     state.tasks = tasks.items || [];
     state.github = github;
     state.budgets = budgets;
     state.config = config;
+    state.session = session;
     state.lastEventId = overview.latestEventId ?? state.lastEventId;
     setError(null);
     renderAll();
@@ -996,7 +1098,21 @@ async function openTask(taskId) {
     if (!attempts.children.length) attempts.append(element('small', null, '尚无尝试'));
     grid.append(detailBlock('Attempts', attempts));
 
+    const actions = element('div', 'action-bar');
+    if (!['completed', 'cancelled'].includes(detail.task.status)) {
+      const cancel = element('button', 'danger-button', '取消任务');
+      cancel.type = 'button';
+      cancel.addEventListener('click', () => showActionConfirmation(detail.task, 'cancel'));
+      actions.append(cancel);
+    }
+    if (['failed', 'blocked', 'waiting_quota', 'waiting_dependency', 'waiting_human'].includes(detail.task.status)) {
+      const retry = element('button', 'primary-button', '重新入队');
+      retry.type = 'button';
+      retry.addEventListener('click', () => showActionConfirmation(detail.task, 'retry'));
+      actions.append(retry);
+    }
     const prompt = element('div', 'prompt-box', detail.task.prompt);
+    if (actions.children.length) grid.append(detailBlock('Actions', actions));
     content.append(grid, detailBlock('Prompt', prompt));
 
     const handoff = element('div', 'prompt-box', detail.handoffNote?.note ? JSON.stringify(detail.handoffNote.note, null, 2) : '当前 checkpoint 没有 handoff 笔记');
@@ -1033,6 +1149,14 @@ $('#task-status-filter').addEventListener('change', renderTasks);
 $('#dialog-close').addEventListener('click', () => $('#task-dialog').close());
 $('#task-dialog').addEventListener('click', (event) => {
   if (event.target === $('#task-dialog')) $('#task-dialog').close();
+});
+$('#action-dialog-cancel').addEventListener('click', () => {
+  state.pendingAction = null;
+  $('#action-dialog').close();
+});
+$('#action-dialog-confirm').addEventListener('click', executePendingAction);
+$('#action-dialog').addEventListener('close', () => {
+  if (!$('#action-dialog-confirm').disabled) state.pendingAction = null;
 });
 window.addEventListener('beforeunload', () => state.eventSource?.close());
 

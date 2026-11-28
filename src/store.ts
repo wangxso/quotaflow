@@ -57,6 +57,21 @@ export interface CreateTaskOnceResult {
   created: boolean;
 }
 
+export type DashboardTaskAction = 'cancel' | 'retry';
+
+export interface DashboardTaskActionInput {
+  taskId: string;
+  action: DashboardTaskAction;
+  actor: string;
+  requestId: string;
+  now?: number;
+}
+
+export interface DashboardTaskActionResult {
+  task: Task;
+  replayed: boolean;
+}
+
 interface PreparedTaskInput {
   id: string;
   title: string;
@@ -1183,44 +1198,101 @@ export class TaskStore {
   }
 
   retry(taskId: string, now = Date.now()): Task {
-    return this.db.transaction(() => {
-      const task = this.getTask(taskId);
-      const active = this.activeAttempt(taskId);
-      if (active) throw new Error(`Task ${taskId} has an active attempt ${active.id}; stop it before retrying`);
-      if (!['failed', 'blocked', 'waiting_quota', 'waiting_dependency', 'waiting_human'].includes(task.status)) {
-        throw new Error(`Task ${taskId} cannot be retried from status ${task.status}`);
-      }
-      const attemptCount = this.db.query<{ n: number }, [string]>(
-        'SELECT count(*) AS n FROM attempts WHERE task_id = ?',
-      ).get(taskId)!.n;
-      if (attemptCount >= MAX_ATTEMPTS_PER_TASK) {
-        throw new Error(`Task ${taskId} reached the attempt limit of ${MAX_ATTEMPTS_PER_TASK}`);
-      }
-      this.#updateStatus(taskId, 'queued', null, now);
-      this.#event(taskId, null, 'retry_requested', {
-        previousStatus: task.status,
-        attemptCount,
-        now,
-      });
-      return this.getTask(taskId);
-    }).immediate();
+    return this.db.transaction(() => this.#retry(taskId, now)).immediate();
   }
 
   cancel(taskId: string, now = Date.now()): Task {
+    return this.db.transaction(() => this.#cancel(taskId, now)).immediate();
+  }
+
+  performDashboardTaskAction(input: DashboardTaskActionInput): DashboardTaskActionResult {
+    const now = input.now ?? Date.now();
+    if (!input.actor.trim() || input.actor.length > 200) throw new Error('Dashboard actor is invalid');
+    if (!input.requestId.trim() || input.requestId.length > 100) throw new Error('Dashboard request ID is invalid');
     return this.db.transaction(() => {
-      const task = this.getTask(taskId);
-      if (task.status === 'completed' || task.status === 'cancelled') return task;
-      const active = this.activeAttempt(taskId);
-      if (active) {
-        if (task.status === 'cancelling' && this.cancelRequested(taskId, active.id)) return task;
-        this.#updateStatus(taskId, 'cancelling', null, now);
-        this.#event(taskId, active.id, 'cancel_requested', { reason: 'operator', now });
-        return this.getTask(taskId);
+      const existing = this.db.query<{ task_id: string; detail: string }, [string]>(`
+        SELECT task_id, detail
+        FROM events
+        WHERE kind = 'dashboard_action' AND json_extract(detail, '$.requestId') = ?
+        ORDER BY id
+        LIMIT 1
+      `).get(input.requestId);
+      if (existing) {
+        const detail = JSON.parse(existing.detail) as { action?: string };
+        if (existing.task_id !== input.taskId || detail.action !== input.action) {
+          throw new Error(`Dashboard request ${input.requestId} was reused with different content`);
+        }
+        return { task: this.getTask(existing.task_id), replayed: true };
       }
-      this.#updateStatus(taskId, 'cancelled', null, now);
-      this.#event(taskId, null, 'cancelled', { now });
-      return this.getTask(taskId);
+      const task = this.getTask(input.taskId);
+      if (input.action === 'retry') {
+        const updated = this.#retry(task.id, now);
+        this.#event(task.id, null, 'dashboard_action', {
+          action: input.action,
+          actor: input.actor,
+          requestId: input.requestId,
+          previousStatus: task.status,
+          resultingStatus: updated.status,
+          outcome: 'completed',
+          now,
+        }, now);
+        return { task: updated, replayed: false };
+      }
+      if (input.action === 'cancel') {
+        if (task.status === 'completed' || task.status === 'cancelled') {
+          throw new Error(`Task ${task.id} cannot be cancelled from status ${task.status}`);
+        }
+        const updated = this.#cancel(task.id, now);
+        this.#event(task.id, null, 'dashboard_action', {
+          action: input.action,
+          actor: input.actor,
+          requestId: input.requestId,
+          previousStatus: task.status,
+          resultingStatus: updated.status,
+          outcome: 'completed',
+          now,
+        }, now);
+        return { task: updated, replayed: false };
+      }
+      throw new Error(`Unsupported dashboard action ${(input as { action?: string }).action ?? 'unknown'}`);
     }).immediate();
+  }
+
+  #retry(taskId: string, now: number): Task {
+    const task = this.getTask(taskId);
+    const active = this.activeAttempt(taskId);
+    if (active) throw new Error(`Task ${taskId} has an active attempt ${active.id}; stop it before retrying`);
+    if (!['failed', 'blocked', 'waiting_quota', 'waiting_dependency', 'waiting_human'].includes(task.status)) {
+      throw new Error(`Task ${taskId} cannot be retried from status ${task.status}`);
+    }
+    const attemptCount = this.db.query<{ n: number }, [string]>(
+      'SELECT count(*) AS n FROM attempts WHERE task_id = ?',
+    ).get(taskId)!.n;
+    if (attemptCount >= MAX_ATTEMPTS_PER_TASK) {
+      throw new Error(`Task ${taskId} reached the attempt limit of ${MAX_ATTEMPTS_PER_TASK}`);
+    }
+    this.#updateStatus(taskId, 'queued', null, now);
+    this.#event(taskId, null, 'retry_requested', {
+      previousStatus: task.status,
+      attemptCount,
+      now,
+    });
+    return this.getTask(taskId);
+  }
+
+  #cancel(taskId: string, now: number): Task {
+    const task = this.getTask(taskId);
+    if (task.status === 'completed' || task.status === 'cancelled') return task;
+    const active = this.activeAttempt(taskId);
+    if (active) {
+      if (task.status === 'cancelling' && this.cancelRequested(taskId, active.id)) return task;
+      this.#updateStatus(taskId, 'cancelling', null, now);
+      this.#event(taskId, active.id, 'cancel_requested', { reason: 'operator', now });
+      return this.getTask(taskId);
+    }
+    this.#updateStatus(taskId, 'cancelled', null, now);
+    this.#event(taskId, null, 'cancelled', { now });
+    return this.getTask(taskId);
   }
 
   #updateStatus(taskId: string, status: TaskStatus, nextWakeAt: number | null, now: number) {
