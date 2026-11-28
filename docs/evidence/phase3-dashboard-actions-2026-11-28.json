@@ -27,7 +27,7 @@
     },
     "csrf": {
       "algorithm": "32 random bytes, timing-safe comparison",
-      "transport": "X-QuotaFlow-CSRF header",
+      "transport": "request header",
       "tokenExposedInHtml": false
     },
     "originRequired": true,
