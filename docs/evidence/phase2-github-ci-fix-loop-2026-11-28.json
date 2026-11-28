@@ -1,0 +1,132 @@
+{
+  "recordedOn": "2026-11-28",
+  "baseRevision": "62077d221b6ef38810063b46482f89789a4ac238",
+  "repository": "wangxso/mcarplay",
+  "pullRequest": {
+    "number": 147,
+    "state": "closed",
+    "draft": true,
+    "url": "https://github.com/wangxso/mcarplay/pull/147",
+    "initialHeadSha": "7099724fc4436fe3b4ce208586b6d11ffbc2aadf",
+    "finalHeadSha": "f59d37d98beeefc3f6a3b7e3e500215e5257cc47",
+    "baseSha": "23033142a38d87441ed5632bc4c9d9ac821ccd61",
+    "temporaryBranchDeleted": true
+  },
+  "githubWebhook": {
+    "stableEndpoint": "https://quotaflow-hooks.wangxso.com/github/webhook",
+    "requiredChecksConfiguration": [
+      "controlled-code-failure"
+    ],
+    "deliveryId": "a781cab0-eaeb-11f1-8fc5-0a9576ea3a57",
+    "githubDeliveryId": "3856544185574227968",
+    "redeliveryHttpStatus": 202,
+    "deliveryOutcome": {
+      "status": "blocked",
+      "reasons": [
+        "draft",
+        "ci_not_success",
+        "independent_review_missing"
+      ]
+    }
+  },
+  "initialFailure": {
+    "workflowRunId": 46111777461,
+    "jobId": 140876681810,
+    "checkName": "controlled-code-failure",
+    "category": "code_or_test",
+    "assertion": "AssertionError: 'infrastructure' != 'code_or_test'",
+    "taskPromptContainedRedactedActionsExcerpt": true
+  },
+  "taskMaterialization": {
+    "taskId": "gh-8e62e2d75e67e2e0260970530743f2c9",
+    "kind": "ci_fix",
+    "priority": 120,
+    "accessMode": "write",
+    "initialCheckpoint": "7099724fc4436fe3b4ce208586b6d11ffbc2aadf",
+    "taskCountForPullRequest": 1,
+    "prelaunchPlaceholderAttempt": {
+      "attemptId": 1,
+      "agentStarted": false,
+      "resolution": "Released the unused budget lease and requeued through the supported recovery API before starting an Agent."
+    }
+  },
+  "agentExecution": {
+    "attemptId": 2,
+    "lane": "codex-magpie-free",
+    "requestedModel": "opencode-go/hy4-flash-free",
+    "actualModel": "opencode-go/hy4-flash-free",
+    "provider": "magpie",
+    "agentStatus": "completed",
+    "taskStatus": "completed",
+    "checkpoint": "28be6be0ef9e0a12efc2c7e43b646367059d774c",
+    "stopReceipt": {
+      "exitCode": 0,
+      "activeProcesses": 0,
+      "reason": "worker_exit"
+    },
+    "changedFiles": [
+      "tools/quotaflow_ci_fix_smoke.py"
+    ],
+    "handoffChecks": [
+      "python3 -m unittest tools.test_quotaflow_ci_fix_smoke -v: passed",
+      "python3 -m unittest discover -s tools -p 'test_*.py': 91 tests passed"
+    ],
+    "requestLevelUsageRows": 0,
+    "providerInvoice": "UNKNOWN"
+  },
+  "publishedRepair": {
+    "commit": "f59d37d98beeefc3f6a3b7e3e500215e5257cc47",
+    "subject": "Fix network failure classification",
+    "focusedPythonTests": {
+      "count": 1,
+      "failed": 0
+    },
+    "discoveredPythonTests": {
+      "count": 91,
+      "failed": 0
+    },
+    "newCheckRun": {
+      "id": 140877557843,
+      "workflowRunId": 46112060611,
+      "name": "controlled-code-failure",
+      "status": "completed",
+      "conclusion": "success",
+      "headSha": "f59d37d98beeefc3f6a3b7e3e500215e5257cc47"
+    },
+    "gate": {
+      "checks": [
+        {
+          "name": "controlled-code-failure",
+          "passed": true
+        }
+      ],
+      "remainingReasons": [
+        "draft",
+        "independent_review_missing"
+      ],
+      "ciBlockingReasonPresent": false
+    }
+  },
+  "verification": {
+    "fullSuite": {
+      "macOS": 161,
+      "linux": 161,
+      "windowsOnlySkipped": 1,
+      "failed": 0,
+      "assertions": 732
+    },
+    "build": "passed",
+    "configurationValidation": "passed",
+    "temporaryWorktreesRemoved": true,
+    "temporaryPullRequestClosed": true,
+    "temporaryBranchDeleted": true
+  },
+  "scope": {
+    "realFailureToTaskClosed": true,
+    "agentToCheckpointClosed": true,
+    "checkpointPatchPublished": true,
+    "followUpCiPassed": true,
+    "automaticPushOrMerge": false,
+    "providerInvoiceAttribution": "UNKNOWN"
+  }
+}

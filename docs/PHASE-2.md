@@ -99,6 +99,8 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github webhook payload.json \
 
 本地 HTTP 监听器使用配置中的 `githubWebhook`，或通过命令行覆盖。`fetchGate` 默认为 `true`，验签后会调用 GitHub REST 获取当前 PR 快照，校验事件 HEAD/base，并保存 Gate 与动作计划。
 
+`githubWebhook.requiredChecks` 可显式限定 Webhook Gate 使用的检查名。未配置时沿用当前 HEAD 的全部最新检查；配置后只读取指定的当前 HEAD 检查，适合将试点门禁与其他仓库工作流隔离。
+
 ```sh
 GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
 # GET /healthz -> {"status":"ok"}
@@ -129,12 +131,18 @@ GitHub App installation 已将 Actions 权限从 read 提升为 read and write�
 
 代码级验收覆盖成功复跑、PR HEAD 漂移、workflow run HEAD 漂移、次数耗尽、并发重复投递、代码/测试同 run 禁止复跑、分类不完整、显式零限额、API 失败和 v9→v10 迁移；macOS 与 Linux 均为 161 通过、1 个平台性 skip、0 失败。真实 Actions read/write 与同 HEAD 复跑结果见[复跑闭环证据](evidence/phase2-github-ci-rerun-2026-11-28.json)。
 
+## 真实 CI 修复闭环
+
+2026-11-28 在临时 Draft PR #147 上完成真实 `ci_fix` 闭环。初始 HEAD `7099724` 的 Python 测试产生 `code_or_test` 失败，稳定 Cloudflare Webhook 收到当前 HEAD 快照和脱敏 Actions 日志后，只创建一个优先级 120 的 CI 修复任务。免费 Magpie 通道的 Codex App Server 在隔离 Worktree 中修改单个 Python 文件，写入交接笔记，发布 `activeProcesses=0` 停止凭证，并形成检查点 `28be6be`。
+
+控制面审查该 checkpoint 后，将单行修复提交 `f59d37d` 写回临时 PR。新的 `controlled-code-failure` Check 对同一 PR 的最终 HEAD 成功；重新运行门禁时，阻断项只剩 Draft 和独立审查，CI 阻断已消失。临时 PR、远端分支和两个 Worktree 随后全部清理。本次 Codex 调用没有可归属的请求级 Magpie 用量行，Provider 账单仍为 `UNKNOWN`。 [CI 修复闭环证据](evidence/phase2-github-ci-fix-loop-2026-11-28.json)
+
 ## 尚未完成
 
 - 写入应答丢失、重复 Webhook、越权请求和凭据轮换演练。
-- 后续 Review–Fix／CI 修复任务的完整执行、复跑和门禁闭环。
+- 在不同仓库和多项目映射上扩大真实运行样本。
 
 ## 下一里程碑
 
-1. 对后续 Review–Fix／CI 修复任务重复执行和门禁闭环。
+1. 完成 Webhook 投递故障、越权与凭据轮换演练。
 2. Phase 2 核心验收完成后进入 Phase 3 Dashboard 与部署。

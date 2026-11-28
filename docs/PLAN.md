@@ -32,6 +32,8 @@ PR #141 随后由有权限的操作者转为 Ready。重新拉取快照后，Dra
 
 随后接入 GitHub App 短时安装令牌和 Actions 日志分流。控制面从失败 Check 的 details URL 提取 job 和 workflow run ID，最多读取 3 个 job 的日志并限制为 256 KiB，清理 ANSI、脱敏令牌、Authorization、凭据赋值和 PEM 后分类为代码/测试、基础设施、权限配置、取消或未知。代码类失败的脱敏摘要会追加到当前 HEAD 的 Fix 任务提示。纯基础设施或取消 run 只有在 PR 与 run 的 HEAD 再次核验一致且每 HEAD 原子限额可用时才复跑；权限、代码/测试、未知、未完整分类和 SHA 漂移不会自动复跑。App installation 已接受 Actions read/write。真实 job `140707721837` 的 164144 字节日志成功下载并分类为 `code_or_test`；临时 Draft PR #146 的受控基础设施失败完成同 SHA 复跑，API 返回 201，run attempt 从 1 增至 2，新 Check 保持同一 HEAD，重复 delivery 未再次复跑。详见 [CI 分流证据](evidence/phase2-github-ci-triage-2026-11-28.json) 与[复跑闭环证据](evidence/phase2-github-ci-rerun-2026-11-28.json)。
 
+随后在临时 Draft PR #147 完成真实 CI 修复闭环。新增 `githubWebhook.requiredChecks` 将试点门禁限定为 `controlled-code-failure`。初始 HEAD 的 Python 失败被分类为 `code_or_test`，稳定 Cloudflare Webhook 创建一个包含脱敏日志的 `ci_fix` 任务；免费 Magpie Codex 在隔离 Worktree 中完成单行修复，写入手交笔记和 `activeProcesses=0` 停止凭证，形成 checkpoint `28be6be`。控制面审查后将修复提交 `f59d37d` 写回临时 PR，新 Check 对最终 HEAD 成功，门禁只剩 Draft 与独立审查。临时 PR、分支和 Worktree 全部清理。详见 [CI 修复闭环证据](evidence/phase2-github-ci-fix-loop-2026-11-28.json)。
+
 ## Phase 0 · 调研与可行性验证
 
 | 顺序 | 工作 | 通过证据 |
