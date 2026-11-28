@@ -146,7 +146,7 @@ function repositoryForTask(config: QuotaFlowConfig, task: Task): string {
   return repositoryForPath(config, task.repoPath);
 }
 
-function taskSummary(task: Task, config: QuotaFlowConfig) {
+function taskSummary(store: TaskStore, task: Task, config: QuotaFlowConfig) {
   return {
     id: task.id,
     title: task.title,
@@ -157,6 +157,7 @@ function taskSummary(task: Task, config: QuotaFlowConfig) {
     priority: task.priority,
     critical: task.critical,
     accessMode: task.accessMode,
+    laneIds: [...new Set(store.attempts(task.id).map((attempt) => attempt.laneId))],
     checkpoint: task.checkpoint,
     nextWakeAt: task.nextWakeAt,
     createdAt: task.createdAt,
@@ -242,7 +243,7 @@ function overview(store: TaskStore, config: QuotaFlowConfig, repository?: string
       .slice()
       .sort((left, right) => right.updatedAt - left.updatedAt)
       .slice(0, 12)
-      .map((task) => taskSummary(task, config)),
+      .map((task) => taskSummary(store, task, config)),
     recentEvents: events,
     latestEventId: store.latestEventId(),
     repositories: safeConfig.repositories,
@@ -355,7 +356,7 @@ function eventStream(
             task: (() => {
               let task = tasks.get(event.taskId);
               if (!task) {
-                task = taskSummary(store.getTask(event.taskId), config);
+                task = taskSummary(store, store.getTask(event.taskId), config);
                 tasks.set(event.taskId, task);
               }
               return task;
@@ -526,7 +527,7 @@ async function dashboardTaskAction(
     return json({
       status: result.replayed ? 'replayed' : 'accepted',
       action,
-      task: taskSummary(result.task, config),
+      task: taskSummary(store, result.task, config),
       requestId: body.requestId,
       ...(action === 'start' ? { workerPid } : {}),
     }, result.replayed ? 200 : 202);
@@ -590,7 +591,7 @@ function dashboardHandler(
         .filter((task) => !repository || repositoryForTask(config, task) === repository)
         .slice()
         .sort((left, right) => right.updatedAt - left.updatedAt)
-        .map((task) => taskSummary(task, config));
+        .map((task) => taskSummary(store, task, config));
       return json({ generatedAt: Date.now(), items });
     }
     const workerLogMatch = /^\/api\/tasks\/([^/]+)\/workers\/([^/]+)\/log$/.exec(url.pathname);

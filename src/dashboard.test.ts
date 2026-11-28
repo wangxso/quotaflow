@@ -53,7 +53,7 @@ function config(): QuotaFlowConfig {
   };
 }
 
-test('dashboard serves a guarded local API, SSE and project filters', async () => {
+test('dashboard serves a guarded local API, SSE and combined filters', async () => {
   const db = openDatabase(':memory:');
   const store = new TaskStore(db);
   const root = mkdtempSync(join(tmpdir(), 'quotaflow-dashboard-'));
@@ -85,6 +85,9 @@ test('dashboard serves a guarded local API, SSE and project filters', async () =
     const pageHtml = await page.text();
     expect(pageHtml).toContain('QuotaFlow Control Plane');
     expect(pageHtml).toContain('最近任务');
+    expect(pageHtml).toContain('id="time-filter"');
+    expect(pageHtml).toContain('id="task-lane-filter"');
+    expect(pageHtml).toContain('id="review-filter"');
 
     const stylesheet = await fetch(new URL('/assets/app.css', server.url));
     expect(stylesheet.headers.get('content-type')).toContain('text/css');
@@ -95,6 +98,9 @@ test('dashboard serves a guarded local API, SSE and project filters', async () =
     const scriptText = await script.text();
     expect(scriptText).toContain("$('#sidebar-recents')");
     expect(scriptText).toContain("detailBlock('Worker runs'");
+    expect(scriptText).toContain('quotaflow.dashboard.time');
+    expect(scriptText).toContain('quotaflow.dashboard.lane');
+    expect(scriptText).toContain('quotaflow.dashboard.review');
     expect(scriptText).not.toContain('innerHTML');
     expect(() => new Function(scriptText)).not.toThrow();
 
@@ -110,7 +116,7 @@ test('dashboard serves a guarded local API, SSE and project filters', async () =
     expect(overviewBody).toMatchObject({
       tasks: { total: 1, activeAttempts: 0 },
       latestEventId: 1,
-      recentTasks: [{ id: task.id, title: task.title, status: 'queued' }],
+      recentTasks: [{ id: task.id, title: task.title, status: 'queued', laneIds: [] }],
     });
     expect(overviewBody.tasks.byStatus.queued).toBe(1);
     expect(overviewBody.repositories.map((repository: { repository: string }) => repository.repository))

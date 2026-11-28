@@ -61,6 +61,16 @@ export const dashboardHtml = `<!doctype html>
               <option value="">全部项目</option>
             </select>
           </label>
+          <label class="project-filter">
+            <span>时间</span>
+            <select id="time-filter">
+              <option value="">全部时间</option>
+              <option value="1h">最近 1 小时</option>
+              <option value="24h">最近 24 小时</option>
+              <option value="7d">最近 7 天</option>
+              <option value="30d">最近 30 天</option>
+            </select>
+          </label>
           <span class="live-pill" data-state="connecting"><span aria-hidden="true"></span><b id="live-label">Connecting</b></span>
           <button id="refresh-button" class="icon-button" type="button" aria-label="刷新数据" title="刷新数据">↻</button>
           <small id="last-updated">等待数据</small>
@@ -120,6 +130,12 @@ export const dashboardHtml = `<!doctype html>
                   <option value="">全部状态</option>
                 </select>
               </label>
+              <label class="select-field">
+                <span class="sr-only">Lane 筛选</span>
+                <select id="task-lane-filter">
+                  <option value="">全部 Lane</option>
+                </select>
+              </label>
             </div>
           </div>
           <div class="table-wrap">
@@ -145,10 +161,19 @@ export const dashboardHtml = `<!doctype html>
         <div id="github-metrics" class="metrics metrics-compact" aria-label="GitHub 指标"></div>
         <div class="overview-grid">
           <section class="panel panel-wide">
-            <div class="panel-heading">
+            <div class="panel-heading panel-heading-wrap">
               <div>
                 <h2>最近门禁</h2>
               </div>
+              <label class="select-field">
+                <span class="sr-only">审查状态筛选</span>
+                <select id="review-filter">
+                  <option value="">全部审查状态</option>
+                  <option value="approved">审查已通过</option>
+                  <option value="missing">缺少独立审查</option>
+                  <option value="changes_requested">请求修改</option>
+                </select>
+              </label>
             </div>
             <div class="table-wrap">
               <table class="data-table">
@@ -511,17 +536,28 @@ h3 { margin-bottom: 5px; font-size: 14px; }
   *, *::before, *::after { animation-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }`;
 
-export const dashboardJs = `const storedProject = (() => {
+export const dashboardJs = `function storedPreference(key) {
   try {
-    return localStorage.getItem('quotaflow.dashboard.project') || '';
+    return localStorage.getItem(key) || '';
   } catch {
     return '';
   }
-})();
+}
+
+function savePreference(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Local storage is optional in restricted browser contexts.
+  }
+}
 
 const state = {
   view: 'overview',
-  project: storedProject,
+  project: storedPreference('quotaflow.dashboard.project'),
+  timeRange: storedPreference('quotaflow.dashboard.time'),
+  lane: storedPreference('quotaflow.dashboard.lane'),
+  review: storedPreference('quotaflow.dashboard.review'),
   overview: null,
   tasks: [],
   github: { gates: [], reruns: [] },
@@ -555,16 +591,48 @@ function matchesProject(repository) {
   return !state.project || repository === state.project;
 }
 
+function timeRangeMs(value) {
+  return {
+    '1h': 60 * 60 * 1000,
+    '24h': 24 * 60 * 60 * 1000,
+    '7d': 7 * 24 * 60 * 60 * 1000,
+    '30d': 30 * 24 * 60 * 60 * 1000,
+  }[value] || 0;
+}
+
+function matchesTime(value) {
+  const range = timeRangeMs(state.timeRange);
+  return !range || Number(value) >= Date.now() - range;
+}
+
+function matchesLane(task) {
+  return !state.lane || (task.laneIds || []).includes(state.lane);
+}
+
+function reviewStatus(gate) {
+  const reasons = new Set((gate.evaluation?.reasons || []).map((reason) => reason.code));
+  if (reasons.has('changes_requested')) return 'changes_requested';
+  if (reasons.has('independent_review_missing')) return 'missing';
+  return 'approved';
+}
+
+function matchesReview(gate) {
+  return !state.review || reviewStatus(gate) === state.review;
+}
+
 function visibleTasks() {
-  return state.tasks.filter((task) => matchesProject(task.repository));
+  return state.tasks.filter((task) =>
+    matchesProject(task.repository) && matchesTime(task.updatedAt) && matchesLane(task));
 }
 
 function visibleGates() {
-  return (state.github.gates || []).filter((gate) => matchesProject(gate.repository));
+  return (state.github.gates || []).filter((gate) =>
+    matchesProject(gate.repository) && matchesTime(gate.updatedAt) && matchesReview(gate));
 }
 
 function visibleReruns() {
-  return (state.github.reruns || []).filter((rerun) => matchesProject(rerun.repository));
+  return (state.github.reruns || []).filter((rerun) =>
+    matchesProject(rerun.repository) && matchesTime(rerun.updatedAt));
 }
 
 function countByStatus(tasks) {
@@ -842,6 +910,7 @@ function selectView(view) {
 
 function renderAll() {
   populateProjectFilter();
+  populateLaneFilter();
   renderOverview();
   renderTasks();
   renderGithub();
@@ -905,7 +974,12 @@ function renderOverview() {
   const stream = $('#event-stream');
   stream.replaceChildren();
   (state.overview.recentEvents || [])
-    .filter((event) => matchesProject(event.repository))
+    .filter((event) => {
+      if (!matchesProject(event.repository) || !matchesTime(event.createdAt)) return false;
+      if (!state.lane) return true;
+      return state.tasks.some((task) =>
+        task.id === event.taskId && (task.laneIds || []).includes(state.lane));
+    })
     .slice(0, 9)
     .forEach((event) => {
       const item = element('article', 'event-item');
@@ -950,6 +1024,25 @@ function populateStatusFilter() {
     select.append(option);
   });
   select.value = [...select.options].some((option) => option.value === current) ? current : '';
+}
+
+function populateLaneFilter() {
+  const select = $('#task-lane-filter');
+  const lanes = new Set([
+    ...(state.budgets?.lanes || []).map((lane) => lane.id),
+    ...state.tasks.flatMap((task) => task.laneIds || []),
+  ].filter(Boolean));
+  select.replaceChildren();
+  const all = element('option', null, '全部 Lane');
+  all.value = '';
+  select.append(all);
+  [...lanes].sort().forEach((lane) => {
+    const option = element('option', null, lane);
+    option.value = lane;
+    select.append(option);
+  });
+  if (state.lane && !lanes.has(state.lane)) state.lane = '';
+  select.value = state.lane;
 }
 
 function filteredTasks() {
@@ -1244,13 +1337,24 @@ $$('[data-open-view]').forEach((button) => button.addEventListener('click', () =
 $('#refresh-button').addEventListener('click', refresh);
 $('#project-filter').addEventListener('change', (event) => {
   state.project = event.target.value;
-  try {
-    localStorage.setItem('quotaflow.dashboard.project', state.project);
-  } catch {
-    // Local storage is optional in restricted browser contexts.
-  }
+  savePreference('quotaflow.dashboard.project', state.project);
   renderAll();
   connectEventStream();
+});
+$('#time-filter').addEventListener('change', (event) => {
+  state.timeRange = event.target.value;
+  savePreference('quotaflow.dashboard.time', state.timeRange);
+  renderAll();
+});
+$('#task-lane-filter').addEventListener('change', (event) => {
+  state.lane = event.target.value;
+  savePreference('quotaflow.dashboard.lane', state.lane);
+  renderAll();
+});
+$('#review-filter').addEventListener('change', (event) => {
+  state.review = event.target.value;
+  savePreference('quotaflow.dashboard.review', state.review);
+  renderAll();
 });
 $('#task-search').addEventListener('input', renderTasks);
 $('#task-status-filter').addEventListener('change', renderTasks);
@@ -1269,6 +1373,10 @@ $('#action-dialog').addEventListener('close', () => {
 window.addEventListener('beforeunload', () => state.eventSource?.close());
 
 const initialView = location.hash.slice(1);
+if (!timeRangeMs(state.timeRange)) state.timeRange = '';
+if (!['approved', 'missing', 'changes_requested'].includes(state.review)) state.review = '';
+$('#time-filter').value = state.timeRange;
+$('#review-filter').value = state.review;
 selectView(viewCopy[initialView] ? initialView : 'overview');
 refresh();
 setInterval(() => {
