@@ -24,7 +24,7 @@
       "budget leases",
       "events"
     ],
-    "projectFilter": "all projects or one repository",
+    "filters": "project, time range, task Lane, and gate review status",
     "liveEvents": "SSE with SQLite event cursor and automatic reconnect",
     "visualReference": "T3 Code density and desktop workspace hierarchy, without copied assets or interface reproduction"
   },
@@ -81,13 +81,13 @@
   },
   "verification": {
     "dashboardTests": 2,
-    "dashboardAssertions": 67,
+    "dashboardAssertions": 73,
     "fullSuite": {
       "macOS": 171,
       "linux": 171,
       "windowsOnlySkipped": 1,
       "failed": 0,
-      "assertions": 829
+      "assertions": 835
     },
     "build": "passed",
     "configurationValidation": "passed",

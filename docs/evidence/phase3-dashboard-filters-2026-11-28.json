@@ -1,0 +1,125 @@
+{
+  "recordedOn": "2026-11-28",
+  "kind": "phase3-dashboard-filters",
+  "baseRevision": "9eaf8ab3ff07d534a177fbd3fc4b16a29fa75d32",
+  "environment": {
+    "host": "macOS 26.6.2, arm64",
+    "bun": "1.4.5",
+    "browser": "Microsoft Edge",
+    "serviceManager": "macOS launchd",
+    "serviceLabel": "com.quotaflow.dashboard"
+  },
+  "filters": {
+    "project": {
+      "source": "configured repositories and Dashboard task data",
+      "scope": [
+        "tasks",
+        "events",
+        "GitHub gates",
+        "CI reruns"
+      ]
+    },
+    "time": {
+      "options": [
+        "all",
+        "1h",
+        "24h",
+        "7d",
+        "30d"
+      ],
+      "scope": [
+        "tasks by updatedAt",
+        "events by createdAt",
+        "GitHub gates by updatedAt",
+        "CI reruns by updatedAt"
+      ]
+    },
+    "lane": {
+      "optionsSource": "configured lanes plus lanes observed in task attempts",
+      "optionsObserved": [
+        "all",
+        "codex-magpie",
+        "codex-magpie-free"
+      ],
+      "scope": [
+        "tasks",
+        "overview recent tasks",
+        "overview events"
+      ],
+      "taskField": "laneIds"
+    },
+    "review": {
+      "options": [
+        "all",
+        "approved",
+        "missing",
+        "changes_requested"
+      ],
+      "scope": [
+        "GitHub gates",
+        "GitHub metrics"
+      ],
+      "semantics": {
+        "changes_requested": "A current-head review has requested changes",
+        "missing": "The independent-review requirement is not satisfied",
+        "approved": "No review reason remains; unrelated CI, Draft, mergeability, or pull-state blocks are retained"
+      }
+    },
+    "persistence": [
+      "quotaflow.dashboard.project",
+      "quotaflow.dashboard.time",
+      "quotaflow.dashboard.lane",
+      "quotaflow.dashboard.review"
+    ]
+  },
+  "browserVerification": {
+    "initialTaskCount": 3,
+    "oneHourAndLane": {
+      "time": "1h",
+      "lane": "codex-magpie-free",
+      "matchingTasks": 0,
+      "emptyStateObserved": true
+    },
+    "twentyFourHoursAndLane": {
+      "time": "24h",
+      "lane": "codex-magpie-free",
+      "matchingTasks": 1,
+      "taskObserved": "GitHub PR #147: Triage and fix current-head CI"
+    },
+    "twentyFourHoursAndApprovedReview": {
+      "time": "24h",
+      "review": "approved",
+      "matchingGates": 2,
+      "blockedGates": 1,
+      "readyGates": 1,
+      "pullNumber": 141,
+      "observed": [
+        "READY FOR HUMAN MERGE",
+        "BLOCKED by pull_not_open and not_mergeable without a review reason"
+      ]
+    },
+    "filterControlsVisible": true,
+    "javascriptParsed": true
+  },
+  "implementation": {
+    "taskSummaryAddsLaneIds": true,
+    "clientSideFiltering": true,
+    "persistentDataModelChanged": false,
+    "additionalNetworkRequestsPerFilterChange": false,
+    "dynamicValuesRenderedWithTextContent": true
+  },
+  "verification": {
+    "dashboardTests": 2,
+    "dashboardAssertions": 73,
+    "fullSuite": {
+      "macOS": 171,
+      "linux": 171,
+      "platformSkips": 1,
+      "failed": 0,
+      "assertions": 835
+    },
+    "build": "passed",
+    "configurationValidation": "passed",
+    "jsonAndDiffChecks": "passed"
+  }
+}

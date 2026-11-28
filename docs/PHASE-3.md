@@ -18,7 +18,7 @@ bun run src/cli.ts dashboard --config quotaflow.config.json
 - 任务详情：attempt、实际模型、checkpoint、prompt、handoff、usage、预算租约、Worker Run 和事件时间线。
 - GitHub：最近 Gate 结果、阻断原因和同 HEAD CI rerun 记录。
 - Budgets：预算使用、余额、活跃租约和 Lane 配置。
-- 项目筛选：Overview、Tasks、GitHub 和最近任务共享同一个 repository 过滤上下文。
+- 组合筛选：项目与时间范围作用于任务、事件和 GitHub 数据；Tasks 可再按 Lane 筛选，GitHub 可再按审查状态筛选，筛选偏好保存在本地浏览器。
 - 实时事件：`/api/events/stream` 通过 SSE 从 SQLite event cursor 增量推送任务和运行状态，断线后自动重连。
 - 受控任务操作：支持 `start`、`cancel` 和 `retry`，均要求明确确认；动作请求写入 `dashboard_action`，Worker 启动和退出写入独立生命周期事件。
 
@@ -65,6 +65,5 @@ macOS 当前通过 `com.quotaflow.dashboard` LaunchAgent 常驻，并由现有�
 
 ## 下一步
 
-1. 增加时间范围、Lane 和审查状态组合筛选。
-2. 在 GitHub 写权限和人工确认流程下增加批准／合并。
-3. 增加桌面发行、备份、恢复和 Linux／Windows + WSL2 启动检查。
+1. 在 GitHub 写权限和人工确认流程下增加批准／合并。
+2. 增加桌面发行、备份、恢复和 Linux／Windows + WSL2 启动检查。
