@@ -53,7 +53,15 @@ function config(): QuotaFlowConfig {
 test('dashboard serves a guarded local API, SSE and project filters', async () => {
   const db = openDatabase(':memory:');
   const store = new TaskStore(db);
-  const server = startDashboardServer(store, config(), { host: '127.0.0.1', port: 0 });
+  const workerStarts: string[] = [];
+  const server = startDashboardServer(store, config(), {
+    host: '127.0.0.1',
+    port: 0,
+    workerStarter: ({ taskId, requestId }) => {
+      workerStarts.push(`${taskId}:${requestId}`);
+      return { pid: 4242, exited: Promise.resolve(0) };
+    },
+  });
   try {
     const task = store.createTask({
       id: 'dashboard-task',
@@ -86,7 +94,7 @@ test('dashboard serves a guarded local API, SSE and project filters', async () =
     expect(await health.json()).toEqual(expect.objectContaining({
       status: 'ok',
       readOnly: false,
-      writeActions: ['cancel', 'retry'],
+      writeActions: ['cancel', 'retry', 'start'],
     }));
 
     const overview = await fetch(new URL('/api/overview', server.url));
@@ -178,6 +186,7 @@ test('dashboard serves a guarded local API, SSE and project filters', async () =
     expect(sessionCookie).toContain('SameSite=Strict');
     const session = await sessionResponse.json() as { csrfToken: string };
     expect(session.csrfToken).toHaveLength(64);
+    expect((session as { actions: string[] }).actions).toEqual(['cancel', 'retry', 'start']);
     const cookie = sessionCookie!.split(';')[0]!;
     const action = async (
       taskId: string,
@@ -237,6 +246,33 @@ test('dashboard serves a guarded local API, SSE and project filters', async () =
       task: { id: task.id, status: 'cancelled' },
     });
     expect(store.events(task.id).filter((event) => event.kind === 'dashboard_action')).toHaveLength(1);
+
+    const started = await action(other.id, 'request-start-1', {
+      action: 'start',
+      confirmTaskId: other.id,
+    });
+    expect(started.status).toBe(202);
+    expect(await started.json()).toMatchObject({
+      status: 'accepted',
+      action: 'start',
+      workerPid: 4242,
+      task: { id: other.id, status: 'queued' },
+    });
+    expect(workerStarts).toEqual([`${other.id}:request-start-1`]);
+    const startReplay = await action(other.id, 'request-start-1', {
+      action: 'start',
+      confirmTaskId: other.id,
+    });
+    expect(startReplay.status).toBe(200);
+    expect(await startReplay.json()).toMatchObject({
+      status: 'replayed',
+      action: 'start',
+      workerPid: null,
+    });
+    expect(workerStarts).toHaveLength(1);
+    await Bun.sleep(0);
+    expect(store.events(other.id).map((event) => event.kind))
+      .toEqual(expect.arrayContaining(['dashboard_worker_started', 'dashboard_worker_exited']));
 
     store.block(other.id, 'fixture_blocked', 300);
     const retried = await action(other.id, 'request-retry-1', {

@@ -57,7 +57,7 @@ export interface CreateTaskOnceResult {
   created: boolean;
 }
 
-export type DashboardTaskAction = 'cancel' | 'retry';
+export type DashboardTaskAction = 'cancel' | 'retry' | 'start';
 
 export interface DashboardTaskActionInput {
   taskId: string;
@@ -70,6 +70,16 @@ export interface DashboardTaskActionInput {
 export interface DashboardTaskActionResult {
   task: Task;
   replayed: boolean;
+}
+
+export interface DashboardWorkerEventInput {
+  taskId: string;
+  requestId: string;
+  outcome: 'started' | 'exited' | 'spawn_failed';
+  pid?: number;
+  exitCode?: number;
+  error?: string;
+  now?: number;
 }
 
 interface PreparedTaskInput {
@@ -1225,6 +1235,27 @@ export class TaskStore {
         return { task: this.getTask(existing.task_id), replayed: true };
       }
       const task = this.getTask(input.taskId);
+      if (input.action === 'start') {
+        if (task.status !== 'queued' && task.status !== 'waiting_quota') {
+          throw new Error(`Task ${task.id} cannot be started from status ${task.status}`);
+        }
+        if (this.activeAttempt(task.id)) {
+          throw new Error(`Task ${task.id} already has an active attempt`);
+        }
+        if (task.nextWakeAt !== null && task.nextWakeAt > now) {
+          throw new Error(`Task ${task.id} is not due until ${task.nextWakeAt}`);
+        }
+        this.#event(task.id, null, 'dashboard_action', {
+          action: input.action,
+          actor: input.actor,
+          requestId: input.requestId,
+          previousStatus: task.status,
+          resultingStatus: task.status,
+          outcome: 'requested',
+          now,
+        }, now);
+        return { task, replayed: false };
+      }
       if (input.action === 'retry') {
         const updated = this.#retry(task.id, now);
         this.#event(task.id, null, 'dashboard_action', {
@@ -1256,6 +1287,22 @@ export class TaskStore {
       }
       throw new Error(`Unsupported dashboard action ${(input as { action?: string }).action ?? 'unknown'}`);
     }).immediate();
+  }
+
+  recordDashboardWorkerEvent(input: DashboardWorkerEventInput): void {
+    const task = this.getTask(input.taskId);
+    const now = input.now ?? Date.now();
+    if (!input.requestId.trim() || input.requestId.length > 100) throw new Error('Dashboard request ID is invalid');
+    if (input.pid !== undefined && (!Number.isInteger(input.pid) || input.pid <= 0)) {
+      throw new Error('Dashboard worker PID is invalid');
+    }
+    this.#event(task.id, null, `dashboard_worker_${input.outcome}`, {
+      requestId: input.requestId,
+      pid: input.pid ?? null,
+      exitCode: input.exitCode ?? null,
+      error: input.error?.slice(0, 500) ?? null,
+      now,
+    }, now);
   }
 
   #retry(taskId: string, now: number): Task {

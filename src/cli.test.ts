@@ -82,6 +82,7 @@ test('dashboard command is local-only and documented in help', async () => {
   try {
     const help = await cli(root, ['--help']);
     expect(help.stdout).toContain('quotaflow dashboard');
+    expect(help.stdout).toContain('quotaflow worker once [--task-id <id>]');
     const remote = await cliResult(root, ['dashboard', '--host', '0.0.0.0', '--port', '8788']);
     expect(remote.exitCode).toBe(1);
     expect(remote.stderr).toContain('loopback');

@@ -43,7 +43,7 @@ export const dashboardHtml = `<!doctype html>
         <span class="local-dot" aria-hidden="true"></span>
         <div>
           <strong>Local control</strong>
-          <small>Guarded cancel and retry</small>
+          <small>Guarded start, cancel and retry</small>
         </div>
       </div>
     </aside>
@@ -624,16 +624,20 @@ function requestId() {
 
 function showActionConfirmation(task, action) {
   const cancel = action === 'cancel';
+  const start = action === 'start';
   state.pendingAction = {
     task,
     action,
     requestId: requestId(),
   };
-  $('#action-dialog-title').textContent = cancel ? '取消任务' : '重试任务';
+  $('#action-dialog-title').textContent = cancel ? '取消任务' : start ? '启动 Worker' : '重试任务';
   $('#action-dialog-message').textContent = cancel
     ? '将请求停止“' + task.title + '”。运行中的任务会先进入 cancelling，由 Worker 完成受监督停止。'
-    : '将把“' + task.title + '”重新加入队列。该操作不会直接启动 Agent。';
-  $('#action-dialog-confirm').textContent = cancel ? '确认取消' : '确认重试';
+    : start
+      ? '将为“' + task.title + '”启动一次性 Worker。Worker 会重新检查 Lane、额度、预算和调度状态，只有实际可运行时才会调用 Agent。'
+      : '将把“' + task.title + '”重新加入队列。该操作不会直接启动 Agent。';
+  $('#action-dialog-confirm').textContent = cancel ? '确认取消' : start ? '确认启动' : '确认重试';
+  $('#action-dialog-confirm').className = cancel ? 'danger-button' : 'primary-button';
   $('#action-dialog-confirm').disabled = false;
   $('#action-dialog-cancel').disabled = false;
   $('#action-dialog-error').hidden = true;
@@ -1110,6 +1114,15 @@ async function openTask(taskId) {
       retry.type = 'button';
       retry.addEventListener('click', () => showActionConfirmation(detail.task, 'retry'));
       actions.append(retry);
+    }
+    if (
+      ['queued', 'waiting_quota'].includes(detail.task.status)
+      && state.session?.actions?.includes('start')
+    ) {
+      const start = element('button', 'primary-button', '启动 Worker');
+      start.type = 'button';
+      start.addEventListener('click', () => showActionConfirmation(detail.task, 'start'));
+      actions.append(start);
     }
     const prompt = element('div', 'prompt-box', detail.task.prompt);
     if (actions.children.length) grid.append(detailBlock('Actions', actions));

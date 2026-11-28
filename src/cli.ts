@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 
 import { randomUUID } from 'node:crypto';
-import { readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { closeSync, mkdirSync, openSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadConfig } from './config';
 import { agentForLane } from './agent-factory';
 import { openDatabase } from './db';
@@ -40,7 +41,7 @@ quotaflow task cancel <id> [--wait <ms>] [--force] [--config <file>]
 quotaflow task retry <id> [--config <file>]
 quotaflow task prepare <id> [--config <file>]
 quotaflow queue next [--config <file>]
-quotaflow worker once [--config <file>]
+quotaflow worker once [--task-id <id>] [--config <file>]
 quotaflow worker recover [--config <file>]
 quotaflow budget status [--config <file>]
 quotaflow budget audit [--limit <n>] [--config <file>]
@@ -242,10 +243,43 @@ async function main() {
       if (!Number.isInteger(port) || port < 1 || port > 65535) {
         throw new Error('--port must be an integer between 1 and 65535');
       }
-      const server = startDashboardServer(store, config, { host, port });
+      const absoluteConfigPath = resolve(configPath);
+      const cliEntrypoint = fileURLToPath(import.meta.url);
+      const server = startDashboardServer(store, config, {
+        host,
+        port,
+        workerStarter: async ({ taskId, requestId }) => {
+          const logDirectory = join(dirname(config.database), 'dashboard-workers');
+          mkdirSync(logDirectory, { recursive: true });
+          const logFd = openSync(join(logDirectory, `${requestId}.log`), 'a', 0o600);
+          try {
+            const child = Bun.spawn([
+              process.execPath,
+              cliEntrypoint,
+              'worker',
+              'once',
+              '--task-id',
+              taskId,
+              '--config',
+              absoluteConfigPath,
+            ], {
+              cwd: config.defaultRepo ?? process.cwd(),
+              stdin: 'ignore',
+              stdout: logFd,
+              stderr: logFd,
+            });
+            return {
+              pid: child.pid,
+              exited: child.exited,
+            };
+          } finally {
+            closeSync(logFd);
+          }
+        },
+      });
       console.log(JSON.stringify({
         listening: server.url.toString(),
-        mode: 'read-only',
+        mode: 'guarded-actions',
         health: '/api/health',
       }, null, 2));
       const stopped = new Promise<void>((resolve) => {
@@ -459,7 +493,11 @@ async function main() {
     }
 
     if (scope === 'worker' && action === 'once') {
-      const result = await runOnce(store, config, agentForLane);
+      const taskId = option(rest, '--task-id');
+      if (rest.length > 0) throw new Error(`Unexpected worker once arguments: ${rest.join(' ')}`);
+      const result = await runOnce(store, config, agentForLane, Date.now, {
+        ...(taskId ? { taskId } : {}),
+      });
       console.log(JSON.stringify(result ?? { status: 'idle' }, null, 2));
       return;
     }

@@ -151,6 +151,41 @@ test('worker reserves, executes, checkpoints and completes a task', async () => 
   }
 });
 
+test('targeted worker start ignores higher-priority queue entries', async () => {
+  const { root, repo, db, store, config } = setup();
+  try {
+    store.createTask({
+      id: 'target',
+      title: 'target',
+      repoPath: repo,
+      workspacePath: join(root, 'target'),
+      priority: 1,
+    });
+    store.createTask({
+      id: 'higher-priority',
+      title: 'higher priority',
+      repoPath: repo,
+      workspacePath: join(root, 'higher-priority'),
+      priority: 100,
+    });
+    const result = await runOnce(
+      store,
+      config,
+      () => fixtureAgent((workspace) => writeFileSync(join(workspace, 'target.txt'), 'done\n')),
+      Date.now,
+      { taskId: 'target' },
+    );
+    expect(result).toMatchObject({
+      task: { id: 'target', status: 'completed' },
+      agentStatus: 'completed',
+    });
+    expect(store.getTask('higher-priority').status).toBe('queued');
+  } finally {
+    db.close();
+    await removeEventually(root);
+  }
+});
+
 test('a rejected change keeps the handoff checkpoint and blocks a retry while the protected file is dirty', async () => {
   const { root, repo, db, store, config } = setup();
   try {

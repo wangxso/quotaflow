@@ -52,6 +52,10 @@ export interface WorkerResult {
   error?: string;
 }
 
+export interface WorkerRunOptions {
+  taskId?: string;
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -61,12 +65,18 @@ export async function runOnce(
   config: QuotaFlowConfig,
   agentFor: AgentFactory,
   clock: () => number = Date.now,
+  options: WorkerRunOptions = {},
 ): Promise<WorkerResult | null> {
   if (store.activeAttempts().length > 0) {
-    recoverInterruptedAttempts(store, config, { now: clock() });
+    recoverInterruptedAttempts(store, config, {
+      now: clock(),
+      ...(options.taskId ? { taskId: options.taskId } : {}),
+    });
   }
   const reservedAt = clock();
-  const reservation = reserveNext(store, config.lanes, reservedAt, config.budgets);
+  const reservation = options.taskId
+    ? store.reserve(options.taskId, config.lanes, reservedAt, config.budgets)
+    : reserveNext(store, config.lanes, reservedAt, config.budgets);
   if (!reservation) return null;
   const attempt = reservation.attempt;
   const finishedAt = () => Math.max(attempt.startedAt, clock());

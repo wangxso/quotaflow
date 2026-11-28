@@ -7,7 +7,18 @@ export interface DashboardServerOptions {
   host?: string;
   port?: number;
   sessionTtlMs?: number;
+  workerStarter?: DashboardWorkerStarter;
 }
+
+export interface DashboardWorkerStart {
+  pid: number;
+  exited?: Promise<number>;
+}
+
+export type DashboardWorkerStarter = (input: {
+  taskId: string;
+  requestId: string;
+}) => Promise<DashboardWorkerStart> | DashboardWorkerStart;
 
 const securityHeaders = {
   'Content-Security-Policy':
@@ -386,6 +397,7 @@ function eventStream(
 function sessionResponse(
   request: Request,
   sessions: DashboardSessions,
+  actions: string[],
 ): Response {
   const currentId = cookies(request).get(sessionCookie) ?? null;
   let id = currentId;
@@ -409,6 +421,7 @@ function sessionResponse(
     csrfToken: session.csrfToken,
     expiresAt: session.expiresAt,
     actor: 'local-dashboard',
+    actions,
   }, 200, setCookie);
 }
 
@@ -418,6 +431,7 @@ async function dashboardTaskAction(
   request: Request,
   url: URL,
   sessions: DashboardSessions,
+  workerStarter: DashboardWorkerStarter | undefined,
 ): Promise<Response> {
   if (request.headers.get('origin') !== url.origin) return json({ error: 'origin_rejected' }, 403);
   const session = sessions.get(cookies(request).get(sessionCookie) ?? null);
@@ -446,12 +460,15 @@ async function dashboardTaskAction(
     return json({ error: 'invalid_task_id' }, 400);
   }
   const action = body.action;
-  if (action !== 'cancel' && action !== 'retry') return json({ error: 'invalid_action' }, 400);
+  if (action !== 'cancel' && action !== 'retry' && action !== 'start') {
+    return json({ error: 'invalid_action' }, 400);
+  }
   if (body.confirmTaskId !== taskId) return json({ error: 'confirmation_rejected' }, 403);
   if (typeof body.requestId !== 'string' || !/^[A-Za-z0-9._:-]{8,100}$/.test(body.requestId)) {
     return json({ error: 'invalid_request_id' }, 400);
   }
   if (!store.findTask(taskId)) return json({ error: 'task_not_found' }, 404);
+  if (action === 'start' && !workerStarter) return json({ error: 'worker_unavailable' }, 503);
   try {
     const result = store.performDashboardTaskAction({
       taskId,
@@ -459,11 +476,53 @@ async function dashboardTaskAction(
       actor: 'local-dashboard',
       requestId: body.requestId,
     });
+    let workerPid: number | null = null;
+    if (action === 'start' && !result.replayed) {
+      try {
+        const worker = await workerStarter!({
+          taskId,
+          requestId: body.requestId,
+        });
+        workerPid = worker.pid;
+        store.recordDashboardWorkerEvent({
+          taskId,
+          requestId: body.requestId,
+          outcome: 'started',
+          pid: worker.pid,
+        });
+        if (worker.exited) {
+          void worker.exited
+            .then((exitCode) => store.recordDashboardWorkerEvent({
+              taskId,
+              requestId: body.requestId,
+              outcome: 'exited',
+              pid: worker.pid,
+              exitCode,
+            }))
+            .catch((error) => store.recordDashboardWorkerEvent({
+              taskId,
+              requestId: body.requestId,
+              outcome: 'exited',
+              pid: worker.pid,
+              error: error instanceof Error ? error.message : 'Worker exit status unavailable',
+            }));
+        }
+      } catch (error) {
+        store.recordDashboardWorkerEvent({
+          taskId,
+          requestId: body.requestId,
+          outcome: 'spawn_failed',
+          error: error instanceof Error ? error.message : 'Worker spawn failed',
+        });
+        return json({ error: 'worker_start_failed' }, 502);
+      }
+    }
     return json({
       status: result.replayed ? 'replayed' : 'accepted',
       action,
       task: taskSummary(result.task, config),
       requestId: body.requestId,
+      ...(action === 'start' ? { workerPid } : {}),
     }, result.replayed ? 200 : 202);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Dashboard action failed';
@@ -472,6 +531,8 @@ async function dashboardTaskAction(
       || message.includes('cannot be cancelled')
       || message.includes('active attempt')
       || message.includes('attempt limit')
+      || message.includes('cannot be started')
+      || message.includes('is not due')
       || message.includes('reused with different content')
     ) {
       return json({ error: 'action_conflict', message }, 409);
@@ -480,11 +541,17 @@ async function dashboardTaskAction(
   }
 }
 
-function dashboardHandler(store: TaskStore, config: QuotaFlowConfig, sessions: DashboardSessions) {
+function dashboardHandler(
+  store: TaskStore,
+  config: QuotaFlowConfig,
+  sessions: DashboardSessions,
+  workerStarter: DashboardWorkerStarter | undefined,
+) {
+  const writeActions = ['cancel', 'retry', ...(workerStarter ? ['start'] : [])];
   const route = async function route(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === 'POST' && url.pathname.startsWith('/api/tasks/')) {
-      return dashboardTaskAction(store, config, request, url, sessions);
+      return dashboardTaskAction(store, config, request, url, sessions, workerStarter);
     }
     if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405);
     if (url.pathname === '/') return asset(dashboardHtml, 'text/html; charset=utf-8');
@@ -495,10 +562,10 @@ function dashboardHandler(store: TaskStore, config: QuotaFlowConfig, sessions: D
         status: 'ok',
         generatedAt: Date.now(),
         readOnly: false,
-        writeActions: ['cancel', 'retry'],
+        writeActions,
       });
     }
-    if (url.pathname === '/api/session') return sessionResponse(request, sessions);
+    if (url.pathname === '/api/session') return sessionResponse(request, sessions, writeActions);
     if (url.pathname === '/api/overview') {
       return json(overview(store, config, repositoryFilter(url)));
     }
@@ -588,6 +655,6 @@ export function startDashboardServer(
   return Bun.serve({
     hostname: host,
     port,
-    fetch: dashboardHandler(store, config, sessions),
+    fetch: dashboardHandler(store, config, sessions, options.workerStarter),
   });
 }
