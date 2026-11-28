@@ -131,6 +131,9 @@ export async function fetchGitHubPullSnapshot(
   const head = object(pull.head, 'GitHub pull response.head');
   const base = object(pull.base, 'GitHub pull response.base');
   const author = object(pull.user, 'GitHub pull response.user');
+  const headRepository = head.repo === null || head.repo === undefined
+    ? null
+    : object(head.repo, 'GitHub pull response.head.repo');
   const headSha = text(head.sha, 'GitHub pull response.head.sha');
 
   const [checksResponse, reviewsResponse] = await Promise.all([
@@ -180,6 +183,9 @@ export async function fetchGitHubPullSnapshot(
       authorLogin: author.login,
       baseRef: base.ref,
       headRef: head.ref,
+      ...(headRepository
+        ? { headRepository: text(headRepository.full_name, 'GitHub pull response.head.repo.full_name') }
+        : {}),
       baseSha: base.sha,
       headSha,
       checks,

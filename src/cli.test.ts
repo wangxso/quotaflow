@@ -172,7 +172,7 @@ test('fetches a GitHub pull snapshot through the CLI API entry point', async () 
           mergeable: 'mergeable',
           user: { login: 'wangxso' },
           base: { ref: 'main', sha: baseSha },
-          head: { ref: 'feature', sha: headSha },
+          head: { ref: 'feature', sha: headSha, repo: { full_name: 'wangxso/mcarplay' } },
         });
       }
       if (url.pathname === `/repos/wangxso/mcarplay/commits/${headSha}/check-runs`) {
@@ -207,6 +207,7 @@ test('fetches a GitHub pull snapshot through the CLI API entry point', async () 
         number: 141,
         draft: true,
         mergeable: 'mergeable',
+        headRepository: 'wangxso/mcarplay',
         headSha,
         checks: [{ name: 'test', conclusion: 'success' }],
         reviews: [],

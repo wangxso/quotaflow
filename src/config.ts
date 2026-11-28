@@ -4,6 +4,7 @@ import type {
   AgentKind,
   BudgetPolicy,
   GitHubApprovalConfig,
+  GitHubProjectConfig,
   GitHubWebhookConfig,
   LaneConfig,
   Provider,
@@ -180,6 +181,46 @@ function parseGitHubApproval(value: unknown): GitHubApprovalConfig {
   return { allowBotApprovals: raw.allowBotApprovals };
 }
 
+function parseGitHubProject(value: unknown, index: number, root: string): GitHubProjectConfig {
+  const field = `githubProjects[${index}]`;
+  const raw = object(value, field);
+  const repository = text(raw.repository, `${field}.repository`).toLowerCase();
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) {
+    fail(`${field}.repository must use the owner/name form`);
+  }
+  const [owner, name] = repository.split('/');
+  if (/^\.+$/.test(owner!) || /^\.+$/.test(name!)) {
+    fail(`${field}.repository must use the owner/name form`);
+  }
+  if (!Array.isArray(raw.branchPrefixes) || raw.branchPrefixes.length === 0) {
+    fail(`${field}.branchPrefixes must be a non-empty array`);
+  }
+  const branchPrefixes = raw.branchPrefixes.map((prefix, position) => {
+    const parsed = text(prefix, `${field}.branchPrefixes[${position}]`);
+    if (parsed.startsWith('-') || parsed.includes('..') || /[\x00-\x1f\x7f]/.test(parsed)) {
+      fail(`${field}.branchPrefixes[${position}] is unsafe`);
+    }
+    return parsed;
+  });
+  if (new Set(branchPrefixes).size !== branchPrefixes.length) {
+    fail(`${field}.branchPrefixes contains duplicates`);
+  }
+  const remote = raw.remote === undefined ? undefined : text(raw.remote, `${field}.remote`);
+  if (remote && (!/^[A-Za-z0-9._-]+$/.test(remote) || remote.startsWith('-'))) {
+    fail(`${field}.remote must be a Git remote name`);
+  }
+  if (raw.allowForks !== undefined && typeof raw.allowForks !== 'boolean') {
+    fail(`${field}.allowForks must be boolean`);
+  }
+  return {
+    repository,
+    repoPath: resolvePath(root, text(raw.repoPath, `${field}.repoPath`)),
+    branchPrefixes,
+    ...(remote ? { remote } : {}),
+    ...(raw.allowForks === undefined ? {} : { allowForks: raw.allowForks }),
+  };
+}
+
 export function normalizeConfig(value: unknown, file: string): QuotaFlowConfig {
   const raw = object(value, 'config');
   if (raw.version !== 1) fail('version must be 1');
@@ -233,6 +274,16 @@ export function normalizeConfig(value: unknown, file: string): QuotaFlowConfig {
   }
   const githubWebhook = raw.githubWebhook === undefined ? undefined : parseGitHubWebhook(raw.githubWebhook);
   const githubApproval = raw.githubApproval === undefined ? undefined : parseGitHubApproval(raw.githubApproval);
+  let githubProjects: GitHubProjectConfig[] = [];
+  if (raw.githubProjects !== undefined) {
+    if (!Array.isArray(raw.githubProjects)) fail('githubProjects must be an array');
+    githubProjects = raw.githubProjects.map((project, index) => parseGitHubProject(project, index, root));
+    const repositories = new Set<string>();
+    for (const project of githubProjects) {
+      if (repositories.has(project.repository)) fail(`duplicate GitHub project ${project.repository}`);
+      repositories.add(project.repository);
+    }
+  }
 
   return {
     version: 1,
@@ -243,6 +294,7 @@ export function normalizeConfig(value: unknown, file: string): QuotaFlowConfig {
     ...(githubWebhook ? { githubWebhook } : {}),
     ...(githubApproval ? { githubApproval } : {}),
     budgets,
+    githubProjects,
     lanes,
   };
 }

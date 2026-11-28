@@ -68,6 +68,14 @@ export interface GitHubApprovalConfig {
   allowBotApprovals: boolean;
 }
 
+export interface GitHubProjectConfig {
+  repository: string;
+  repoPath: string;
+  branchPrefixes: string[];
+  remote?: string;
+  allowForks?: boolean;
+}
+
 export interface BudgetPolicy {
   account: string;
   unit: string;
@@ -112,6 +120,7 @@ export interface QuotaFlowConfig {
   routing: RoutingConfig;
   githubWebhook?: GitHubWebhookConfig;
   githubApproval?: GitHubApprovalConfig;
+  githubProjects?: GitHubProjectConfig[];
   budgets?: BudgetPolicy[];
   lanes: LaneConfig[];
 }

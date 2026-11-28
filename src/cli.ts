@@ -23,6 +23,7 @@ import {
 } from './github';
 import { fetchGitHubPullSnapshot } from './github-api';
 import { startGitHubWebhookServer } from './github-webhook-server';
+import { materializeGitHubWebhookActions } from './github-webhook-actions';
 import { materializeGitHubActions } from './github-materialize';
 
 const usage = `
@@ -103,6 +104,7 @@ async function main() {
       routedModelApproval: config.routing.routedModelApproval ?? null,
       githubWebhook: config.githubWebhook ?? null,
       githubApproval: config.githubApproval ?? { allowBotApprovals: false },
+      githubProjects: config.githubProjects ?? [],
       budgets: config.budgets ?? [],
       lanes: config.lanes.map((lane) => ({
         id: lane.id,
@@ -383,6 +385,7 @@ async function main() {
         gatePolicy: {
           allowBotApprovals: Boolean(config.githubApproval?.allowBotApprovals),
         },
+        actionHandler: (context) => materializeGitHubWebhookActions(store, config, context),
       });
       console.log(JSON.stringify({ listening: server.url.toString(), path, health: '/healthz' }, null, 2));
       const stopped = new Promise<void>((resolve) => {

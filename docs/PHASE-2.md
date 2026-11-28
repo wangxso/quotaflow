@@ -22,6 +22,19 @@ QuotaFlow 已在 `wangxso/mcarplay` Issue #82 上创建独立 Worktree，由 Cod
 
 `--materialize <repo>` 只会为 `independent_review`、`review_fix` 或 `ci_fix` 创建任务。任务 ID 由 `actionKey` 稳定派生，因此 Webhook 重放或重复执行门禁不会创建重复任务。任务初始检查点固定为 PR HEAD，仓库中必须已经存在当前 base／head 提交，否则命令会在写库前失败。执行沿用 QuotaFlow 的每任务最多 3 次尝试和配置预算，任务提示禁止 Agent push、评论、批准、合并或修改仓库权限。`independent_review` 使用 SQLite v9 的任务级只读模式，Agent 不能写入 worktree，其他 Adapter 如果无法保证只读会被 Worker 拒绝，完成后还会再次校验 HEAD 和工作树。Draft、冲突、刷新证据和人工合并只作为 `human_required` 返回，不会派发。 [物化与执行证据](evidence/phase2-github-materialization-2026-11-28.json)
 
+Webhook 自动物化必须通过 `githubProjects` 显式映射。未映射仓库返回 `not_configured`，fork PR 和未命中 `branchPrefixes` 的分支返回 `ignored`，这些情况不会创建任务。命中映射后，服务会从配置 remote 拉取缺失的 base/head 提交并复用 CLI 的幂等任务物化。
+
+```json
+{
+  "githubProjects": [{
+    "repository": "wangxso/mcarplay",
+    "repoPath": "/path/to/local/mcarplay",
+    "branchPrefixes": ["quotaflow/"],
+    "remote": "origin"
+  }]
+}
+```
+
 检查快照时使用：
 
 ```sh
@@ -98,7 +111,6 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
 ## 尚未完成
 
 - 将临时公网 SSH 隧道替换为带稳定域名、TLS、进程监督和故障恢复的持久部署。
-- 在物化前自动抓取 PR HEAD／base 到本地 Git 仓库并校验提交可用性。
 - Check-run 日志抓取、失败分类细节和同 SHA 复跑绑定。
 - 写入应答丢失、重复 Webhook、越权请求和凭据轮换演练。
 - 后续 Review–Fix／CI 修复任务的完整执行、复跑和门禁闭环。
@@ -106,6 +118,6 @@ GITHUB_WEBHOOK_SECRET=... bun run src/cli.ts github serve-webhook
 ## 下一里程碑
 
 1. 将监听器部署到稳定公网地址和受控反向代理。
-2. 对后续 Review–Fix／CI 修复任务重复执行、复跑和门禁闭环。
-3. 接入 Check-run 日志抓取和失败分类。
+2. 接入 Check-run 日志抓取、失败分类和同 SHA 复跑。
+3. 对后续 Review–Fix／CI 修复任务重复执行和门禁闭环。
 4. Phase 2 核心验收完成后进入 Phase 3 Dashboard 与部署。

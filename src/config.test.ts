@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { loadConfig, normalizeConfig } from './config';
 
 function workspace() {
@@ -161,11 +161,22 @@ test('parses and validates GitHub webhook configuration', () => {
     githubApproval: {
       allowBotApprovals: true,
     },
+    githubProjects: [{
+      repository: 'WANGXSO/mcarplay',
+      repoPath: 'repos/mcarplay',
+      branchPrefixes: ['quotaflow/'],
+    }],
     lanes: [],
   };
-  const parsed = normalizeConfig(base, join(tmpdir(), 'quotaflow.config.json'));
+  const configFile = join(tmpdir(), 'quotaflow.config.json');
+  const parsed = normalizeConfig(base, configFile);
   expect(parsed.githubWebhook).toEqual(base.githubWebhook);
   expect(parsed.githubApproval).toEqual(base.githubApproval);
+  expect(parsed.githubProjects).toEqual([{
+    repository: 'wangxso/mcarplay',
+    repoPath: join(dirname(configFile), 'repos', 'mcarplay'),
+    branchPrefixes: ['quotaflow/'],
+  }]);
   expect(() => normalizeConfig({ ...base, githubWebhook: { ...base.githubWebhook, port: 0 } },
     join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubWebhook.port');
   expect(() => normalizeConfig({ ...base, githubWebhook: { ...base.githubWebhook, path: '/hooks?secret=1' } },
@@ -180,4 +191,12 @@ test('parses and validates GitHub webhook configuration', () => {
     join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubWebhook.apiUrl');
   expect(() => normalizeConfig({ ...base, githubApproval: { allowBotApprovals: 'yes' } },
     join(tmpdir(), 'quotaflow.config.json'))).toThrow('githubApproval.allowBotApprovals');
+  expect(() => normalizeConfig({
+    ...base,
+    githubProjects: [base.githubProjects[0], base.githubProjects[0]],
+  }, join(tmpdir(), 'quotaflow.config.json'))).toThrow('duplicate GitHub project');
+  expect(() => normalizeConfig({
+    ...base,
+    githubProjects: [{ ...base.githubProjects[0], branchPrefixes: [] }],
+  }, join(tmpdir(), 'quotaflow.config.json'))).toThrow('branchPrefixes');
 });

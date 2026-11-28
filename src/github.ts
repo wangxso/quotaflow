@@ -27,6 +27,7 @@ export interface GitHubPullSnapshot {
   authorLogin: string;
   baseRef: string;
   headRef: string;
+  headRepository?: string;
   baseSha: string;
   headSha: string;
   checks: GitHubCheckRun[];
@@ -211,6 +212,9 @@ export function parseGitHubPullSnapshot(value: unknown): GitHubPullSnapshot {
     authorLogin: stringValue(update.authorLogin, 'update.authorLogin'),
     baseRef: stringValue(update.baseRef, 'update.baseRef'),
     headRef: stringValue(update.headRef, 'update.headRef'),
+    ...(update.headRepository === undefined || update.headRepository === null
+      ? {}
+      : { headRepository: stringValue(update.headRepository, 'update.headRepository').toLowerCase() }),
     baseSha: shaValue(update.baseSha, 'update.baseSha'),
     headSha: shaValue(update.headSha, 'update.headSha'),
     checks,

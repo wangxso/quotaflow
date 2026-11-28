@@ -45,6 +45,19 @@ export function currentCommit(repoPath: string): string | null {
   return gitOrNull(resolve(repoPath), ['rev-parse', 'HEAD']);
 }
 
+export function fetchGitHubCommits(repoPath: string, remote: string, revisions: string[]): void {
+  const repo = resolve(repoPath);
+  if (!/^[A-Za-z0-9._-]+$/.test(remote) || remote.startsWith('-')) {
+    throw new Error(`Invalid Git remote name ${remote}`);
+  }
+  for (const revision of new Set(revisions)) {
+    if (!/^[0-9a-f]{40}$/i.test(revision)) throw new Error(`Invalid Git commit ${revision}`);
+    if (commitExists(repo, revision)) continue;
+    git(repo, ['fetch', '--no-tags', remote, revision]);
+    if (!commitExists(repo, revision)) throw new Error(`Fetched commit ${revision} is not available`);
+  }
+}
+
 export class ReadOnlyWorkspaceViolationError extends Error {}
 
 export function verifyReadOnlyWorkspace(repoPath: string, expectedCommit: string | null): void {

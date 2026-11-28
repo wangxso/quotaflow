@@ -3,7 +3,9 @@ import {
   normalizeGitHubWebhook,
   planGitHubActions,
   verifyGitHubWebhookSignature,
+  type GitHubActionPlan,
   type GitHubGatePolicy,
+  type GitHubGateResult,
   type GitHubPullSnapshot,
   type GitHubWebhookEvent,
 } from './github';
@@ -17,6 +19,15 @@ export interface GitHubWebhookHandlerOptions {
   path: string;
   snapshotFetcher?: (repository: string, pullNumber: number) => Promise<GitHubPullSnapshot>;
   gatePolicy?: GitHubGatePolicy;
+  actionHandler?: (context: GitHubWebhookActionContext) => Promise<unknown> | unknown;
+}
+
+export interface GitHubWebhookActionContext {
+  deliveryId: string;
+  event: GitHubWebhookEvent;
+  snapshot: GitHubPullSnapshot;
+  gate: GitHubGateResult;
+  plan: GitHubActionPlan;
 }
 
 export interface GitHubWebhookServerOptions extends GitHubWebhookHandlerOptions {
@@ -139,6 +150,26 @@ export function createGitHubWebhookHandler(options: GitHubWebhookHandlerOptions)
           deliveryId,
           eventType: event.eventType,
         });
+        const plan = planGitHubActions(result.gate.evaluation);
+        let taskMaterialization: unknown;
+        if (options.actionHandler) {
+          try {
+            taskMaterialization = await options.actionHandler({
+              deliveryId,
+              event,
+              snapshot,
+              gate: result.gate.evaluation,
+              plan,
+            });
+          } catch (error) {
+            return json({
+              error: 'task_materialization_failed',
+              message: error instanceof Error ? error.message.slice(0, 500) : 'unknown',
+              gate: result.gate.evaluation,
+              plan,
+            }, 500);
+          }
+        }
         return json({
           status: result.duplicate ? 'duplicate' : 'gated',
           event: {
@@ -150,7 +181,8 @@ export function createGitHubWebhookHandler(options: GitHubWebhookHandlerOptions)
           },
           delivery: result.delivery,
           gate: result.gate.evaluation,
-          plan: planGitHubActions(result.gate.evaluation),
+          plan,
+          ...(taskMaterialization === undefined ? {} : { taskMaterialization }),
         }, result.duplicate ? 200 : 202);
       } catch (error) {
         const conflict = error instanceof Error && error.message.includes('reused with different content');

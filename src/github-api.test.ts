@@ -27,7 +27,7 @@ test('fetches and normalizes a pull request with current checks and reviews', as
         mergeable: true,
         user: { login: 'wangxso' },
         base: { ref: 'main', sha: baseSha },
-        head: { ref: 'feature', sha: headSha },
+        head: { ref: 'feature', sha: headSha, repo: { full_name: 'wangxso/mcarplay' } },
       });
     }
     if (url.includes(`/commits/${headSha}/check-runs`)) {
@@ -69,6 +69,7 @@ test('fetches and normalizes a pull request with current checks and reviews', as
     draft: true,
     mergeable: 'mergeable',
     headSha,
+    headRepository: 'wangxso/mcarplay',
     checks: [{ name: 'test', conclusion: 'success' }],
     reviews: [{ authorLogin: 'reviewer', authorType: 'user', state: 'APPROVED', commitSha: headSha }],
   });
@@ -91,7 +92,7 @@ test('retries while GitHub is still computing mergeability', async () => {
         mergeable: pullRequests === 1 ? null : true,
         user: { login: 'wangxso' },
         base: { ref: 'main', sha: baseSha },
-        head: { ref: 'feature', sha: headSha },
+        head: { ref: 'feature', sha: headSha, repo: { full_name: 'wangxso/mcarplay' } },
       });
     }
     if (url.includes(`/commits/${headSha}/check-runs`)) return json({ check_runs: [] });

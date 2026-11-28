@@ -81,8 +81,8 @@
     "accessModeIdempotencyTests": 1,
     "schemaMigrationTests": "v1 through v8 migrate to v9",
     "fullSuite": {
-      "macOS": 138,
-      "linux": 138,
+      "macOS": 142,
+      "linux": 142,
       "windowsOnlySkipped": 1,
       "failed": 0
     },

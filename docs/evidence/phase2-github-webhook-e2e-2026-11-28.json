@@ -102,11 +102,11 @@
   },
   "verification": {
     "webhookGateTests": 1,
-    "webhookServerTests": 4,
+    "webhookServerTests": 5,
     "configTests": 1,
     "fullSuite": {
-      "macOS": 138,
-      "linux": 138,
+      "macOS": 142,
+      "linux": 142,
       "windowsOnlySkipped": 1,
       "failed": 0
     },

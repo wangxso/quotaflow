@@ -1,0 +1,74 @@
+{
+  "recordedOn": "2026-11-28",
+  "baseRevision": "eaca008497a63265317a07b1e78fcf8101369c48",
+  "policy": {
+    "mappingRequired": true,
+    "repository": "wangxso/mcarplay",
+    "repoPath": "/Users/wangxs/.local/share/quotaflow/repos/mcarplay",
+    "branchPrefixes": [
+      "quotaflow/"
+    ],
+    "allowForks": false,
+    "remote": "origin",
+    "agentActions": [
+      "independent_review",
+      "review_fix",
+      "ci_fix"
+    ],
+    "humanActions": [
+      "human_merge",
+      "mark_ready",
+      "resolve_conflict",
+      "refresh_evidence"
+    ],
+    "attemptLimitPerTask": 3,
+    "budgetEnforcement": "Existing QuotaFlow account budgets"
+  },
+  "materialization": {
+    "taskId": "Stable hash of repository, PR, exact head SHA, action kind and reason codes",
+    "initialCheckpoint": "Exact event head SHA",
+    "gitFetch": "Missing base and head commits are fetched from the configured remote before task creation",
+    "repeatDelivery": "Returns task_exists without creating another task",
+    "forkPullRequest": "Ignored unless allowForks is explicitly true",
+    "branchOutsideAllowlist": "Ignored",
+    "unmappedRepository": "Returns not_configured",
+    "parallelAgentActions": "Rejected"
+  },
+  "liveChecks": {
+    "persistentRepoHead": "23033142a38d87441ed5632bc4c9d9ac821ccd61",
+    "fetchedPullHead": "1ec88e9840e07831f93ee05c506726341c24e08f",
+    "fetchedPullBase": "daf67e87a72aa9033a4d62f88e9a9d05ce047d9e",
+    "unapprovedBranchEvent": {
+      "repository": "wangxso/mcarplay",
+      "pullNumber": 136,
+      "headRef": "codex/release-0.1.7-candidate",
+      "httpStatus": 200,
+      "deliveryStatus": "duplicate",
+      "materializationStatus": "ignored",
+      "reason": "branch_not_allowed",
+      "tasksCreated": 0
+    },
+    "allowedBranchLiveRun": "Not executed because no current open pull request uses quotaflow/*"
+  },
+  "verification": {
+    "webhookMaterializationTests": 2,
+    "webhookServerTests": 5,
+    "gitFetchTests": 1,
+    "configurationTests": 1,
+    "fullSuite": {
+      "macOS": 142,
+      "linux": 142,
+      "windowsOnlySkipped": 1,
+      "failed": 0
+    },
+    "buildAndConfig": "passed on macOS and Linux",
+    "realRemoteCommitFetch": "passed",
+    "jsonAndDiffChecks": "passed"
+  },
+  "scope": {
+    "automaticTaskMaterialization": "implemented for mapped same-repository branches",
+    "automaticPushCommentApproveOrMerge": false,
+    "durablePublicWebhook": "pending",
+    "ciLogClassificationAndRerun": "pending"
+  }
+}

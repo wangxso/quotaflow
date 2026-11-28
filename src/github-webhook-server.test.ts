@@ -50,6 +50,7 @@ function snapshot(head = headSha): GitHubPullSnapshot {
     authorLogin: 'wangxso',
     baseRef: 'main',
     headRef: 'feature',
+    headRepository: 'wangxso/mcarplay',
     baseSha,
     headSha: head,
     checks: [{
@@ -133,6 +134,7 @@ test('HTTP webhook handler fetches the current snapshot and stores a gate', asyn
   const store = new TaskStore(db);
   let current = snapshot();
   let fetchFailure = false;
+  const actionContexts: string[] = [];
   const handle = createGitHubWebhookHandler({
     store,
     secret,
@@ -145,6 +147,10 @@ test('HTTP webhook handler fetches the current snapshot and stores a gate', asyn
       requiredChecks: ['test'],
       requiredApprovals: 1,
     },
+    actionHandler: async (context) => {
+      actionContexts.push(`${context.gate.pullNumber}:${context.plan.actions[0]?.kind ?? 'none'}`);
+      return { status: 'materialized', taskId: 'task-1' };
+    },
   });
   try {
     const body = payload();
@@ -155,6 +161,7 @@ test('HTTP webhook handler fetches the current snapshot and stores a gate', asyn
       delivery: { duplicateDelivery: false, duplicateEvent: false },
       gate: { status: 'blocked', reasons: [{ code: 'independent_review_missing' }] },
       plan: { actions: [{ kind: 'independent_review' }] },
+      taskMaterialization: { status: 'materialized', taskId: 'task-1' },
     });
     const duplicate = await handle(request(body));
     expect(duplicate.status).toBe(200);
@@ -162,6 +169,7 @@ test('HTTP webhook handler fetches the current snapshot and stores a gate', asyn
       status: 'duplicate',
       delivery: { duplicateDelivery: true, duplicateEvent: true },
     });
+    expect(actionContexts).toEqual(['141:independent_review', '141:independent_review']);
 
     current = snapshot('f'.repeat(40));
     const stale = await handle(request(body, { 'x-github-delivery': 'delivery-stale' }));
@@ -172,6 +180,33 @@ test('HTTP webhook handler fetches the current snapshot and stores a gate', asyn
     const unavailable = await handle(request(body, { 'x-github-delivery': 'delivery-unavailable' }));
     expect(unavailable.status).toBe(502);
     expect(await unavailable.json()).toEqual({ error: 'snapshot_fetch_failed' });
+    expect(db.query<{ n: number }, []>('SELECT count(*) AS n FROM github_deliveries').get()?.n).toBe(1);
+    expect(db.query<{ n: number }, []>('SELECT count(*) AS n FROM github_gate_results').get()?.n).toBe(1);
+  } finally {
+    db.close();
+  }
+});
+
+test('HTTP webhook handler asks GitHub to retry when action materialization fails', async () => {
+  const db = openDatabase(':memory:');
+  const store = new TaskStore(db);
+  const handle = createGitHubWebhookHandler({
+    store,
+    secret,
+    path,
+    snapshotFetcher: async () => snapshot(),
+    actionHandler: () => {
+      throw new Error('repository fetch failed');
+    },
+  });
+  try {
+    const response = await handle(request(payload()));
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({
+      error: 'task_materialization_failed',
+      message: 'repository fetch failed',
+      gate: { status: 'blocked' },
+    });
     expect(db.query<{ n: number }, []>('SELECT count(*) AS n FROM github_deliveries').get()?.n).toBe(1);
     expect(db.query<{ n: number }, []>('SELECT count(*) AS n FROM github_gate_results').get()?.n).toBe(1);
   } finally {
